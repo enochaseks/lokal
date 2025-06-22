@@ -1,0 +1,11 @@
+{
+  "projects": {
+    "default": "lokal-b4b28"
+  },
+  "targets": {},
+  "etags": {
+    "lokal-b4b28": {
+      "extensionInstances": {}
+    }
+  }
+}

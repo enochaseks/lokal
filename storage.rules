@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// DEVELOPMENT ONLY: Allows all authenticated users to read and write any file.
+// Restrict this for production!
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow users to read/write their own files in storeItems (filename starts with their UID)
+    match /storeItems/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    // Allow users to read/write their own files in storeBanners (filename starts with their UID)
+    match /storeBanners/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

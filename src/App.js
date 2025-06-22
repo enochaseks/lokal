@@ -1,24 +1,54 @@
 import logo from './logo.svg';
 import './App.css';
+import ExplorePage from './pages/ExplorePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import { BrowserRouter as Router, Routes, Route } from 'react-router';
+import OnboardingPage from './pages/OnboardingPage';
+import OnboardingSellCategoryPage from './pages/OnboardingSellCategoryPage';
+import OnboardingSellLocationPage from './pages/OnboardingSellLocationPage';
+import CreateShopPage from './pages/CreateShopPage';
+import StoreProfilePage from './pages/StoreProfilePage';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
+    <Router>
+      <div className="App" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#F9F5EE' }}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '1200px',
+            minHeight: '100vh',
+            background: 'inherit',
+            boxShadow: '0 0 0 #fff',
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            padding: '0 16px',
+          }}
         >
-          Learn React
-        </a>
-      </header>
-    </div>
+          <Routes>
+            <Route path="/" element={<ExplorePage />} />
+            <Route path="/explore" element={<ExplorePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/onboarding-sell-category" element={<OnboardingSellCategoryPage />} />
+            <Route path="/onboarding-sell-location" element={<OnboardingSellLocationPage />} />
+            <Route path="/create-shop" element={<CreateShopPage />} />
+            <Route path="/store-profile" element={<StoreProfilePage />} />
+          </Routes>
+        </div>
+        <style>{`
+          @media (max-width: 600px) {
+            .App > div {
+              max-width: 100vw !important;
+              padding: 0 4px !important;
+            }
+          }
+        `}</style>
+      </div>
+    </Router>
   );
 }
 
