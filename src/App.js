@@ -11,6 +11,7 @@ import CreateShopPage from './pages/CreateShopPage';
 import StoreProfilePage from './pages/StoreProfilePage';
 import StorePreviewPage from './pages/StorePreviewPage';
 import StoreReviewsPage from './pages/StoreReviewsPage';
+import FeedPage from './pages/FeedPage';
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
             <Route path="/store-profile" element={<StoreProfilePage />} />
             <Route path="/store-preview/:id" element={<StorePreviewPage />} />
             <Route path="/my-reviews" element={<StoreReviewsPage />} />
+            <Route path="/feed" element={<FeedPage />} />
           </Routes>
         </div>
         <style>{`

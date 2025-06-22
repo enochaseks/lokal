@@ -103,6 +103,7 @@ function CreateShopPage() {
         paymentType,
         paymentInfo,
         createdAt: new Date().toISOString(),
+        category: sellerData.category || '',
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
       setLoading(false);

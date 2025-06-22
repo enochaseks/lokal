@@ -82,7 +82,7 @@ function Navbar() {
             ×
           </button>
           <Link to="/explore" onClick={() => setSidebarOpen(false)} style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Explore</Link>
-          <a href="/feed" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Feed</a>
+          <Link to="/feed" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Feed</Link>
           <a href="/settings" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Settings</a>
           <button onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Reviews</button>
         </div>

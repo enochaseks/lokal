@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, getDoc, collection, addDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function StoreProfilePage() {
@@ -20,7 +20,7 @@ function StoreProfilePage() {
   const [itemCurrency, setItemCurrency] = useState('GBP');
   const [itemQuality, setItemQuality] = useState('');
   const [itemQuantity, setItemQuantity] = useState('');
-  const [followers, setFollowers] = useState(0);
+  const [followers, setFollowers] = useState([]);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editLocation, setEditLocation] = useState('');
@@ -29,6 +29,8 @@ function StoreProfilePage() {
   const [editDeliveryType, setEditDeliveryType] = useState('');
   const [editOpeningTime, setEditOpeningTime] = useState('');
   const [editClosingTime, setEditClosingTime] = useState('');
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -57,6 +59,14 @@ function StoreProfilePage() {
         const itemsCol = collection(db, 'stores', user.uid, 'items');
         const itemsSnap = await getDocs(itemsCol);
         setStoreItems(itemsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        // Fetch followers
+        const followersCol = collection(db, 'stores', user.uid, 'followers');
+        onSnapshot(followersCol, (snapshot) => {
+          const followersArr = snapshot.docs.map(doc => doc.data());
+          setFollowers(followersArr);
+          // Check if current user is following
+          setIsFollowing(followersArr.some(f => f.uid === user.uid));
+        });
       } catch (err) {
         setError(err.message);
       }
@@ -177,6 +187,24 @@ function StoreProfilePage() {
     setProfile(prev => ({ ...prev, live: false }));
   };
 
+  const handleFollow = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user || !profile) return;
+    const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
+    await addDoc(collection(db, 'stores', user.uid, 'followers'), { uid: user.uid, email: user.email });
+    setIsFollowing(true);
+  };
+
+  const handleUnfollow = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user || !profile) return;
+    const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
+    await deleteDoc(followerRef);
+    setIsFollowing(false);
+  };
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -257,8 +285,11 @@ function StoreProfilePage() {
             <button style={{ background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
               <span role="img" aria-label="messages">💬</span> Messages
             </button>
-            <button style={{ background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => setFollowers(followers + 1)}>
-              <span role="img" aria-label="followers">👥</span> Followers ({followers})
+            <button
+              style={{ background: 'none', border: '1.5px solid #007B7F', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+              onClick={() => setShowFollowersModal(true)}
+            >
+              <span role="img" aria-label="followers">👥</span> Followers ({followers.length})
             </button>
           </div>
           {/* Store item tab/button */}
@@ -371,7 +402,24 @@ function StoreProfilePage() {
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Origin</label>
-                  <input type="text" value={editOrigin} onChange={e => setEditOrigin(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                  <select
+                    value={editOrigin}
+                    onChange={e => setEditOrigin(e.target.value)}
+                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}
+                    required
+                  >
+                    <option value="">Select country/island</option>
+                    <optgroup label="African Countries">
+                      {[
+                        'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia', 'Morocco', 'Uganda', 'Tanzania', 'Algeria', 'Angola', 'Cameroon', 'Ivory Coast', 'Senegal', 'Zimbabwe', 'Zambia', 'Botswana', 'Namibia', 'Rwanda', 'Burundi', 'Mali', 'Malawi', 'Mozambique', 'Tunisia', 'Libya', 'Sudan', 'Somalia', 'Chad', 'Niger', 'Benin', 'Burkina Faso', 'Guinea', 'Sierra Leone', 'Liberia', 'Togo', 'Central African Republic', 'Congo', 'Gabon', 'Gambia', 'Lesotho', 'Mauritius', 'Swaziland', 'Djibouti', 'Eritrea', 'Seychelles', 'Comoros', 'Cape Verde', 'Sao Tome and Principe',
+                      ].map(c => <option key={c} value={c}>{c}</option>)}
+                    </optgroup>
+                    <optgroup label="Caribbean Islands">
+                      {[
+                        'Jamaica', 'Trinidad and Tobago', 'Barbados', 'Bahamas', 'Saint Lucia', 'Grenada', 'Saint Vincent and the Grenadines', 'Antigua and Barbuda', 'Dominica', 'Saint Kitts and Nevis', 'Cuba', 'Haiti', 'Dominican Republic', 'Puerto Rico', 'Aruba', 'Curacao', 'Saint Martin', 'Saint Barthelemy', 'Anguilla', 'Montserrat', 'British Virgin Islands', 'US Virgin Islands', 'Cayman Islands', 'Turks and Caicos', 'Guadeloupe', 'Martinique', 'Saint Pierre and Miquelon',
+                      ].map(c => <option key={c} value={c}>{c}</option>)}
+                    </optgroup>
+                  </select>
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Delivery Type</label>
@@ -403,6 +451,23 @@ function StoreProfilePage() {
                   <button type="submit" style={{ background: '#007B7F', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Save</button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        {showFollowersModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw' }}>
+              <h3 style={{ marginBottom: 18, color: '#007B7F', fontWeight: 700, fontSize: '1.2rem' }}>Followers</h3>
+              {followers.length === 0 ? (
+                <div style={{ color: '#888' }}>No followers yet.</div>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0 }}>
+                  {followers.map(f => (
+                    <li key={f.uid} style={{ marginBottom: 8, color: '#222' }}>{f.email || f.uid}</li>
+                  ))}
+                </ul>
+              )}
+              <button onClick={() => setShowFollowersModal(false)} style={{ marginTop: 16, background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         )}

@@ -18,6 +18,10 @@ function StorePreviewPage() {
   const [avgRating, setAvgRating] = useState(0);
   const [ratingCount, setRatingCount] = useState(0);
   const [tab, setTab] = useState('products');
+  const [userRating, setUserRating] = useState(0);
+  const [userReview, setUserReview] = useState('');
+  const [reviewSent, setReviewSent] = useState(false);
+  const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
     // Get userType from localStorage (set in onboarding)
@@ -79,6 +83,14 @@ function StorePreviewPage() {
   };
 
   const open = store ? isStoreOpen(store.openingTime, store.closingTime) : false;
+
+  const handleSubmitReview = () => {
+    setReviewSent(true);
+    setTimeout(() => setReviewSent(false), 2000);
+    setUserRating(0);
+    setUserReview('');
+    // Here you would submit the review to the backend (not implemented)
+  };
 
   if (loading) {
     return (
@@ -180,6 +192,32 @@ function StorePreviewPage() {
                 Total: {total.toFixed(2)}
               </div>
             )}
+          </div>
+        )}
+        {tab === 'reviews' && (
+          <div style={{ marginTop: 24 }}>
+            {userType === 'buyer' && (
+              <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
+                <input type="number" min="1" max="5" value={userRating} onChange={e => setUserRating(Number(e.target.value))} placeholder="Rating (1-5)" style={{ width: 80, marginRight: 8, borderRadius: 4, border: '1px solid #ccc', padding: 4 }} />
+                <textarea value={userReview} onChange={e => setUserReview(e.target.value)} placeholder="Your review..." style={{ width: '100%', minHeight: 40, borderRadius: 4, border: '1px solid #ccc', padding: 6, marginTop: 8 }} />
+                <button onClick={handleSubmitReview} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginTop: 8, cursor: 'pointer' }}>Submit</button>
+                {reviewSent && <div style={{ color: '#3A8E3A', marginTop: 8 }}>Review submitted!</div>}
+              </div>
+            )}
+            <div>
+              {reviews.length === 0 ? (
+                <div style={{ color: '#888' }}>No reviews yet.</div>
+              ) : (
+                reviews.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map(r => (
+                  <div key={r.id} style={{ borderBottom: '1px solid #eee', marginBottom: 12, paddingBottom: 8 }}>
+                    <div style={{ fontWeight: 600 }}>⭐ {r.rating} - {r.userName || 'Anonymous'}</div>
+                    <div style={{ color: '#444' }}>{r.text}</div>
+                    {r.reply && <div style={{ color: '#007B7F', fontStyle: 'italic', marginBottom: 6 }}>Reply: {r.reply}</div>}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>

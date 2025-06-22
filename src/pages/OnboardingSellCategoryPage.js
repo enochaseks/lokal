@@ -4,9 +4,8 @@ import { useNavigate } from 'react-router';
 const categories = [
   'Foods & Goods',
   'Meat & Poultry',
-  'Wholesale Items',
+  'Wholesale',
   'Beauty & Hair',
-  'Other',
 ];
 
 function OnboardingSellCategoryPage() {
@@ -20,7 +19,7 @@ function OnboardingSellCategoryPage() {
           <button
             key={cat}
             style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1rem', cursor: 'pointer' }}
-            onClick={() => navigate('/onboarding-sell-location')}
+            onClick={() => navigate('/onboarding-sell-location', { state: { category: cat } })}
           >
             {cat}
           </button>

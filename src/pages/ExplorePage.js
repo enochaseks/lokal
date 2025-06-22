@@ -66,6 +66,13 @@ function isStoreOpen(opening, closing) {
   return now >= openDate && now <= closeDate;
 }
 
+const categories = [
+  'Foods & Goods',
+  'Meat & Poultry',
+  'Wholesale',
+  'Beauty & Hair',
+];
+
 function ExplorePage() {
   const [userLocation, setUserLocation] = useState(null);
   const [city, setCity] = useState('');
@@ -73,6 +80,10 @@ function ExplorePage() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [shops, setShops] = useState([]);
   const [ratings, setRatings] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [filterBy, setFilterBy] = useState('');
+  const [sortBy, setSortBy] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -111,12 +122,24 @@ function ExplorePage() {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'stores'), where('live', '==', true));
+    let q;
+    if (selectedCategory) {
+      q = query(
+        collection(db, 'stores'),
+        where('live', '==', true),
+        where('category', '==', selectedCategory)
+      );
+    } else {
+      q = query(
+        collection(db, 'stores'),
+        where('live', '==', true)
+      );
+    }
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       setShops(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
-  }, []);
+  }, [selectedCategory]);
 
   useEffect(() => {
     // Fetch ratings for all shops
@@ -134,6 +157,43 @@ function ExplorePage() {
     if (shops.length > 0) fetchRatings();
   }, [shops]);
 
+  // Filtering and sorting logic
+  let displayedShops = [...shops];
+
+  // Search filter
+  if (searchTerm.trim() !== '') {
+    const term = searchTerm.trim().toLowerCase();
+    displayedShops = displayedShops.filter(shop => {
+      const name = (shop.storeName || '').toLowerCase();
+      const location = (shop.storeLocation || '').toLowerCase();
+      const postCode = (shop.postCode || '').toLowerCase();
+      return name.includes(term) || location.includes(term) || postCode.includes(term);
+    });
+  }
+
+  // Filter By
+  if (filterBy === 'Open Now') {
+    displayedShops = displayedShops.filter(shop => isStoreOpen(shop.openingTime, shop.closingTime));
+  } else if (filterBy === 'Top Rated') {
+    displayedShops = displayedShops
+      .map(shop => ({ ...shop, avgRating: parseFloat(ratings[shop.id]?.avg || 0), ratingCount: ratings[shop.id]?.count || 0 }))
+      .filter(shop => shop.ratingCount >= 10)
+      .sort((a, b) => b.avgRating - a.avgRating)
+      .slice(0, 5);
+  }
+
+  // Sort By
+  if (sortBy === 'Newest') {
+    displayedShops = displayedShops.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  } else if (sortBy === 'Oldest') {
+    displayedShops = displayedShops.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  } else if (sortBy === 'Rating') {
+    displayedShops = displayedShops
+      .map(shop => ({ ...shop, avgRating: parseFloat(ratings[shop.id]?.avg || 0), ratingCount: ratings[shop.id]?.count || 0 }))
+      .filter(shop => shop.ratingCount >= 10)
+      .sort((a, b) => b.avgRating - a.avgRating);
+  }
+
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <style>{responsiveStyles}</style>
@@ -147,6 +207,8 @@ function ExplorePage() {
           <input
             type="text"
             placeholder="Search..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
             style={{
               flex: 1,
               padding: '0.5rem 1rem',
@@ -180,29 +242,44 @@ function ExplorePage() {
             ▼
           </button>
           <div className="explore-dropdowns" style={{ display: isMobile ? (showDropdowns ? 'flex' : 'none') : 'flex', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto', background: isMobile ? '#fff' : 'none', position: isMobile ? 'absolute' : 'static', left: 0, top: '100%', zIndex: 10, border: isMobile ? '2px solid #007B7F' : 'none', borderRadius: isMobile ? '0 0 16px 16px' : '0', marginTop: isMobile ? '-2px' : '0' }}>
-            <select style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRight: isMobile ? 'none' : '1px solid #007B7F', borderRadius: '0' }}>
-              <option>Category</option>
+            <select
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+              style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRight: isMobile ? 'none' : '1px solid #007B7F', borderRadius: '0' }}
+            >
+              <option value="">Category</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
-            <select style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRight: isMobile ? 'none' : '1px solid #007B7F', borderRadius: '0' }}>
-              <option>Filter By</option>
-              <option>Open Now</option>
-              <option>Top Rated</option>
+            <select
+              value={filterBy}
+              onChange={e => setFilterBy(e.target.value)}
+              style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRight: isMobile ? 'none' : '1px solid #007B7F', borderRadius: '0' }}
+            >
+              <option value="">Filter By</option>
+              <option value="Open Now">Open Now</option>
+              <option value="Top Rated">Top Rated</option>
             </select>
-            <select style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRadius: '0' }}>
-              <option>Sort By</option>
-              <option>Newest</option>
-              <option>Oldest</option>
-              <option>Rating</option>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: 'none', color: '#1C1C1C', background: 'transparent', borderRadius: '0' }}
+            >
+              <option value="">Sort By</option>
+              <option value="Newest">Newest</option>
+              <option value="Oldest">Oldest</option>
+              <option value="Rating">Rating</option>
             </select>
           </div>
         </div>
       </div>
       <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Shops near you</h2>
-      {shops.length === 0 && (
+      {displayedShops.length === 0 && (
         <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Stores Near You</div>
       )}
       <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
-        {shops.map(shop => {
+        {displayedShops.map(shop => {
           const open = isStoreOpen(shop.openingTime, shop.closingTime);
           return (
             <div
@@ -250,7 +327,66 @@ function ExplorePage() {
           );
         })}
       </div>
-      {/* Page content can go here */}
+      {/* Spotlight Store Section */}
+      <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Spotlight Store</h2>
+      {displayedShops.filter(s => s.clickCount > 0).length === 0 ? (
+        <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Spotlight Store</div>
+      ) : (
+        <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
+          {displayedShops
+            .filter(s => s.clickCount > 0)
+            .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0))
+            .slice(0, 5)
+            .map(shop => {
+              const open = isStoreOpen(shop.openingTime, shop.closingTime);
+              return (
+                <div
+                  key={shop.id}
+                  onClick={() => navigate(`/store-preview/${shop.id}`)}
+                  style={{
+                    minWidth: 220,
+                    border: '2px solid #FFD700',
+                    borderRadius: 12,
+                    background: '#fffbe6',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px #ececec',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    position: 'relative',
+                    opacity: open ? 1 : 0.5,
+                    filter: open ? 'none' : 'grayscale(0.5)',
+                    transition: 'opacity 0.3s, filter 0.3s',
+                  }}
+                >
+                  <div style={{ width: '100%', position: 'relative' }}>
+                    <img
+                      src={shop.backgroundImg}
+                      alt={shop.storeName}
+                      style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: '12px 12px 0 0' }}
+                    />
+                    <div style={{ position: 'absolute', top: 8, right: 12, background: '#fff', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: '#FFD700', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
+                      ⭐ {ratings[shop.id]?.avg || '0.0'} ({ratings[shop.id]?.count || 0})
+                    </div>
+                    <div style={{ position: 'absolute', top: 8, left: 12, background: open ? '#e8fbe8' : '#fbe8e8', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: open ? '#3A8E3A' : '#D92D20', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
+                      {open ? 'Open' : 'Closed'}
+                    </div>
+                    {!open && (
+                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(255,255,255,0.55)', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3rem', color: '#D92D20', pointerEvents: 'none' }}>
+                        Closed
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '0.7rem', width: '100%' }}>
+                    <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#222' }}>{shop.storeName}</div>
+                    <div style={{ fontSize: '0.95rem', color: '#444' }}>{shop.storeLocation}</div>
+                    <div style={{ fontSize: '0.95rem', color: '#FFD700', fontWeight: 600 }}>Clicks: {shop.clickCount || 0}</div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      )}
     </div>
   );
 }

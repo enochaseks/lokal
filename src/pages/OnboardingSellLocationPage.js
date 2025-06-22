@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const locations = [
   'In a store',
@@ -16,6 +16,8 @@ const caribbeanIslands = [
 
 function OnboardingSellLocationPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const category = location.state?.category || '';
   const [showStoreForm, setShowStoreForm] = useState(false);
   const [showMarketForm, setShowMarketForm] = useState(false);
   const [showOnlineForm, setShowOnlineForm] = useState(false);
@@ -132,7 +134,7 @@ function OnboardingSellLocationPage() {
             </button>
           ))
         ) : showStoreForm ? (
-          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { storeName, storeLocation, businessId, certificate, origin } }); }}>
+          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { storeName, storeLocation, businessId, certificate, origin, category } }); }}>
             <div style={{ marginBottom: '1rem', position: 'relative' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Store Name</label>
               <input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
@@ -172,7 +174,7 @@ function OnboardingSellLocationPage() {
             <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }}>Continue</button>
           </form>
         ) : showMarketForm ? (
-          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { marketName, marketLocation, foodHygiene, marketStallLicence, origin } }); }}>
+          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { marketName, marketLocation, foodHygiene, marketStallLicence, origin, category } }); }}>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Market Name</label>
               <input type="text" value={marketName} onChange={e => setMarketName(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
@@ -212,7 +214,7 @@ function OnboardingSellLocationPage() {
             <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }}>Continue</button>
           </form>
         ) : (
-          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { onlineName, platform, socialHandle, hasWebsite, websiteLink, onlineLicence, onlineLocation, origin } }); }}>
+          <form style={{ textAlign: 'left' }} onSubmit={e => { e.preventDefault(); navigate('/create-shop', { state: { onlineName, platform, socialHandle, hasWebsite, websiteLink, onlineLicence, onlineLocation, origin, category } }); }}>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Name</label>
               <input type="text" value={onlineName} onChange={e => setOnlineName(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
