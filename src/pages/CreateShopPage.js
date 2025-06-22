@@ -50,6 +50,12 @@ function CreateShopPage() {
 
   const handleCreateShop = async (e) => {
     e.preventDefault();
+
+    if (deliveryType === 'Delivery' && paymentType === 'Other') {
+      alert("'Pay at Store' is not available with 'Delivery'. Please choose another payment method.");
+      return;
+    }
+
     setLoading(true);
     try {
       const auth = getAuth();
@@ -204,11 +210,19 @@ function CreateShopPage() {
           </div>
           <div style={{ marginBottom: '1.5rem', width: '100%' }}>
             <label style={{ fontWeight: 500, marginRight: 10 }}>Delivery Type:</label>
-            <select value={deliveryType} onChange={e => {
-              setDeliveryType(e.target.value);
-              setHasOwnDelivery('');
-              setShowDeliveryMsg(false);
-            }} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
+            <select
+              value={deliveryType}
+              onChange={e => {
+                const newDeliveryType = e.target.value;
+                setDeliveryType(newDeliveryType);
+                if (newDeliveryType === 'Delivery' && paymentType === 'Other') {
+                  setPaymentType(''); // Reset payment type if it was 'Pay at Store'
+                }
+                setHasOwnDelivery('');
+                setShowDeliveryMsg(false);
+              }}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}
+            >
               <option value="Collection">Collection</option>
               <option value="Delivery">Delivery</option>
             </select>
@@ -238,10 +252,14 @@ function CreateShopPage() {
           )}
           <div style={{ marginBottom: '1.5rem', width: '100%' }}>
             <label style={{ fontWeight: 500, marginRight: 10 }}>Payment Type:</label>
-            <select value={paymentType} onChange={e => setPaymentType(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
+            <select
+              value={paymentType}
+              onChange={e => setPaymentType(e.target.value)}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}
+            >
               <option value="" disabled>Select payment type</option>
               <option value="Own Card/Bank Details">Own Card/Bank Details</option>
-              <option value="Other">Pay at Store</option>
+              <option value="Other" disabled={deliveryType === 'Delivery'}>Pay at Store</option>
             </select>
             {paymentType === 'Own Card/Bank Details' && (
               <button type="button" onClick={() => setShowPaymentModal(true)} style={{ marginTop: 10, background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Add Card Details</button>

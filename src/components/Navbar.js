@@ -16,6 +16,15 @@ function Navbar() {
     return () => unsubscribe();
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(getAuth(app));
+      navigate('/explore');
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   return (
     <nav style={{ 
       display: 'flex', 
@@ -55,7 +64,7 @@ function Navbar() {
             <a href="/store-profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
               <span role="img" aria-label="profile">👤</span>
             </a>
-            <button onClick={() => { signOut(getAuth(app)); }} style={{ background: 'none', border: 'none', color: '#D92D20', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>Logout</button>
+            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#D92D20', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>Logout</button>
           </>
         )}
       </div>
