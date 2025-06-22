@@ -9,6 +9,8 @@ import OnboardingSellCategoryPage from './pages/OnboardingSellCategoryPage';
 import OnboardingSellLocationPage from './pages/OnboardingSellLocationPage';
 import CreateShopPage from './pages/CreateShopPage';
 import StoreProfilePage from './pages/StoreProfilePage';
+import StorePreviewPage from './pages/StorePreviewPage';
+import StoreReviewsPage from './pages/StoreReviewsPage';
 
 function App() {
   return (
@@ -37,6 +39,8 @@ function App() {
             <Route path="/onboarding-sell-location" element={<OnboardingSellLocationPage />} />
             <Route path="/create-shop" element={<CreateShopPage />} />
             <Route path="/store-profile" element={<StoreProfilePage />} />
+            <Route path="/store-preview/:id" element={<StorePreviewPage />} />
+            <Route path="/my-reviews" element={<StoreReviewsPage />} />
           </Routes>
         </div>
         <style>{`

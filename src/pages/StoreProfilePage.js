@@ -27,6 +27,8 @@ function StoreProfilePage() {
   const [editOrigin, setEditOrigin] = useState('');
   const [editThumbnail, setEditThumbnail] = useState(null);
   const [editDeliveryType, setEditDeliveryType] = useState('');
+  const [editOpeningTime, setEditOpeningTime] = useState('');
+  const [editClosingTime, setEditClosingTime] = useState('');
 
   useEffect(() => {
     const auth = getAuth();
@@ -46,6 +48,8 @@ function StoreProfilePage() {
           setEditLocation(docSnap.data().storeLocation || '');
           setEditOrigin(docSnap.data().origin || '');
           setEditDeliveryType(docSnap.data().deliveryType || '');
+          setEditOpeningTime(docSnap.data().openingTime || '');
+          setEditClosingTime(docSnap.data().closingTime || '');
         } else {
           setError('Store profile not found.');
         }
@@ -122,6 +126,8 @@ function StoreProfilePage() {
         origin: editOrigin,
         backgroundImg: thumbnailUrl,
         deliveryType: editDeliveryType,
+        openingTime: editOpeningTime,
+        closingTime: editClosingTime,
       });
       setShowEditProfile(false);
       // Re-fetch profile
@@ -152,6 +158,25 @@ function StoreProfilePage() {
     profile.deliveryType &&
     storeItems.length > 0;
 
+  const handleGoLive = async () => {
+    if (!canGoLive) return;
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+    const docRef = doc(db, 'stores', user.uid);
+    await updateDoc(docRef, { live: true });
+    setProfile(prev => ({ ...prev, live: true }));
+  };
+
+  const handleGoOffline = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+    const docRef = doc(db, 'stores', user.uid);
+    await updateDoc(docRef, { live: false });
+    setProfile(prev => ({ ...prev, live: false }));
+  };
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -178,23 +203,25 @@ function StoreProfilePage() {
           {profile.backgroundImg ? (
             <img src={profile.backgroundImg} alt="Banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : null}
-          {/* Go live button on the right */}
-          <button
-            style={{ position: 'absolute', right: 24, top: 24, background: canGoLive ? '#D92D20' : '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.2rem', fontWeight: 700, fontSize: '1rem', cursor: canGoLive ? 'pointer' : 'not-allowed', zIndex: 2 }}
-            onClick={async () => {
-              if (!canGoLive) return;
-              const auth = getAuth();
-              const user = auth.currentUser;
-              if (!user) return;
-              const docRef = doc(db, 'stores', user.uid);
-              await updateDoc(docRef, { live: true });
-              setProfile(prev => ({ ...prev, live: true }));
-            }}
-            disabled={!canGoLive}
-            title={canGoLive ? '' : 'Add all required info and at least one item to go live'}
-          >
-            Go live
-          </button>
+          {/* Go live or live/offline button on the right */}
+          {profile.live ? (
+            <button
+              style={{ position: 'absolute', right: 24, top: 24, background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.2rem', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', zIndex: 2 }}
+              onClick={handleGoOffline}
+              title="Click to go offline"
+            >
+              Store is live (Turn off)
+            </button>
+          ) : (
+            <button
+              style={{ position: 'absolute', right: 24, top: 24, background: canGoLive ? '#D92D20' : '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.2rem', fontWeight: 700, fontSize: '1rem', cursor: canGoLive ? 'pointer' : 'not-allowed', zIndex: 2 }}
+              onClick={handleGoLive}
+              disabled={!canGoLive}
+              title={canGoLive ? '' : 'Add all required info and at least one item to go live'}
+            >
+              Go live
+            </button>
+          )}
         </div>
         {/* Title and details below banner */}
         <div style={{ width: '100%', maxWidth: 400, background: '#fff', borderRadius: 20, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.2rem 1.2rem 1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: -30, marginBottom: 24, position: 'relative' }}>
@@ -218,6 +245,13 @@ function StoreProfilePage() {
               <span style={{ fontWeight: 500 }}>Location:</span> {profile.storeLocation}
             </div>
           )}
+          {/* Opening/Closing Time and Status */}
+          <div style={{ width: '100%', fontSize: '0.98rem', color: '#007B7F', marginBottom: 8 }}>
+            <b>Opening Time:</b> {profile.openingTime || '--:--'} &nbsp; <b>Closing Time:</b> {profile.closingTime || '--:--'}
+            <span style={{ marginLeft: 16, fontWeight: 600, color: isStoreOpen(profile.openingTime, profile.closingTime) ? '#3A8E3A' : '#D92D20' }}>
+              {isStoreOpen(profile.openingTime, profile.closingTime) ? 'Open Now' : 'Closed Now'}
+            </span>
+          </div>
           {/* Messages and Followers row */}
           <div style={{ width: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0 8px 0' }}>
             <button style={{ background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -353,6 +387,14 @@ function StoreProfilePage() {
                   </select>
                 </div>
                 <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Opening Time</label>
+                  <input type="time" value={editOpeningTime} onChange={e => setEditOpeningTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Closing Time</label>
+                  <input type="time" value={editClosingTime} onChange={e => setEditClosingTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                </div>
+                <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Thumbnail</label>
                   <input type="file" accept="image/*" onChange={e => setEditThumbnail(e.target.files[0])} />
                 </div>
@@ -367,6 +409,16 @@ function StoreProfilePage() {
       </div>
     </div>
   );
+}
+
+function isStoreOpen(opening, closing) {
+  if (!opening || !closing) return false;
+  const now = new Date();
+  const [openH, openM] = opening.split(':').map(Number);
+  const [closeH, closeM] = closing.split(':').map(Number);
+  const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+  const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+  return now >= openDate && now <= closeDate;
 }
 
 export default StoreProfilePage; 
