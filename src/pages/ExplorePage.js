@@ -73,6 +73,19 @@ const categories = [
   'Beauty & Hair',
 ];
 
+// Add Haversine distance function
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in km
+}
+
 function ExplorePage() {
   const [userLocation, setUserLocation] = useState(null);
   const [city, setCity] = useState('');
@@ -84,6 +97,7 @@ function ExplorePage() {
   const [filterBy, setFilterBy] = useState('');
   const [sortBy, setSortBy] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchRadius, setSearchRadius] = useState(30);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -159,6 +173,20 @@ function ExplorePage() {
 
   // Filtering and sorting logic
   let displayedShops = [...shops];
+
+  // Filter by proximity (10km) if userLocation and shop lat/lng exist
+  if (userLocation) {
+    displayedShops = displayedShops.filter(shop => {
+      if (shop.latitude && shop.longitude) {
+        const distance = getDistanceFromLatLonInKm(
+          Number(userLocation.lat), Number(userLocation.lng),
+          Number(shop.latitude), Number(shop.longitude)
+        );
+        return distance <= searchRadius;
+      }
+      return false;
+    });
+  }
 
   // Search filter
   if (searchTerm.trim() !== '') {
@@ -274,6 +302,22 @@ function ExplorePage() {
           </div>
         </div>
       </div>
+
+      {/* Place the radius slider here, below the controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '1rem 0 0 1rem' }}>
+        <label style={{ fontWeight: 500 }}>Search Radius:</label>
+        <input
+          type="range"
+          min={0.5}
+          max={100}
+          step={0.1}
+          value={searchRadius}
+          onChange={e => setSearchRadius(Number(e.target.value))}
+          style={{ width: 120 }}
+        />
+        <span style={{ minWidth: 40 }}>{searchRadius} km</span>
+      </div>
+
       <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Shops near you</h2>
       {displayedShops.length === 0 && (
         <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Stores Near You</div>
@@ -281,6 +325,13 @@ function ExplorePage() {
       <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
         {displayedShops.map(shop => {
           const open = isStoreOpen(shop.openingTime, shop.closingTime);
+          let distance = null;
+          if (userLocation && shop.latitude && shop.longitude) {
+            distance = getDistanceFromLatLonInKm(
+              Number(userLocation.lat), Number(userLocation.lng),
+              Number(shop.latitude), Number(shop.longitude)
+            ).toFixed(2);
+          }
           return (
             <div
               key={shop.id}
@@ -319,8 +370,33 @@ function ExplorePage() {
                   </div>
                 )}
               </div>
-              <div style={{ padding: '0.7rem', width: '100%' }}>
-                <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#222' }}>{shop.storeName}</div>
+              <div style={{ padding: '0.7rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%' }}>
+                  <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#222' }}>{shop.storeName}</div>
+                  {distance !== null && (
+                    <div
+                      style={{
+                        background: '#fff',
+                        borderRadius: 16,
+                        padding: '2px 14px',
+                        fontWeight: 600,
+                        color: '#007B7F',
+                        fontSize: '1rem',
+                        boxShadow: '0 1px 4px #ececec',
+                        border: '1.5px solid #eee',
+                        display: 'inline-block',
+                        minWidth: 60,
+                        textAlign: 'center',
+                        marginTop: '-30px',
+                        marginLeft: 'auto',
+                        zIndex: 10,
+                        position: 'relative',
+                      }}
+                    >
+                      {distance} km
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: '0.95rem', color: '#444' }}>{shop.storeLocation}</div>
               </div>
             </div>

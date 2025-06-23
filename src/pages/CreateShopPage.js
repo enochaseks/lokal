@@ -89,10 +89,25 @@ function CreateShopPage() {
           paymentInfo = { country: 'Other', details: otherPayment };
         }
       }
+      // Geocode the store location to get latitude and longitude
+      let latitude = null, longitude = null;
+      let storeLocationString = sellerData.storeLocation || sellerData.marketLocation || sellerData.onlineLocation || '';
+      if (storeLocationString) {
+        try {
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(storeLocationString)}`);
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0) {
+            latitude = parseFloat(geoData[0].lat);
+            longitude = parseFloat(geoData[0].lon);
+          }
+        } catch (geoErr) {
+          // If geocoding fails, leave lat/lng as null
+        }
+      }
       const storeProfile = {
         ownerId: user.uid,
         storeName: sellerData.storeName || sellerData.marketName || sellerData.onlineName || '',
-        storeLocation: sellerData.storeLocation || sellerData.marketLocation || sellerData.onlineLocation || '',
+        storeLocation: storeLocationString,
         businessId: sellerData.businessId || '',
         certificate: sellerData.certificate?.name || '',
         foodHygiene: sellerData.foodHygiene?.name || '',
@@ -110,6 +125,8 @@ function CreateShopPage() {
         paymentInfo,
         createdAt: new Date().toISOString(),
         category: sellerData.category || '',
+        latitude,
+        longitude,
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
       setLoading(false);
