@@ -12,6 +12,12 @@ import StoreProfilePage from './pages/StoreProfilePage';
 import StorePreviewPage from './pages/StorePreviewPage';
 import StoreReviewsPage from './pages/StoreReviewsPage';
 import FeedPage from './pages/FeedPage';
+import SettingsPage from './pages/SettingsPage';
+import AboutPage from './pages/AboutPage';
+import OnboardingShopTypePage from './pages/OnboardingShopTypePage';
+import CreateProfilePage from './pages/CreateProfilePage';
+import ProfilePage from './pages/ProfilePage';
+import StoreReviewPreviewPage from './pages/StoreReviewPreviewPage';
 
 function App() {
   return (
@@ -43,6 +49,12 @@ function App() {
             <Route path="/store-preview/:id" element={<StorePreviewPage />} />
             <Route path="/my-reviews" element={<StoreReviewsPage />} />
             <Route path="/feed" element={<FeedPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/onboarding-shop-type" element={<OnboardingShopTypePage />} />
+            <Route path="/create-profile" element={<CreateProfilePage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/store-review-preview/:storeId" element={<StoreReviewPreviewPage />} />
           </Routes>
         </div>
         <style>{`

@@ -1,8 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+
+function StarRating({ value, onChange, max = 5 }) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {[...Array(max)].map((_, i) => (
+        <span
+          key={i}
+          style={{
+            fontSize: 28,
+            color: i < value ? '#FFD700' : '#ccc',
+            cursor: 'pointer',
+            transition: 'color 0.2s'
+          }}
+          onClick={() => onChange(i + 1)}
+          onMouseOver={e => e.target.style.color = '#FFD700'}
+          onMouseOut={e => e.target.style.color = i < value ? '#FFD700' : '#ccc'}
+          role="button"
+          aria-label={`Rate ${i + 1} star${i === 0 ? '' : 's'}`}
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function StorePreviewPage() {
   const { id } = useParams();
@@ -15,6 +41,7 @@ function StorePreviewPage() {
   const [messageSent, setMessageSent] = useState(false);
   const [following, setFollowing] = useState(false);
   const [userType, setUserType] = useState('');
+  const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = not logged in, object = logged in
   const [avgRating, setAvgRating] = useState(0);
   const [ratingCount, setRatingCount] = useState(0);
   const [tab, setTab] = useState('products');
@@ -24,9 +51,22 @@ function StorePreviewPage() {
   const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
-    // Get userType from localStorage (set in onboarding)
-    const type = localStorage.getItem('userType');
-    setUserType(type);
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setAuthUser(user || null);
+      if (user) {
+        // Check if user is a buyer or seller
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserType('buyer');
+        } else {
+          setUserType('seller');
+        }
+      } else {
+        setUserType('');
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -48,6 +88,32 @@ function StorePreviewPage() {
     };
   }, [id]);
 
+  // Check if already following
+  useEffect(() => {
+    if (!authUser || !id) return;
+    const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
+    const unsub = onSnapshot(followerRef, (docSnap) => {
+      setFollowing(docSnap.exists());
+    });
+    return () => unsub();
+  }, [authUser, id]);
+
+  const handleFollow = async () => {
+    if (!authUser || !id) return;
+    const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
+    await setDoc(followerRef, {
+      uid: authUser.uid,
+      email: authUser.email || '',
+      followedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleUnfollow = async () => {
+    if (!authUser || !id) return;
+    const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
+    await deleteDoc(followerRef);
+  };
+
   const handleCheckbox = (item) => {
     setSelectedItems(prev => {
       if (prev.some(i => i.id === item.id)) {
@@ -67,11 +133,6 @@ function StorePreviewPage() {
     // Here you would send the message to the seller (not implemented)
   };
 
-  const handleFollow = () => {
-    setFollowing(true);
-    // Here you would update the follow status in the backend (not implemented)
-  };
-
   const isStoreOpen = (opening, closing) => {
     if (!opening || !closing) return false;
     const now = new Date();
@@ -84,13 +145,47 @@ function StorePreviewPage() {
 
   const open = store ? isStoreOpen(store.openingTime, store.closingTime) : false;
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
+    if (!userRating || !userReview || !authUser) return;
+
+    // Fetch buyer profile
+    const userProfileSnap = await getDoc(doc(db, 'users', authUser.uid));
+    let name = 'Anonymous';
+    let photoURL = '';
+    if (userProfileSnap.exists()) {
+      const data = userProfileSnap.data();
+      name = data.displayName || data.name || 'Anonymous';
+      photoURL = data.photoURL || '';
+    }
+
+    await addDoc(collection(db, 'stores', id, 'reviews'), {
+      rating: userRating,
+      text: userReview,
+      userName: name,
+      userPhoto: photoURL,
+      createdAt: serverTimestamp(),
+    });
     setReviewSent(true);
     setTimeout(() => setReviewSent(false), 2000);
     setUserRating(0);
     setUserReview('');
-    // Here you would submit the review to the backend (not implemented)
   };
+
+  useEffect(() => {
+    if (!id) return;
+    const unsubReviews = onSnapshot(collection(db, 'stores', id, 'reviews'), (snap) => {
+      const reviewsArr = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setReviews(reviewsArr);
+      if (reviewsArr.length > 0) {
+        setAvgRating((reviewsArr.reduce((sum, r) => sum + (r.rating || 0), 0) / reviewsArr.length).toFixed(1));
+        setRatingCount(reviewsArr.length);
+      } else {
+        setAvgRating(0);
+        setRatingCount(0);
+      }
+    });
+    return () => unsubReviews();
+  }, [id]);
 
   if (loading) {
     return (
@@ -147,9 +242,15 @@ function StorePreviewPage() {
           </div>
           {userType === 'buyer' && (
             <>
-              <button onClick={handleFollow} disabled={following} style={{ background: following ? '#ccc' : '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: following ? 'not-allowed' : 'pointer' }}>
-                {following ? 'Following' : 'Follow'}
-              </button>
+              {following ? (
+                <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                  Unfollow
+                </button>
+              ) : (
+                <button onClick={handleFollow} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                  Follow
+                </button>
+              )}
               <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
                 Message
               </button>
@@ -199,7 +300,7 @@ function StorePreviewPage() {
             {userType === 'buyer' && (
               <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
-                <input type="number" min="1" max="5" value={userRating} onChange={e => setUserRating(Number(e.target.value))} placeholder="Rating (1-5)" style={{ width: 80, marginRight: 8, borderRadius: 4, border: '1px solid #ccc', padding: 4 }} />
+                <StarRating value={userRating} onChange={setUserRating} />
                 <textarea value={userReview} onChange={e => setUserReview(e.target.value)} placeholder="Your review..." style={{ width: '100%', minHeight: 40, borderRadius: 4, border: '1px solid #ccc', padding: 6, marginTop: 8 }} />
                 <button onClick={handleSubmitReview} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginTop: 8, cursor: 'pointer' }}>Submit</button>
                 {reviewSent && <div style={{ color: '#3A8E3A', marginTop: 8 }}>Review submitted!</div>}
@@ -209,11 +310,20 @@ function StorePreviewPage() {
               {reviews.length === 0 ? (
                 <div style={{ color: '#888' }}>No reviews yet.</div>
               ) : (
-                reviews.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).map(r => (
-                  <div key={r.id} style={{ borderBottom: '1px solid #eee', marginBottom: 12, paddingBottom: 8 }}>
-                    <div style={{ fontWeight: 600 }}>⭐ {r.rating} - {r.userName || 'Anonymous'}</div>
-                    <div style={{ color: '#444' }}>{r.text}</div>
-                    {r.reply && <div style={{ color: '#007B7F', fontStyle: 'italic', marginBottom: 6 }}>Reply: {r.reply}</div>}
+                reviews.map(r => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                    <img
+                      src={r.userPhoto || 'https://via.placeholder.com/32'}
+                      alt={r.userName || 'Anonymous'}
+                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', marginRight: 10 }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>
+                        <span style={{ color: '#FFD700', marginRight: 4 }}>★</span>
+                        {r.rating} - {r.userName || 'Anonymous'}
+                      </div>
+                      <div style={{ color: '#444' }}>{r.text}</div>
+                    </div>
                   </div>
                 ))
               )}

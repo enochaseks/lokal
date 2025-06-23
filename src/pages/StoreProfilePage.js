@@ -21,15 +21,7 @@ function StoreProfilePage() {
   const [itemQuality, setItemQuality] = useState('');
   const [itemQuantity, setItemQuantity] = useState('');
   const [followers, setFollowers] = useState([]);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editLocation, setEditLocation] = useState('');
-  const [editOrigin, setEditOrigin] = useState('');
-  const [editThumbnail, setEditThumbnail] = useState(null);
-  const [editDeliveryType, setEditDeliveryType] = useState('');
-  const [editPaymentType, setEditPaymentType] = useState('');
-  const [editOpeningTime, setEditOpeningTime] = useState('');
-  const [editClosingTime, setEditClosingTime] = useState('');
+  const [followersDetails, setFollowersDetails] = useState([]);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   
@@ -65,6 +57,17 @@ function StoreProfilePage() {
   const [showThumbnailChangeDialog, setShowThumbnailChangeDialog] = useState(false);
   // New state for the specific "first change" warning
   const [showFirstThumbnailWarning, setShowFirstThumbnailWarning] = useState(false);
+
+  // Add missing state for edit fields and showEditProfile
+  const [editName, setEditName] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editOrigin, setEditOrigin] = useState('');
+  const [editDeliveryType, setEditDeliveryType] = useState('');
+  const [editPaymentType, setEditPaymentType] = useState('');
+  const [editOpeningTime, setEditOpeningTime] = useState('');
+  const [editClosingTime, setEditClosingTime] = useState('');
+  const [editThumbnail, setEditThumbnail] = useState(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -106,9 +109,22 @@ function StoreProfilePage() {
         setStoreItems(itemsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         // Fetch followers
         const followersCol = collection(db, 'stores', user.uid, 'followers');
-        onSnapshot(followersCol, (snapshot) => {
+        onSnapshot(followersCol, async (snapshot) => {
           const followersArr = snapshot.docs.map(doc => doc.data());
           setFollowers(followersArr);
+          // Fetch user details for each follower
+          const details = [];
+          for (const f of followersArr) {
+            if (f.uid) {
+              const userDoc = await getDoc(doc(db, 'users', f.uid));
+              if (userDoc.exists()) {
+                details.push({ uid: f.uid, ...userDoc.data() });
+              } else {
+                details.push({ uid: f.uid, name: f.email || f.uid, photoURL: '' });
+              }
+            }
+          }
+          setFollowersDetails(details);
           // Check if current user is following
           setIsFollowing(followersArr.some(f => f.uid === user.uid));
         });
@@ -238,7 +254,6 @@ function StoreProfilePage() {
         origin: editOrigin,
         backgroundImg: thumbnailUrl,
         deliveryType: editDeliveryType,
-        paymentType: editPaymentType,
         openingTime: editOpeningTime,
         closingTime: editClosingTime,
         nameChanges: newChangeHistory.nameChanges,
@@ -872,20 +887,9 @@ function StoreProfilePage() {
                   <select value={editDeliveryType} onChange={e => {
                     const newDeliveryType = e.target.value;
                     setEditDeliveryType(newDeliveryType);
-                    if (newDeliveryType === 'Delivery' && editPaymentType === 'Other') {
-                      setEditPaymentType('');
-                    }
                   }} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
                     <option value="Collection">Collection</option>
                     <option value="Delivery">Delivery</option>
-                  </select>
-                </div>
-                <div style={{ marginBottom: '1.5rem', width: '100%' }}>
-                  <label style={{ fontWeight: 500, display: 'block', marginBottom: 8 }}>Payment Type:</label>
-                  <select value={editPaymentType} onChange={e => setEditPaymentType(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
-                    <option value="" disabled>Select payment type</option>
-                    <option value="Own Card/Bank Details">Own Card/Bank Details</option>
-                    <option value="Other" disabled={editDeliveryType === 'Delivery'}>Pay at Store</option>
                   </select>
                 </div>
                 <div style={{ marginBottom: 14 }}>
@@ -993,19 +997,37 @@ function StoreProfilePage() {
           </div>
         )}
         {showFollowersModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw' }}>
-              <h3 style={{ marginBottom: 18, color: '#007B7F', fontWeight: 700, fontSize: '1.2rem' }}>Followers</h3>
-              {followers.length === 0 ? (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}>
+            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw', textAlign: 'center' }}>
+              <button
+                onClick={() => setShowFollowersModal(false)}
+                style={{ position: 'absolute', top: 8, right: 8, background: '#eee', border: 'none', borderRadius: '50%', width: 28, height: 28, fontSize: 18, cursor: 'pointer' }}>
+                ×
+              </button>
+              <h3 style={{ marginBottom: 18, color: '#007B7F' }}>Followers ({followersDetails.length})</h3>
+              {followersDetails.length === 0 ? (
                 <div style={{ color: '#888' }}>No followers yet.</div>
               ) : (
-                <ul style={{ listStyle: 'none', padding: 0 }}>
-                  {followers.map(f => (
-                    <li key={f.uid} style={{ marginBottom: 8, color: '#222' }}>{f.email || f.uid}</li>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {followersDetails.map(f => (
+                    <li key={f.uid} style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <img src={f.photoURL || 'https://via.placeholder.com/40'} alt={f.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                      <span style={{ fontWeight: 600 }}>{f.name}</span>
+                    </li>
                   ))}
                 </ul>
               )}
-              <button onClick={() => setShowFollowersModal(false)} style={{ marginTop: 16, background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         )}

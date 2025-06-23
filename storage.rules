@@ -4,13 +4,21 @@ rules_version = '2';
 // Restrict this for production!
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow users to read/write their own files in storeItems (filename starts with their UID)
-    match /storeItems/{allPaths=**} {
-      allow read, write: if request.auth != null;
+    // Allow users to read/write their own files in storeItems
+    match /storeItems/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    // Allow users to read/write their own files in storeBanners (filename starts with their UID)
-    match /storeBanners/{allPaths=**} {
-      allow read, write: if request.auth != null;
+    // Allow users to read/write their own files in storeBanners
+    match /storeBanners/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    // Allow users to read/write their own files in posts
+    match /posts/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    // Allow users to read/write their own files in userProfiles
+    match /userProfiles/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     // Deny all other access
     match /{allPaths=**} {

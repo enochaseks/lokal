@@ -13,7 +13,9 @@ function OnboardingPage() {
         >
           I want to sell
         </button>
-        <button style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>
+        <button style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}
+          onClick={() => navigate('/onboarding-shop-type')}
+        >
           I am looking to shop around
         </button>
       </div>
