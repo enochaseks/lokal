@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function CreateProfilePage() {
   const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
+  const [zip, setZip] = useState('');
+  const [country, setCountry] = useState('');
   const [profilePic, setProfilePic] = useState(null);
   const [preview, setPreview] = useState('');
   const [error, setError] = useState('');
@@ -32,6 +36,10 @@ function CreateProfilePage() {
       setError('Name is required.');
       return;
     }
+    if (!street.trim() || !city.trim() || !country.trim()) {
+      setError('Full address is required.');
+      return;
+    }
     if (!profilePic) {
       setError('Profile picture is required.');
       return;
@@ -46,15 +54,33 @@ function CreateProfilePage() {
       const picRef = ref(storage, `userProfiles/${user.uid}/${profilePic.name}`);
       await uploadBytes(picRef, profilePic);
       const photoURL = await getDownloadURL(picRef);
+      // Combine address fields
+      const fullAddress = `${street}, ${city}, ${stateRegion}, ${zip}, ${country}`;
+      // Geocode address
+      let lat = null, lon = null;
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            lat = data[0].lat;
+            lon = data[0].lon;
+          }
+        }
+      } catch {}
       // Save profile to Firestore
       await setDoc(doc(db, 'users', user.uid), {
         name,
-        location,
+        location: fullAddress,
+        latitude: lat,
+        longitude: lon,
         photoURL,
         uid: user.uid,
         email: user.email || '',
         createdAt: new Date().toISOString(),
       });
+      // Mark onboarding as complete
+      await updateDoc(doc(db, 'users', user.uid), { onboardingStep: 'complete' });
       setLoading(false);
       navigate('/profile');
     } catch (err) {
@@ -79,8 +105,24 @@ function CreateProfilePage() {
             <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} required />
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontWeight: 600 }}>Location (optional)</label><br />
-            <input type="text" value={location} onChange={e => setLocation(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} />
+            <label style={{ fontWeight: 600 }}>Street Address *</label><br />
+            <input type="text" value={street} onChange={e => setStreet(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} required />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontWeight: 600 }}>City *</label><br />
+            <input type="text" value={city} onChange={e => setCity(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} required />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontWeight: 600 }}>State/Province/Region</label><br />
+            <input type="text" value={stateRegion} onChange={e => setStateRegion(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontWeight: 600 }}>Zip/Postal Code</label><br />
+            <input type="text" value={zip} onChange={e => setZip(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontWeight: 600 }}>Country *</label><br />
+            <input type="text" value={country} onChange={e => setCountry(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} required />
           </div>
           {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
           <button type="submit" style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }} disabled={loading}>

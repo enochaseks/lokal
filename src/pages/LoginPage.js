@@ -3,6 +3,8 @@ import Navbar from '../components/Navbar';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -17,7 +19,29 @@ function LoginPage() {
     setLoading(true);
     try {
       const auth = getAuth(app);
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      // Check if user is deactivated in Firestore
+      let userDocSnap = await getDoc(doc(db, 'users', user.uid));
+      if (!userDocSnap.exists()) {
+        // Try as seller
+        userDocSnap = await getDoc(doc(db, 'stores', user.uid));
+      }
+      if (userDocSnap.exists() && userDocSnap.data().deactivated) {
+        await auth.signOut();
+        setError('Your account has been deactivated. Please contact support.');
+        setLoading(false);
+        return;
+      }
+      // Onboarding progress check
+      if (userDocSnap.exists()) {
+        const onboardingStep = userDocSnap.data().onboardingStep;
+        if (onboardingStep && onboardingStep !== 'complete') {
+          navigate('/' + onboardingStep);
+          setLoading(false);
+          return;
+        }
+      }
       navigate('/explore');
     } catch (err) {
       setError('Invalid email or password.');

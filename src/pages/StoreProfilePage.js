@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
@@ -8,7 +8,6 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function StoreProfilePage() {
   const location = useLocation();
-  const data = location.state || {};
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,6 +67,10 @@ function StoreProfilePage() {
   const [editClosingTime, setEditClosingTime] = useState('');
   const [editThumbnail, setEditThumbnail] = useState(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editSellsAlcohol, setEditSellsAlcohol] = useState('');
+  const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const auth = getAuth();
@@ -202,6 +205,11 @@ function StoreProfilePage() {
 
     if (thumbnailChanged) {
       setShowThumbnailChangeDialog(true);
+      return;
+    }
+    
+    if (editSellsAlcohol === 'yes' && !editAlcoholLicense) {
+      alert('You must upload proof of license to sell alcohol.');
       return;
     }
     
@@ -623,6 +631,12 @@ function StoreProfilePage() {
             >
               Edit
             </button>
+            <button
+              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', marginLeft: 10 }}
+              onClick={() => navigate('/messages')}
+            >
+              Messages
+            </button>
           </div>
           {/* Location */}
           {profile.storeLocation && (
@@ -884,14 +898,25 @@ function StoreProfilePage() {
                 </div>
                 <div style={{ marginBottom: '1.5rem', width: '100%' }}>
                   <label style={{ fontWeight: 500, display: 'block', marginBottom: 8 }}>Delivery Type:</label>
-                  <select value={editDeliveryType} onChange={e => {
-                    const newDeliveryType = e.target.value;
-                    setEditDeliveryType(newDeliveryType);
-                  }} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
+                  <select value={editDeliveryType} onChange={e => setEditDeliveryType(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
                     <option value="Collection">Collection</option>
                     <option value="Delivery">Delivery</option>
                   </select>
                 </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Do you sell alcohol in your store/market/online?</label>
+                  <select value={editSellsAlcohol} onChange={e => setEditSellsAlcohol(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
+                    <option value="">Select</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                {editSellsAlcohol === 'yes' && (
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Upload proof of license/permission to sell alcohol (required)</label>
+                    <input type="file" accept="image/*,application/pdf" onChange={e => setEditAlcoholLicense(e.target.files[0])} style={{ width: '100%' }} required />
+                  </div>
+                )}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Opening Time</label>
                   <input type="time" value={editOpeningTime} onChange={e => setEditOpeningTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />

@@ -3,6 +3,8 @@ import Navbar from '../components/Navbar';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 const responsiveStyles = `
 @media (max-width: 768px) {
@@ -98,42 +100,73 @@ function ExplorePage() {
   const [sortBy, setSortBy] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchRadius, setSearchRadius] = useState(30);
+  const [profile, setProfile] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const coords = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          };
-          setUserLocation(coords);
-          fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}`
-          )
-            .then((res) => res.json())
-            .then((data) => {
-              setCity(
-                data.address.city ||
-                data.address.town ||
-                data.address.village ||
-                data.address.state ||
-                ''
-              );
-            });
-        },
-        (error) => {
-          alert('Location access denied or unavailable.');
+    // Fetch buyer profile and use their saved location if available
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setProfile(userDoc.data());
         }
-      );
-    } else {
-      alert('Geolocation is not supported by this browser.');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    async function setInitialLocation() {
+      // If profile location exists, geocode it
+      if (profile && profile.location) {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(profile.location)}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          setUserLocation({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+          setCity(profile.location);
+          return;
+        }
+      }
+      // Fallback to browser geolocation
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const coords = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            };
+            setUserLocation(coords);
+            fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}`
+            )
+              .then((res) => res.json())
+              .then((data) => {
+                setCity(
+                  data.address.city ||
+                  data.address.town ||
+                  data.address.village ||
+                  data.address.state ||
+                  ''
+                );
+              });
+          },
+          (error) => {
+            setCity('');
+          }
+        );
+      } else {
+        setCity('');
+      }
     }
+    setInitialLocation();
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [profile]);
 
   useEffect(() => {
     let q;
@@ -171,10 +204,26 @@ function ExplorePage() {
     if (shops.length > 0) fetchRatings();
   }, [shops]);
 
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return;
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const onboardingStep = userDoc.data().onboardingStep;
+        if (onboardingStep && onboardingStep !== 'complete') {
+          navigate('/' + onboardingStep);
+        }
+      }
+    };
+    checkOnboarding();
+  }, [navigate]);
+
   // Filtering and sorting logic
   let displayedShops = [...shops];
 
-  // Filter by proximity (10km) if userLocation and shop lat/lng exist
+  // Filter by proximity if userLocation and shop lat/lng exist
   if (userLocation) {
     displayedShops = displayedShops.filter(shop => {
       if (shop.latitude && shop.longitude) {

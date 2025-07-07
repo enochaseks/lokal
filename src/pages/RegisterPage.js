@@ -3,6 +3,8 @@ import Navbar from '../components/Navbar';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router';
+import { getDocs, collection, query, where, setDoc, doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -16,8 +18,18 @@ function RegisterPage() {
 
   useEffect(() => {
     const auth = getAuth(app);
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user && user.emailVerified) {
+        // Check onboardingStep
+        const { doc, getDoc } = await import('firebase/firestore');
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const onboardingStep = userDoc.data().onboardingStep;
+          if (onboardingStep && onboardingStep !== 'complete') {
+            navigate('/' + onboardingStep);
+            return;
+          }
+        }
         navigate('/onboarding');
       }
     });
@@ -45,8 +57,27 @@ function RegisterPage() {
       return;
     }
     try {
+      // Check if email is deactivated in users or stores
+      const usersQuery = query(collection(db, 'users'), where('email', '==', email), where('deactivated', '==', true));
+      const usersSnap = await getDocs(usersQuery);
+      const storesQuery = query(collection(db, 'stores'), where('email', '==', email), where('deactivated', '==', true));
+      const storesSnap = await getDocs(storesQuery);
+      if (!usersSnap.empty || !storesSnap.empty) {
+        setError('This email is associated with a deactivated account. Please contact support.');
+        return;
+      }
       const auth = getAuth(app);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const { setDoc, doc, getDoc } = await import('firebase/firestore');
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          email,
+          createdAt: new Date().toISOString(),
+          onboardingStep: 'onboarding',
+        });
+      }
       await sendEmailVerification(userCredential.user);
       setVerificationSent(true);
       setSuccess('Account created! Please check your email to verify your account.');

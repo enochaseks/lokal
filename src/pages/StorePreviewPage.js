@@ -4,6 +4,36 @@ import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, addDoc, serverT
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { useCart } from '../CartContext';
+
+const currencySymbols = {
+  GBP: "£",
+  USD: "$",
+  EUR: "€",
+  NGN: "₦",
+  CAD: "C$",
+  AUD: "A$",
+  ZAR: "R",
+  GHS: "₵",
+  KES: "KSh",
+  XOF: "CFA",
+  XAF: "CFA",
+  INR: "₹",
+  JPY: "¥",
+  CNY: "¥"
+};
+
+function getCurrencySymbol(code) {
+  return currencySymbols[code] || code;
+}
+
+const currenciesWithDecimals = ["GBP", "USD", "EUR", "CAD", "AUD", "ZAR", "GHS", "KES", "INR", "CNY"];
+function formatPrice(price, currency) {
+  if (currenciesWithDecimals.includes(currency)) {
+    return Number(price).toFixed(2);
+  }
+  return price;
+}
 
 function StarRating({ value, onChange, max = 5 }) {
   return (
@@ -49,6 +79,8 @@ function StorePreviewPage() {
   const [userReview, setUserReview] = useState('');
   const [reviewSent, setReviewSent] = useState(false);
   const [reviews, setReviews] = useState([]);
+  const { addToCart } = useCart();
+  const [showAdded, setShowAdded] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -116,8 +148,8 @@ function StorePreviewPage() {
 
   const handleCheckbox = (item) => {
     setSelectedItems(prev => {
-      if (prev.some(i => i.id === item.id)) {
-        return prev.filter(i => i.id !== item.id);
+      if (prev.some(i => i && i.id === item.id)) {
+        return prev.filter(i => i && i.id !== item.id);
       } else {
         return [...prev, item];
       }
@@ -187,6 +219,22 @@ function StorePreviewPage() {
     return () => unsubReviews();
   }, [id]);
 
+  const handleAddToCart = (item) => {
+    addToCart({
+      storeId: id,
+      storeName: store.storeName,
+      itemId: item.id,
+      itemName: item.name,
+      price: parseFloat(item.price),
+      currency: item.currency,
+      quantity: 1,
+      image: item.image,
+      deliveryType: store.deliveryType
+    });
+    setShowAdded(true);
+    setTimeout(() => setShowAdded(false), 1500);
+  };
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -207,6 +255,33 @@ function StorePreviewPage() {
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <Navbar />
+      {showAdded && (
+        <div style={{
+          position: 'fixed',
+          top: 80,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#28a745',
+          color: '#fff',
+          padding: '1rem 2rem',
+          borderRadius: 12,
+          fontWeight: 700,
+          fontSize: '1.1rem',
+          zIndex: 2000,
+          boxShadow: '0 2px 8px #0002',
+          animation: 'fadeInOut 1.5s',
+        }}>
+          ✓ Added to cart!
+        </div>
+      )}
+      <style>{`
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateX(-50%) scale(0.95); }
+          10% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+          80% { opacity: 1; transform: translateX(-50%) scale(1); }
+          100% { opacity: 0; transform: translateX(-50%) scale(0.95); }
+        }
+      `}</style>
       <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
           <div style={{ position: 'relative' }}>
@@ -280,17 +355,33 @@ function StorePreviewPage() {
                 <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: open ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: open ? 1 : 0.5, filter: open ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
                   {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8 }} />}
                   <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
-                  <div style={{ color: '#007B7F', fontWeight: 500 }}>{item.price} {item.currency}</div>
+                  <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
                   <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
-                  {userType === 'buyer' && (
-                    <input type="checkbox" checked={selectedItems.some(i => i.id === item.id)} onChange={() => open ? handleCheckbox(item) : null} style={{ marginTop: 8 }} disabled={!open} />
+                  {userType === 'buyer' && open && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button
+                        style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
+                        onClick={() => handleAddToCart(item)}
+                      >
+                        Add to Cart
+                      </button>
+                      <button
+                        style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
+                        onClick={() => {
+                          handleAddToCart(item);
+                          navigate('/cart');
+                        }}
+                      >
+                        Buy Now
+                      </button>
+                    </div>
                   )}
                 </div>
               ))
             )}
             {userType === 'buyer' && selectedItems.length > 0 && open && (
               <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec' }}>
-                Total: {total.toFixed(2)}
+                Total: {getCurrencySymbol(selectedItems[0].currency)}{selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
               </div>
             )}
           </div>

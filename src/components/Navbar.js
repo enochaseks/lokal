@@ -3,40 +3,55 @@ import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { app, db } from '../firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import { useCart } from '../CartContext';
 
 function Navbar() {
   const [user, setUser] = useState(null);
   const [userType, setUserType] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState('');
   const navigate = useNavigate();
+  const { cart, clearCart } = useCart();
 
   useEffect(() => {
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Check if user is a buyer or seller
-        const userDoc = await getDoc(doc(db, 'users', u.uid));
-        if (userDoc.exists()) {
-          setUserType('buyer');
-        } else {
+        // Check if user is a seller (has a store doc)
+        const storeDoc = await getDoc(doc(db, 'stores', u.uid));
+        if (storeDoc.exists()) {
           setUserType('seller');
+        } else {
+          setUserType('buyer');
+        }
+        // Onboarding guard
+        const userDoc = await getDoc(doc(db, 'users', u.uid));
+        const onboardingStepValue = userDoc.exists() ? userDoc.data().onboardingStep : null;
+        setOnboardingStep(onboardingStepValue);
+        if (onboardingStepValue && onboardingStepValue !== 'complete') {
+          navigate('/' + onboardingStepValue);
         }
       } else {
         setUserType('');
+        setOnboardingStep('');
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleLogout = async () => {
     try {
+      clearCart();
       await signOut(getAuth(app));
       navigate('/explore');
     } catch (error) {
       console.error("Error signing out:", error);
     }
   };
+
+  // Only show cart if userType is 'buyer' and onboardingStep is 'complete' and user is logged in
+  const showCart = user && userType === 'buyer' && onboardingStep === 'complete';
 
   return (
     <nav style={{ 
@@ -64,7 +79,7 @@ function Navbar() {
           </div>
         </button>
       </div>
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {!user ? (
           <>
             <a href="/login" style={{ color: '#007B7F', marginRight: '1rem', textDecoration: 'none', fontWeight: 'bold' }}>Login</a>
@@ -73,9 +88,23 @@ function Navbar() {
         ) : (
           <>
             {userType === 'buyer' ? (
-              <a href="/profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
-                <span role="img" aria-label="profile">👤</span>
-              </a>
+              <>
+                <a href="/profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
+                  <span role="img" aria-label="profile">👤</span>
+                </a>
+                {showCart && (
+                  <button
+                    onClick={() => navigate('/shop-cart')}
+                    style={{ background: 'none', border: 'none', margin: '0 1.2rem', position: 'relative', cursor: 'pointer' }}
+                    aria-label="Cart"
+                  >
+                    <img src={process.env.PUBLIC_URL + '/images/cart.png'} alt="Cart" style={{ width: 32, height: 32 }} />
+                    {cart && cart.length > 0 && (
+                      <span style={{ position: 'absolute', top: -8, right: -8, background: '#D92D20', color: '#fff', borderRadius: '50%', padding: '2px 8px', fontSize: 14, fontWeight: 700 }}>{cart.length}</span>
+                    )}
+                  </button>
+                )}
+              </>
             ) : (
               <a href="/store-profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
                 <span role="img" aria-label="profile">👤</span>
@@ -108,6 +137,9 @@ function Navbar() {
             ×
           </button>
           <button onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>My Reviews</button>
+          {user && (
+            <button onClick={() => { setSidebarOpen(false); navigate('/messages'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Messages</button>
+          )}
           {!user ? (
             <a href="/about" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>About</a>
           ) : (

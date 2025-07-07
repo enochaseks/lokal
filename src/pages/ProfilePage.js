@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs, collectionGroup, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, collectionGroup, onSnapshot, updateDoc } from 'firebase/firestore';
 import Navbar from '../components/Navbar';
 
 function ProfilePage() {
@@ -18,6 +18,14 @@ function ProfilePage() {
   const [followingStores, setFollowingStores] = useState([]);
   const [followingLoading, setFollowingLoading] = useState(true);
   const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editPhoto, setEditPhoto] = useState('');
+  const [editError, setEditError] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -124,23 +132,85 @@ function ProfilePage() {
     // eslint-disable-next-line
   }, [profile, authUser]);
 
+  useEffect(() => {
+    if (profile) {
+      setEditName(profile.name || '');
+      setEditLocation(profile.location || '');
+      setEditPhoto(profile.photoURL || '');
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (!showEditModal || !editLocation) {
+      setLocationSuggestions([]);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(editLocation)}`)
+        .then(res => res.json())
+        .then(data => {
+          setLocationSuggestions(data.map(place => place.display_name));
+        });
+    }, 300); // debounce
+    return () => clearTimeout(timeout);
+  }, [editLocation, showEditModal]);
+
+  // Haversine formula to calculate distance between two lat/lon points
+  function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+  }
+
+  // Geocode a location string to lat/lon using Nominatim
+  async function geocodeLocation(location) {
+    if (!location) return null;
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+    }
+    return null;
+  }
+
   const fetchStores = async (cityName) => {
     try {
       let q = query(collection(db, 'stores'), where('live', '==', true));
       const querySnapshot = await getDocs(q);
-      let filtered = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(store =>
-          store.storeLocation &&
-          cityName &&
-          store.storeLocation.toLowerCase().includes(cityName.toLowerCase())
-        );
-      if (userCategories && userCategories.length > 0) {
-        filtered = filtered.filter(store =>
-          store.category && userCategories.includes(store.category)
-        );
+      let filtered = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Geocode buyer's location
+      const buyerLoc = await geocodeLocation(profile?.location || cityName);
+      if (!buyerLoc) {
+        setNearbyStores([]);
+        setStoresLoading(false);
+        return;
       }
-      setNearbyStores(filtered);
+      // For each store, use lat/lon if present, else geocode, and filter by 30 KM
+      const storesWithin30km = [];
+      for (const store of filtered) {
+        let storeLat = store.latitude, storeLon = store.longitude;
+        let storeLoc = null;
+        if (storeLat == null || storeLon == null) {
+          // Geocode if missing
+          storeLoc = await geocodeLocation(store.storeLocation);
+          if (!storeLoc) continue;
+          storeLat = storeLoc.lat;
+          storeLon = storeLoc.lon;
+        }
+        const dist = getDistanceFromLatLonInKm(buyerLoc.lat, buyerLoc.lon, storeLat, storeLon);
+        if (dist <= 30) {
+          storesWithin30km.push({ ...store, distance: dist });
+        }
+      }
+      // Optionally sort by distance
+      storesWithin30km.sort((a, b) => a.distance - b.distance);
+      setNearbyStores(storesWithin30km);
     } catch (err) {
       setNearbyStores([]);
     }
@@ -150,6 +220,39 @@ function ProfilePage() {
   const name = profile?.name || '';
   const location = profile?.location || '';
   const photoURL = profile?.photoURL || '';
+
+  const handleEditProfile = () => {
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      setEditError('Name is required.');
+      return;
+    }
+    if (!editLocation.trim()) {
+      setEditError('Location is required.');
+      return;
+    }
+    setEditError('');
+    setEditLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+      await updateDoc(doc(db, 'users', user.uid), {
+        name: editName,
+        location: editLocation,
+      });
+      await updateProfile(user, { displayName: editName });
+      setProfile(prev => ({ ...prev, name: editName, location: editLocation }));
+      setShowEditModal(false);
+    } catch (err) {
+      setEditError('Error updating profile: ' + err.message);
+    }
+    setEditLoading(false);
+  };
 
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -172,7 +275,12 @@ function ProfilePage() {
             {/* Message and Following section */}
             <div style={{ margin: '1.5rem 0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div>
-                <button style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 12, cursor: 'pointer' }}>Message</button>
+                <button
+                  style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 12, cursor: 'pointer' }}
+                  onClick={() => navigate('/messages')}
+                >
+                  Messages
+                </button>
                 <button
                   style={{ fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                   onClick={() => setShowFollowingModal(true)}
@@ -182,6 +290,12 @@ function ProfilePage() {
                 </button>
               </div>
             </div>
+            <button
+              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginBottom: 16, cursor: 'pointer' }}
+              onClick={handleEditProfile}
+            >
+              Edit Profile
+            </button>
           </>
         )}
       </div>
@@ -251,6 +365,84 @@ function ProfilePage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw', textAlign: 'center', position: 'relative' }}>
+            <h3 style={{ marginBottom: 18, color: '#007B7F' }}>Edit Profile</h3>
+            <form onSubmit={handleEditSave}>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontWeight: 600 }}>Name *</label><br />
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }} required />
+              </div>
+              <div style={{ marginBottom: 16, position: 'relative' }}>
+                <label style={{ fontWeight: 600 }}>Location *</label><br />
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={e => {
+                    setEditLocation(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  onFocus={() => setShowSuggestions(true)}
+                  style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #ccc' }}
+                  required
+                  autoComplete="off"
+                />
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <ul style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 56,
+                    background: '#fff',
+                    border: '1px solid #ccc',
+                    borderRadius: 6,
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                    zIndex: 10,
+                    margin: 0,
+                    padding: 0,
+                    listStyle: 'none',
+                    boxShadow: '0 2px 8px #0002'
+                  }}>
+                    {locationSuggestions.map((suggestion, idx) => (
+                      <li
+                        key={idx}
+                        onMouseDown={() => {
+                          setEditLocation(suggestion);
+                          setShowSuggestions(false);
+                        }}
+                        style={{ cursor: 'pointer', padding: 8, borderBottom: idx !== locationSuggestions.length - 1 ? '1px solid #eee' : 'none', background: '#fff' }}
+                      >
+                        {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {editError && <div style={{ color: 'red', marginBottom: 12 }}>{editError}</div>}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
+                <button type="button" onClick={() => setShowEditModal(false)} style={{ background: '#eee', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#444', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ background: '#007B7F', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#fff', fontWeight: 600, cursor: 'pointer' }} disabled={editLoading}>
+                  {editLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

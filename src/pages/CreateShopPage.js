@@ -1,15 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+function maskValue(value) {
+  if (!value) return '';
+  if (value.length <= 4) return '****';
+  return '*'.repeat(value.length - 4) + value.slice(-4);
+}
 
 function CreateShopPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const sellerData = location.state || {};
+  let sellerData = location.state || {};
+
+  // Fallback: Load from localStorage if location.state is empty
+  if (Object.keys(sellerData).length === 0) {
+    try {
+      const saved = localStorage.getItem('sellerData');
+      if (saved) sellerData = JSON.parse(saved);
+    } catch {}
+  }
+
+  // Always save sellerData to localStorage on mount
+  useEffect(() => {
+    if (sellerData && Object.keys(sellerData).length > 0) {
+      localStorage.setItem('sellerData', JSON.stringify(sellerData));
+    }
+  }, [sellerData]);
+
   const [backgroundImg, setBackgroundImg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [deliveryType, setDeliveryType] = useState('Collection');
@@ -43,6 +65,7 @@ function CreateShopPage() {
   const [caribAccount, setCaribAccount] = useState('');
   const [caribBank, setCaribBank] = useState('');
   const [caribBranch, setCaribBranch] = useState('');
+  const [cardType, setCardType] = useState('');
 
   const handleBackgroundImgChange = (e) => {
     setBackgroundImg(e.target.files[0]);
@@ -50,6 +73,11 @@ function CreateShopPage() {
 
   const handleCreateShop = async (e) => {
     e.preventDefault();
+    if (!backgroundImg) {
+      alert('Background image is required.');
+      setLoading(false);
+      return;
+    }
 
     if (deliveryType === 'Delivery' && paymentType === 'Other') {
       alert("'Pay at Store' is not available with 'Delivery'. Please choose another payment method.");
@@ -61,12 +89,47 @@ function CreateShopPage() {
       const auth = getAuth();
       const user = auth.currentUser;
       if (!user) throw new Error('Not logged in');
+      
+      // DEBUG: Print sellerData to see what is passed from onboarding
+      console.log('sellerData passed to CreateShopPage:', sellerData);
       let backgroundUrl = '';
       if (backgroundImg) {
         const imgRef = ref(storage, `storeBanners/${user.uid}/${backgroundImg.name}`);
         await uploadBytes(imgRef, backgroundImg);
         backgroundUrl = await getDownloadURL(imgRef);
       }
+      // --- Upload all provided files and save URLs ---
+      let certificateUrl = '';
+      if (sellerData.certificate) {
+        const certRef = ref(storage, `storeCertificates/${user.uid}/${sellerData.certificate.name}`);
+        await uploadBytes(certRef, sellerData.certificate);
+        certificateUrl = await getDownloadURL(certRef);
+      }
+      let foodHygieneUrl = '';
+      if (sellerData.foodHygiene) {
+        const foodRef = ref(storage, `storeFoodHygiene/${user.uid}/${sellerData.foodHygiene.name}`);
+        await uploadBytes(foodRef, sellerData.foodHygiene);
+        foodHygieneUrl = await getDownloadURL(foodRef);
+      }
+      let marketStallLicenceUrl = '';
+      if (sellerData.marketStallLicence) {
+        const marketRef = ref(storage, `storeMarketStallLicence/${user.uid}/${sellerData.marketStallLicence.name}`);
+        await uploadBytes(marketRef, sellerData.marketStallLicence);
+        marketStallLicenceUrl = await getDownloadURL(marketRef);
+      }
+      let onlineLicenceUrl = '';
+      if (sellerData.onlineLicence) {
+        const onlineRef = ref(storage, `storeOnlineLicence/${user.uid}/${sellerData.onlineLicence.name}`);
+        await uploadBytes(onlineRef, sellerData.onlineLicence);
+        onlineLicenceUrl = await getDownloadURL(onlineRef);
+      }
+      let alcoholLicenseUrl = '';
+      if (sellerData.alcoholLicense) {
+        const alcRef = ref(storage, `storeAlcoholLicense/${user.uid}/${sellerData.alcoholLicense.name}`);
+        await uploadBytes(alcRef, sellerData.alcoholLicense);
+        alcoholLicenseUrl = await getDownloadURL(alcRef);
+      }
+      // --- Payment Info ---
       let paymentInfo = {};
       if (paymentType === 'Own Card/Bank Details') {
         if (paymentCountry === 'UK') {
@@ -104,31 +167,45 @@ function CreateShopPage() {
           // If geocoding fails, leave lat/lng as null
         }
       }
+      // --- Save all fields, including those for settings ---
+      // Mask sensitive payment info
+      let maskedPaymentInfo = { ...paymentInfo };
+      if (maskedPaymentInfo.sortCode) maskedPaymentInfo.sortCode = maskValue(maskedPaymentInfo.sortCode);
+      if (maskedPaymentInfo.accountNumber) maskedPaymentInfo.accountNumber = maskValue(maskedPaymentInfo.accountNumber);
+      if (maskedPaymentInfo.expiry) maskedPaymentInfo.expiry = maskValue(maskedPaymentInfo.expiry);
+      if (cardType) maskedPaymentInfo.cardType = cardType;
       const storeProfile = {
         ownerId: user.uid,
         storeName: sellerData.storeName || sellerData.marketName || sellerData.onlineName || '',
-        storeLocation: storeLocationString,
+        storeLocation: sellerData.storeLocation || sellerData.marketLocation || sellerData.onlineLocation || '',
+        origin: sellerData.origin || '',
+        deliveryType: sellerData.deliveryType || '',
         businessId: sellerData.businessId || '',
-        certificate: sellerData.certificate?.name || '',
-        foodHygiene: sellerData.foodHygiene?.name || '',
-        marketStallLicence: sellerData.marketStallLicence?.name || '',
+        certificate: certificateUrl,
+        foodHygiene: foodHygieneUrl,
+        marketStallLicence: marketStallLicenceUrl,
         platform: sellerData.platform || '',
         socialHandle: sellerData.socialHandle || '',
         hasWebsite: sellerData.hasWebsite || '',
         websiteLink: sellerData.websiteLink || '',
-        onlineLicence: sellerData.onlineLicence?.name || '',
-        origin: sellerData.origin || '',
+        onlineLicence: onlineLicenceUrl,
         backgroundImg: backgroundUrl,
-        deliveryType,
         hasOwnDelivery: deliveryType === 'Delivery' ? hasOwnDelivery : '',
         paymentType,
-        paymentInfo,
+        paymentInfo: maskedPaymentInfo,
+        cardType,
         createdAt: new Date().toISOString(),
         category: sellerData.category || '',
         latitude,
         longitude,
+        sellsAlcohol: sellerData.sellsAlcohol || '',
+        alcoholLicense: alcoholLicenseUrl,
+        openingTime: sellerData.openingTime || '',
+        closingTime: sellerData.closingTime || '',
+        // Add any other fields you want to persist for settings
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
+      await updateDoc(doc(db, 'users', user.uid), { ...storeProfile, onboardingStep: 'complete' });
       setLoading(false);
       navigate('/store-profile', { state: { ...storeProfile } });
     } catch (err) {
@@ -173,50 +250,13 @@ function CreateShopPage() {
         <div style={{ marginBottom: '2rem' }}>
           <h4>Summary</h4>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '1.1rem', color: '#222' }}>
-            {sellerData.storeName && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Store Name:</b> {sellerData.storeName}</li>
-            )}
-            {sellerData.storeLocation && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Store Location:</b> {sellerData.storeLocation}</li>
-            )}
-            {sellerData.marketName && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Market Name:</b> {sellerData.marketName}</li>
-            )}
-            {sellerData.marketLocation && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Market Location:</b> {sellerData.marketLocation}</li>
-            )}
-            {sellerData.onlineName && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Online Name:</b> {sellerData.onlineName}</li>
-            )}
-            {sellerData.platform && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Platform:</b> {sellerData.platform}</li>
-            )}
-            {sellerData.socialHandle && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Social Handle:</b> {sellerData.socialHandle}</li>
-            )}
-            {sellerData.hasWebsite && sellerData.hasWebsite === 'yes' && sellerData.websiteLink && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Website:</b> {sellerData.websiteLink}</li>
-            )}
-            {sellerData.businessId && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Business ID:</b> {sellerData.businessId}</li>
-            )}
-            {sellerData.certificate && sellerData.certificate.name && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Certificate:</b> {sellerData.certificate.name}</li>
-            )}
-            {sellerData.foodHygiene && sellerData.foodHygiene.name && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Food Hygiene Certificate:</b> {sellerData.foodHygiene.name}</li>
-            )}
-            {sellerData.marketStallLicence && sellerData.marketStallLicence.name && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Market Stall Licence:</b> {sellerData.marketStallLicence.name}</li>
-            )}
-            {sellerData.onlineLicence && sellerData.onlineLicence.name && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Online Licence:</b> {sellerData.onlineLicence.name}</li>
-            )}
-            {sellerData.origin && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Type of Origin:</b> {sellerData.origin}</li>
-            )}
-            {sellerData.onlineLocation && (
-              <li style={{ marginBottom: '0.7rem' }}><b style={{ fontWeight: 600 }}>Online Location:</b> {sellerData.onlineLocation}</li>
+            <li><b>Store Name:</b> {sellerData.storeName || 'N/A'}</li>
+            <li><b>Store Location:</b> {sellerData.storeLocation || 'N/A'}</li>
+            <li><b>Origin:</b> {sellerData.origin || 'N/A'}</li>
+            <li><b>Category:</b> {sellerData.category || 'N/A'}</li>
+            <li><b>Delivery Type:</b> {sellerData.deliveryType || 'N/A'}</li>
+            {sellerData.paymentInfo && (
+              <li><b>Payment Info:</b> {Object.entries(sellerData.paymentInfo).map(([k, v]) => `${k}: ${v}`).join(', ')}</li>
             )}
           </ul>
         </div>
@@ -293,6 +333,7 @@ function CreateShopPage() {
                     <div><b>Account:</b> {ukAccountNumber}</div>
                     <div><b>Bank:</b> {ukBankName}</div>
                     <div><b>Expiry:</b> {ukExpiry}</div>
+                    {cardType && <div><b>Card Type:</b> {cardType}</div>}
                   </>
                 )}
                 {paymentType === 'Own Card/Bank Details' && paymentCountry === 'Nigeria' && (
@@ -385,6 +426,15 @@ function CreateShopPage() {
                 <option value="Other">Other</option>
               </select>
             </div>
+            {/* Card Type Selection */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Card Type</label>
+              <select value={cardType} onChange={e => setCardType(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
+                <option value="" disabled>Select card type</option>
+                <option value="Personal">Personal</option>
+                <option value="Business">Business</option>
+              </select>
+            </div>
             {paymentCountry === 'UK' && (
               <>
                 <div style={{ marginBottom: 14 }}>
@@ -401,7 +451,19 @@ function CreateShopPage() {
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label>Expiry Date</label>
-                  <input type="text" value={ukExpiry} onChange={e => setUkExpiry(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} placeholder="MM/YY" />
+                  <input
+                    type="text"
+                    value={ukExpiry}
+                    onChange={e => {
+                      let value = e.target.value.replace(/[^0-9]/g, '');
+                      if (value.length > 4) value = value.slice(0, 4);
+                      if (value.length > 2) value = value.slice(0, 2) + '/' + value.slice(2);
+                      setUkExpiry(value);
+                    }}
+                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}
+                    placeholder="MM/YY"
+                    maxLength={5}
+                  />
                 </div>
               </>
             )}
