@@ -71,6 +71,11 @@ function OnboardingSellLocationPage() {
   const [onlineCity, setOnlineCity] = useState('');
   const [onlineState, setOnlineState] = useState('');
   const [onlineZip, setOnlineZip] = useState('');
+  const [lat, setLat] = useState(null);
+  const [lon, setLon] = useState(null);
+  const [locationVerified, setLocationVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   const socialPlatforms = [
     'Instagram', 'Facebook', 'WhatsApp', 'TikTok', 'Twitter', 'Other Social Media', 'Own Website'
@@ -188,12 +193,12 @@ function OnboardingSellLocationPage() {
             }
             setFormError('');
             const country = origin || '';
-            const fullAddress = `${street}, ${city}, ${stateRegion}, ${zip}, ${country}`;
+            const fullAddress = `${city}, ${stateRegion}, ${zip}, ${country}`;
             let lat = null, lon = null;
             try {
               const countryCode = countryNameToCode[origin] || '';
               const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
-              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}${countryParam}`);
+              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
               if (res.ok) {
                 const data = await res.json();
                 if (data.length > 0) {
@@ -323,7 +328,57 @@ function OnboardingSellLocationPage() {
               </div>
             )}
             {formError && <div style={{ color: '#D92D20', marginBottom: 8 }}>{formError}</div>}
-            <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }}>Continue</button>
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                setVerifying(true);
+                setVerifyError('');
+                const fullAddress = `${zip}, ${country}`;
+                try {
+                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                  const data = await res.json();
+                  if (data.length > 0) {
+                    setLat(parseFloat(data[0].lat));
+                    setLon(parseFloat(data[0].lon));
+                    setLocationVerified(true);
+                  } else {
+                    setVerifyError('Location not found. Please check your city, state, postcode, and country.');
+                    setLocationVerified(false);
+                  }
+                } catch {
+                  setVerifyError('Error verifying location.');
+                  setLocationVerified(false);
+                }
+                setVerifying(false);
+              }}
+              disabled={verifying || !zip || !country}
+              type="button"
+              style={{ marginTop: 12, background: '#007B7F', color: '#fff', padding: '0.7rem 1.2rem', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+            >
+              {verifying ? 'Verifying...' : 'Verify Location'}
+            </button>
+            {verifyError && <div style={{color:'red', marginTop: 8}}>{verifyError}</div>}
+            {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
+            <button
+              onClick={async () => {
+                const storeFullAddress = `${city}, ${stateRegion}, ${zip}, ${country}`;
+                const { getAuth } = await import('firebase/auth');
+                const { doc, updateDoc } = await import('firebase/firestore');
+                const { db } = await import('../firebase');
+                const auth = getAuth();
+                const user = auth.currentUser;
+                if (user) {
+                  const userRef = doc(db, 'users', user.uid);
+                  await updateDoc(userRef, { onboardingStep: 'create-shop' });
+                }
+                navigate('/create-shop', { state: { storeName, storeLocation: storeFullAddress, businessId, certificate, origin, category, deliveryType, latitude: lat, longitude: lon } });
+              }}
+              disabled={!locationVerified}
+              type="button"
+              style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: locationVerified ? 'pointer' : 'not-allowed', opacity: locationVerified ? 1 : 0.5 }}
+            >
+              Continue
+            </button>
           </form>
         ) : showMarketForm ? (
           <form style={{ textAlign: 'left' }} onSubmit={async e => {
@@ -441,7 +496,57 @@ function OnboardingSellLocationPage() {
                 </optgroup>
               </select>
             </div>
-            <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }}>Continue</button>
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                setVerifying(true);
+                setVerifyError('');
+                const fullAddress = `${marketCity}, ${marketState}, ${marketZip}, ${origin}`;
+                try {
+                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                  const data = await res.json();
+                  if (data.length > 0) {
+                    setLat(parseFloat(data[0].lat));
+                    setLon(parseFloat(data[0].lon));
+                    setLocationVerified(true);
+                  } else {
+                    setVerifyError('Location not found. Please check your city, state, postcode, and country.');
+                    setLocationVerified(false);
+                  }
+                } catch {
+                  setVerifyError('Error verifying location.');
+                  setLocationVerified(false);
+                }
+                setVerifying(false);
+              }}
+              disabled={verifying || !marketCity || !origin}
+              type="button"
+              style={{ marginTop: 12, background: '#007B7F', color: '#fff', padding: '0.7rem 1.2rem', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+            >
+              {verifying ? 'Verifying...' : 'Verify Location'}
+            </button>
+            {verifyError && <div style={{color:'red', marginTop: 8}}>{verifyError}</div>}
+            {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
+            <button
+              onClick={async () => {
+                const marketFullAddress = `${marketCity}, ${marketState}, ${marketZip}, ${country}`;
+                const { getAuth } = await import('firebase/auth');
+                const { doc, updateDoc } = await import('firebase/firestore');
+                const { db } = await import('../firebase');
+                const auth = getAuth();
+                const user = auth.currentUser;
+                if (user) {
+                  const userRef = doc(db, 'users', user.uid);
+                  await updateDoc(userRef, { onboardingStep: 'create-shop' });
+                }
+                navigate('/create-shop', { state: { storeName: marketName, storeLocation: marketFullAddress, origin, category, deliveryType, latitude: lat, longitude: lon } });
+              }}
+              disabled={!locationVerified}
+              type="button"
+              style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: locationVerified ? 'pointer' : 'not-allowed', opacity: locationVerified ? 1 : 0.5 }}
+            >
+              Continue
+            </button>
           </form>
         ) : (
           <form style={{ textAlign: 'left' }} onSubmit={async e => {
@@ -561,7 +666,57 @@ function OnboardingSellLocationPage() {
                 </optgroup>
               </select>
             </div>
-            <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }}>Continue</button>
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                setVerifying(true);
+                setVerifyError('');
+                const fullAddress = `${onlineCity}, ${onlineState}, ${onlineZip}, ${origin}`;
+                try {
+                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                  const data = await res.json();
+                  if (data.length > 0) {
+                    setLat(parseFloat(data[0].lat));
+                    setLon(parseFloat(data[0].lon));
+                    setLocationVerified(true);
+                  } else {
+                    setVerifyError('Location not found. Please check your city, state, postcode, and country.');
+                    setLocationVerified(false);
+                  }
+                } catch {
+                  setVerifyError('Error verifying location.');
+                  setLocationVerified(false);
+                }
+                setVerifying(false);
+              }}
+              disabled={verifying || !onlineCity || !origin}
+              type="button"
+              style={{ marginTop: 12, background: '#007B7F', color: '#fff', padding: '0.7rem 1.2rem', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+            >
+              {verifying ? 'Verifying...' : 'Verify Location'}
+            </button>
+            {verifyError && <div style={{color:'red', marginTop: 8}}>{verifyError}</div>}
+            {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
+            <button
+              onClick={async () => {
+                const onlineFullAddress = `${onlineCity}, ${onlineState}, ${onlineZip}, ${country}`;
+                const { getAuth } = await import('firebase/auth');
+                const { doc, updateDoc } = await import('firebase/firestore');
+                const { db } = await import('../firebase');
+                const auth = getAuth();
+                const user = auth.currentUser;
+                if (user) {
+                  const userRef = doc(db, 'users', user.uid);
+                  await updateDoc(userRef, { onboardingStep: 'create-shop' });
+                }
+                navigate('/create-shop', { state: { storeName: onlineName, storeLocation: onlineFullAddress, origin, category, deliveryType, latitude: lat, longitude: lon } });
+              }}
+              disabled={!locationVerified}
+              type="button"
+              style={{ width: '100%', background: '#007B7F', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.1rem', cursor: locationVerified ? 'pointer' : 'not-allowed', opacity: locationVerified ? 1 : 0.5 }}
+            >
+              Continue
+            </button>
           </form>
         )}
       </div>

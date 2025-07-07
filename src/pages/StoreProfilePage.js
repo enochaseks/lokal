@@ -884,6 +884,8 @@ function StoreProfilePage() {
                     disabled
                   >
                     <option value="">Select country/island</option>
+                    <option value="African">African</option>
+                    <option value="Caribbean">Caribbean</option>
                     <optgroup label="African Countries">
                       {[
                         'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia', 'Morocco', 'Uganda', 'Tanzania', 'Algeria', 'Angola', 'Cameroon', 'Ivory Coast', 'Senegal', 'Zimbabwe', 'Zambia', 'Botswana', 'Namibia', 'Rwanda', 'Burundi', 'Mali', 'Malawi', 'Mozambique', 'Tunisia', 'Libya', 'Sudan', 'Somalia', 'Chad', 'Niger', 'Benin', 'Burkina Faso', 'Guinea', 'Sierra Leone', 'Liberia', 'Togo', 'Central African Republic', 'Congo', 'Gabon', 'Gambia', 'Lesotho', 'Mauritius', 'Swaziland', 'Djibouti', 'Eritrea', 'Seychelles', 'Comoros', 'Cape Verde', 'Sao Tome and Principe',

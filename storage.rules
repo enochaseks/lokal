@@ -8,6 +8,10 @@ service firebase.storage {
     match /storeItems/{userId}/{allPaths=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // Allow authenticated users to read/write any file directly under storeItems (for compatibility with current upload path)
+    match /storeItems/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
     // Allow users to read/write their own files in storeBanners
     match /storeBanners/{userId}/{allPaths=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;

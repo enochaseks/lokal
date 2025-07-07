@@ -153,9 +153,10 @@ function CreateShopPage() {
         }
       }
       // Geocode the store location to get latitude and longitude
-      let latitude = null, longitude = null;
+      let latitude = sellerData.latitude || null;
+      let longitude = sellerData.longitude || null;
       let storeLocationString = sellerData.storeLocation || sellerData.marketLocation || sellerData.onlineLocation || '';
-      if (storeLocationString) {
+      if ((!latitude || !longitude) && storeLocationString) {
         try {
           const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(storeLocationString)}`);
           const geoData = await geoRes.json();
