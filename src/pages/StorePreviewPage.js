@@ -82,6 +82,9 @@ function StorePreviewPage() {
   const { addToCart } = useCart();
   const [showAdded, setShowAdded] = useState(false);
 
+  // Only declare daysOfWeek ONCE at the top of the file
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -165,7 +168,12 @@ function StorePreviewPage() {
     // Here you would send the message to the seller (not implemented)
   };
 
-  const isStoreOpen = (opening, closing) => {
+  // Use daysOfWeek everywhere in the file for day calculations
+  const today = daysOfWeek[new Date().getDay()];
+  const isClosedToday = store && store.closedDays && store.closedDays.includes(today);
+  const todayOpening = store && store.openingTimes && store.openingTimes[today];
+  const todayClosing = store && store.closingTimes && store.closingTimes[today];
+  function isStoreOpenForToday(opening, closing) {
     if (!opening || !closing) return false;
     const now = new Date();
     const [openH, openM] = opening.split(':').map(Number);
@@ -173,53 +181,13 @@ function StorePreviewPage() {
     const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
     const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
     return now >= openDate && now <= closeDate;
-  };
+  }
 
-  const open = store ? isStoreOpen(store.openingTime, store.closingTime) : false;
+  // Helper to check if current user is the store owner
+  const isStoreOwner = authUser && store && store.ownerId && authUser.uid === store.ownerId;
 
-  const handleSubmitReview = async () => {
-    if (!userRating || !userReview || !authUser) return;
-
-    // Fetch buyer profile
-    const userProfileSnap = await getDoc(doc(db, 'users', authUser.uid));
-    let name = 'Anonymous';
-    let photoURL = '';
-    if (userProfileSnap.exists()) {
-      const data = userProfileSnap.data();
-      name = data.displayName || data.name || 'Anonymous';
-      photoURL = data.photoURL || '';
-    }
-
-    await addDoc(collection(db, 'stores', id, 'reviews'), {
-      rating: userRating,
-      text: userReview,
-      userName: name,
-      userPhoto: photoURL,
-      createdAt: serverTimestamp(),
-    });
-    setReviewSent(true);
-    setTimeout(() => setReviewSent(false), 2000);
-    setUserRating(0);
-    setUserReview('');
-  };
-
-  useEffect(() => {
-    if (!id) return;
-    const unsubReviews = onSnapshot(collection(db, 'stores', id, 'reviews'), (snap) => {
-      const reviewsArr = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setReviews(reviewsArr);
-      if (reviewsArr.length > 0) {
-        setAvgRating((reviewsArr.reduce((sum, r) => sum + (r.rating || 0), 0) / reviewsArr.length).toFixed(1));
-        setRatingCount(reviewsArr.length);
-      } else {
-        setAvgRating(0);
-        setRatingCount(0);
-      }
-    });
-    return () => unsubReviews();
-  }, [id]);
-
-  const handleAddToCart = (item) => {
+  // Add to cart handler
+  function handleAddToCart(item) {
     addToCart({
       storeId: id,
       storeName: store.storeName,
@@ -233,10 +201,24 @@ function StorePreviewPage() {
     });
     setShowAdded(true);
     setTimeout(() => setShowAdded(false), 1500);
-  };
+  }
 
-  // Helper to check if current user is the store owner
-  const isStoreOwner = authUser && store && store.ownerId && authUser.uid === store.ownerId;
+  // Make sure handleSubmitReview is defined (already present in your code)
+  const handleSubmitReview = async () => {
+    if (!authUser || !id) return;
+    const reviewRef = await addDoc(collection(db, 'stores', id, 'reviews'), {
+      rating: userRating,
+      text: userReview,
+      userId: authUser.uid,
+      userName: authUser.displayName || authUser.email,
+      userPhoto: authUser.photoURL,
+      createdAt: serverTimestamp(),
+    });
+    setReviewSent(true);
+    setTimeout(() => setReviewSent(false), 2000);
+    setUserRating(0);
+    setUserReview('');
+  };
 
   if (loading) {
     return (
@@ -289,9 +271,9 @@ function StorePreviewPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
           <div style={{ position: 'relative' }}>
             {store.backgroundImg && (
-              <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: open ? 'none' : 'grayscale(0.7)', opacity: open ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
+              <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: isStoreOpenForToday(todayOpening, todayClosing) ? 'none' : 'grayscale(0.7)', opacity: isStoreOpenForToday(todayOpening, todayClosing) ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
             )}
-            {!open && (
+            {!isStoreOpenForToday(todayOpening, todayClosing) && (
               <div style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, background: 'rgba(255,255,255,0.55)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.1rem', color: '#D92D20', pointerEvents: 'none' }}>
                 Closed
               </div>
@@ -330,12 +312,12 @@ function StorePreviewPage() {
           )}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <span style={{ background: open ? '#e8fbe8' : '#fbe8e8', color: open ? '#3A8E3A' : '#D92D20', borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
-            {open ? 'Open' : 'Closed'}
+          <span style={{ background: isClosedToday ? '#fbe8e8' : (isStoreOpenForToday(todayOpening, todayClosing) ? '#e8fbe8' : '#fbe8e8'), color: isClosedToday ? '#D92D20' : (isStoreOpenForToday(todayOpening, todayClosing) ? '#3A8E3A' : '#D92D20'), borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
+            {isClosedToday ? 'Closed Today' : (isStoreOpenForToday(todayOpening, todayClosing) ? 'Open' : 'Closed')}
           </span>
-          {store && store.openingTime && store.closingTime && (
+          {!isClosedToday && todayOpening && todayClosing && (
             <span style={{ marginLeft: 16, color: '#007B7F', fontSize: '1rem' }}>
-              {store.openingTime} - {store.closingTime}
+              {todayOpening} - {todayClosing}
             </span>
           )}
           {store && Array.isArray(store.closedDays) && store.closedDays.length > 0 && (
@@ -354,13 +336,13 @@ function StorePreviewPage() {
               <div style={{ color: '#888' }}>No items added yet.</div>
             ) : (
               items.map(item => (
-                <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: open ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: open ? 1 : 0.5, filter: open ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
+                <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: isStoreOpenForToday(todayOpening, todayClosing) ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isStoreOpenForToday(todayOpening, todayClosing) ? 1 : 0.5, filter: isStoreOpenForToday(todayOpening, todayClosing) ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
                   {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8 }} />}
                   <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
                   <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
                   <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
                   {/* Only show these buttons for buyers/customers who are not the store owner */}
-                  {userType === 'buyer' && !isStoreOwner && open && (
+                  {userType === 'buyer' && !isStoreOwner && isStoreOpenForToday(todayOpening, todayClosing) && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button
                         style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
@@ -382,7 +364,7 @@ function StorePreviewPage() {
                 </div>
               ))
             )}
-            {userType === 'buyer' && selectedItems.length > 0 && open && (
+            {userType === 'buyer' && selectedItems.length > 0 && isStoreOpenForToday(todayOpening, todayClosing) && (
               <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec' }}>
                 Total: {getCurrencySymbol(selectedItems[0].currency)}{selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
               </div>

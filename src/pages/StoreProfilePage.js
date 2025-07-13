@@ -71,7 +71,7 @@ function StoreProfilePage() {
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
 
   // Add at the top, after other useState hooks
-  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const [closedDays, setClosedDays] = useState(profile?.closedDays || []);
   const [openingTimes, setOpeningTimes] = useState(profile?.openingTimes || {});
   const [closingTimes, setClosingTimes] = useState(profile?.closingTimes || {});
@@ -565,6 +565,21 @@ function StoreProfilePage() {
     return { months, days: remainingDays };
   };
 
+  // Add this helper at the top or near other helpers
+  const today = daysOfWeek[new Date().getDay()];
+  const isClosedToday = profile && profile.closedDays && profile.closedDays.includes(today);
+  const todayOpening = profile && profile.openingTimes && profile.openingTimes[today];
+  const todayClosing = profile && profile.closingTimes && profile.closingTimes[today];
+  function isStoreOpenForToday(opening, closing) {
+    if (!opening || !closing) return false;
+    const now = new Date();
+    const [openH, openM] = opening.split(':').map(Number);
+    const [closeH, closeM] = closing.split(':').map(Number);
+    const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+    const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+    return now >= openDate && now <= closeDate;
+  }
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -706,10 +721,17 @@ function StoreProfilePage() {
           )}
           {/* Opening/Closing Time and Status */}
           <div style={{ width: '100%', fontSize: '0.98rem', color: '#007B7F', marginBottom: 8 }}>
-            <b>Opening Time:</b> {profile.openingTime || '--:--'} &nbsp; <b>Closing Time:</b> {profile.closingTime || '--:--'}
-            <span style={{ marginLeft: 16, fontWeight: 600, color: isStoreOpen(profile.openingTime, profile.closingTime) ? '#3A8E3A' : '#D92D20' }}>
-              {isStoreOpen(profile.openingTime, profile.closingTime) ? 'Open Now' : 'Closed Now'}
-            </span>
+            <b>Today:</b> {today} &nbsp;
+            {isClosedToday ? (
+              <span style={{ color: '#D92D20', fontWeight: 600 }}>Closed Today</span>
+            ) : (
+              <>
+                <b>Opening Time:</b> {todayOpening || '--:--'} &nbsp; <b>Closing Time:</b> {todayClosing || '--:--'}
+                <span style={{ marginLeft: 16, fontWeight: 600, color: isStoreOpenForToday(todayOpening, todayClosing) ? '#3A8E3A' : '#D92D20' }}>
+                  {isStoreOpenForToday(todayOpening, todayClosing) ? 'Open Now' : 'Closed Now'}
+                </span>
+              </>
+            )}
           </div>
           {/* Messages and Followers row */}
           <div style={{ width: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0 8px 0' }}>
