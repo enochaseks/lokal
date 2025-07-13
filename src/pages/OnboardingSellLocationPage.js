@@ -297,6 +297,12 @@ function OnboardingSellLocationPage() {
                 <option value="">Select origin</option>
                 <option value="African">African</option>
                 <option value="Caribbean">Caribbean</option>
+                <option value="African American">African American</option>
+                <option value="Black British">Black British</option>
+                <option value="Black Caribbean">Black Caribbean</option>
+                <option value="Black African">Black African</option>
+                <option value="Black British Caribbean">Black British Caribbean</option>
+                <option value="Black British African">Black British African</option>
                 <optgroup label="African Countries">
                   {africanCountries.map((c) => <option key={c} value={c}>{c}</option>)}
                 </optgroup>
@@ -488,6 +494,12 @@ function OnboardingSellLocationPage() {
                 <option value="">Select origin</option>
                 <option value="African">African</option>
                 <option value="Caribbean">Caribbean</option>
+                <option value="African American">African American</option>
+                <option value="Black British">Black British</option>
+                <option value="Black Caribbean">Black Caribbean</option>
+                <option value="Black African">Black African</option>
+                <option value="Black British Caribbean">Black British Caribbean</option>
+                <option value="Black British African">Black British African</option>
                 <optgroup label="African Countries">
                   {africanCountries.map((c) => <option key={c} value={c}>{c}</option>)}
                 </optgroup>
@@ -658,6 +670,12 @@ function OnboardingSellLocationPage() {
                 <option value="">Select origin</option>
                 <option value="African">African</option>
                 <option value="Caribbean">Caribbean</option>
+                <option value="African American">African American</option>
+                <option value="Black British">Black British</option>
+                <option value="Black Caribbean">Black Caribbean</option>
+                <option value="Black African">Black African</option>
+                <option value="Black British Caribbean">Black British Caribbean</option>
+                <option value="Black British African">Black British African</option>
                 <optgroup label="African Countries">
                   {africanCountries.map((c) => <option key={c} value={c}>{c}</option>)}
                 </optgroup>
