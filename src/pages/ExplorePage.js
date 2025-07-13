@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const responsiveStyles = `
 @media (max-width: 768px) {
   .explore-controls {
@@ -373,7 +375,21 @@ function ExplorePage() {
       )}
       <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
         {displayedShops.map(shop => {
-          const open = isStoreOpen(shop.openingTime, shop.closingTime);
+          // New logic for open/closed status
+          const today = daysOfWeek[new Date().getDay()];
+          const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
+          const todayOpening = shop.openingTimes && shop.openingTimes[today];
+          const todayClosing = shop.closingTimes && shop.closingTimes[today];
+          function isStoreOpenForToday(opening, closing) {
+            if (!opening || !closing) return false;
+            const now = new Date();
+            const [openH, openM] = opening.split(':').map(Number);
+            const [closeH, closeM] = closing.split(':').map(Number);
+            const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+            const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+            return now >= openDate && now <= closeDate;
+          }
+          const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
           let distance = null;
           if (userLocation && shop.latitude && shop.longitude) {
             distance = getDistanceFromLatLonInKm(
@@ -410,12 +426,12 @@ function ExplorePage() {
                 <div style={{ position: 'absolute', top: 8, right: 12, background: '#fff', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: '#007B7F', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
                   ⭐ {ratings[shop.id]?.avg || '0.0'} ({ratings[shop.id]?.count || 0})
                 </div>
-                <div style={{ position: 'absolute', top: 8, left: 12, background: open ? '#e8fbe8' : '#fbe8e8', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: open ? '#3A8E3A' : '#D92D20', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
-                  {open ? 'Open' : 'Closed'}
+                <div style={{ position: 'absolute', top: 8, left: 12, background: isClosedToday ? '#fbe8e8' : (open ? '#e8fbe8' : '#fbe8e8'), borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: isClosedToday ? '#D92D20' : (open ? '#3A8E3A' : '#D92D20'), fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
+                  {isClosedToday ? 'Closed Today' : (open ? 'Open' : 'Closed')}
                 </div>
                 {!open && (
                   <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(255,255,255,0.55)', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3rem', color: '#D92D20', pointerEvents: 'none' }}>
-                    Closed
+                    {isClosedToday ? 'Closed Today' : 'Closed'}
                   </div>
                 )}
               </div>
@@ -447,6 +463,11 @@ function ExplorePage() {
                   )}
                 </div>
                 <div style={{ fontSize: '0.95rem', color: '#444' }}>{shop.storeLocation}</div>
+                {!isClosedToday && todayOpening && todayClosing && (
+                  <div style={{ fontSize: '0.95rem', color: '#007B7F', fontWeight: 500 }}>
+                    {todayOpening} - {todayClosing}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -463,7 +484,21 @@ function ExplorePage() {
             .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0))
             .slice(0, 5)
             .map(shop => {
-              const open = isStoreOpen(shop.openingTime, shop.closingTime);
+              // New logic for open/closed status
+              const today = daysOfWeek[new Date().getDay()];
+              const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
+              const todayOpening = shop.openingTimes && shop.openingTimes[today];
+              const todayClosing = shop.closingTimes && shop.closingTimes[today];
+              function isStoreOpenForToday(opening, closing) {
+                if (!opening || !closing) return false;
+                const now = new Date();
+                const [openH, openM] = opening.split(':').map(Number);
+                const [closeH, closeM] = closing.split(':').map(Number);
+                const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+                const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+                return now >= openDate && now <= closeDate;
+              }
+              const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
               return (
                 <div
                   key={shop.id}
@@ -493,12 +528,12 @@ function ExplorePage() {
                     <div style={{ position: 'absolute', top: 8, right: 12, background: '#fff', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: '#FFD700', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
                       ⭐ {ratings[shop.id]?.avg || '0.0'} ({ratings[shop.id]?.count || 0})
                     </div>
-                    <div style={{ position: 'absolute', top: 8, left: 12, background: open ? '#e8fbe8' : '#fbe8e8', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: open ? '#3A8E3A' : '#D92D20', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
-                      {open ? 'Open' : 'Closed'}
+                    <div style={{ position: 'absolute', top: 8, left: 12, background: isClosedToday ? '#fbe8e8' : (open ? '#e8fbe8' : '#fbe8e8'), borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: isClosedToday ? '#D92D20' : (open ? '#3A8E3A' : '#D92D20'), fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
+                      {isClosedToday ? 'Closed Today' : (open ? 'Open' : 'Closed')}
                     </div>
                     {!open && (
                       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(255,255,255,0.55)', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3rem', color: '#D92D20', pointerEvents: 'none' }}>
-                        Closed
+                        {isClosedToday ? 'Closed Today' : 'Closed'}
                       </div>
                     )}
                   </div>
