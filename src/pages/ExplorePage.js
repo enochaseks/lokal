@@ -104,6 +104,8 @@ function ExplorePage() {
   const [searchRadius, setSearchRadius] = useState(30);
   const [profile, setProfile] = useState(null);
   const navigate = useNavigate();
+  // Add state for selectedCity
+  const [selectedCity, setSelectedCity] = useState('');
 
   useEffect(() => {
     // Fetch buyer profile and use their saved location if available
@@ -222,22 +224,9 @@ function ExplorePage() {
     checkOnboarding();
   }, [navigate]);
 
-  // Filtering and sorting logic
+  // Remove any previous filtering by distance from displayedShops
+  // Only filter by distance once, right before rendering:
   let displayedShops = [...shops];
-
-  // Filter by proximity if userLocation and shop lat/lng exist
-  if (userLocation) {
-    displayedShops = displayedShops.filter(shop => {
-      if (shop.latitude && shop.longitude) {
-        const distance = getDistanceFromLatLonInKm(
-          Number(userLocation.lat), Number(userLocation.lng),
-          Number(shop.latitude), Number(shop.longitude)
-        );
-        return distance <= searchRadius;
-      }
-      return false;
-    });
-  }
 
   // Search filter
   if (searchTerm.trim() !== '') {
@@ -272,6 +261,34 @@ function ExplorePage() {
       .filter(shop => shop.ratingCount >= 10)
       .sort((a, b) => b.avgRating - a.avgRating);
   }
+
+  // Filter displayedShops by selectedCity
+  if (selectedCity) {
+    displayedShops = displayedShops.filter(shop =>
+      (shop.city && shop.city === selectedCity) ||
+      (shop.storeLocation && shop.storeLocation.includes(selectedCity))
+    );
+  }
+
+  // FINAL: Filter by distance (radius) LAST
+  const filteredShops = displayedShops.filter(shop => {
+    if (!shop.latitude || !shop.longitude || !userLocation) return false;
+    const distance = getDistanceFromLatLonInKm(
+      Number(userLocation.lat), Number(userLocation.lng),
+      Number(shop.latitude), Number(shop.longitude)
+    );
+    return distance <= searchRadius;
+  });
+
+  // Define allCities after shops is set and before render logic
+  const allCities = Array.from(new Set(shops.map(shop => {
+    if (shop.city) return shop.city;
+    if (shop.storeLocation) {
+      const parts = shop.storeLocation.split(',');
+      return parts.length > 1 ? parts[1].trim() : '';
+    }
+    return '';
+  }))).filter(Boolean);
 
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -356,25 +373,25 @@ function ExplorePage() {
 
       {/* Place the radius slider here, below the controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '1rem 0 0 1rem' }}>
-        <label style={{ fontWeight: 500 }}>Search Radius:</label>
-        <input
-          type="range"
-          min={0.5}
-          max={100}
-          step={0.1}
-          value={searchRadius}
-          onChange={e => setSearchRadius(Number(e.target.value))}
-          style={{ width: 120 }}
-        />
-        <span style={{ minWidth: 40 }}>{searchRadius} km</span>
+        <label style={{ fontWeight: 500 }}>City:</label>
+        <select
+          value={selectedCity}
+          onChange={e => setSelectedCity(e.target.value)}
+          style={{ padding: '0.5rem 1rem', fontSize: '1rem', border: '1px solid #ccc', borderRadius: 8 }}
+        >
+          <option value=''>All Cities</option>
+          {allCities.map(city => (
+            <option key={city} value={city}>{city}</option>
+          ))}
+        </select>
       </div>
 
       <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Shops near you</h2>
-      {displayedShops.length === 0 && (
+      {filteredShops.length === 0 && (
         <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Stores Near You</div>
       )}
       <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
-        {displayedShops.map(shop => {
+        {filteredShops.map(shop => {
           // New logic for open/closed status
           const today = daysOfWeek[new Date().getDay()];
           const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
@@ -475,11 +492,11 @@ function ExplorePage() {
       </div>
       {/* Spotlight Store Section */}
       <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Spotlight Store</h2>
-      {displayedShops.filter(s => s.clickCount > 0).length === 0 ? (
+      {filteredShops.filter(s => s.clickCount > 0).length === 0 ? (
         <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Spotlight Store</div>
       ) : (
         <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
-          {displayedShops
+          {filteredShops
             .filter(s => s.clickCount > 0)
             .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0))
             .slice(0, 5)
