@@ -70,6 +70,12 @@ function StoreProfilePage() {
   const [editSellsAlcohol, setEditSellsAlcohol] = useState('');
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
 
+  // Add at the top, after other useState hooks
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const [closedDays, setClosedDays] = useState(profile?.closedDays || []);
+  const [openingTimes, setOpeningTimes] = useState(profile?.openingTimes || {});
+  const [closingTimes, setClosingTimes] = useState(profile?.closingTimes || {});
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -267,6 +273,12 @@ function StoreProfilePage() {
         nameChanges: newChangeHistory.nameChanges,
         locationChanges: newChangeHistory.locationChanges,
         thumbnailChanges: newChangeHistory.thumbnailChanges,
+        // Add these fields to save new info
+        closedDays,
+        openingTimes,
+        closingTimes,
+        sellsAlcohol: editSellsAlcohol,
+        alcoholLicense: editAlcoholLicense,
       };
 
       // Handle significant changes that require license updates
@@ -640,8 +652,17 @@ function StoreProfilePage() {
           </div>
           {/* Location */}
           {profile.storeLocation && (
-            <div style={{ width: '100%', textAlign: 'left', fontSize: '0.95rem', color: '#444', marginBottom: 4, wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span><span style={{ fontWeight: 500 }}>Location:</span> {profile.storeLocation}</span>
+            <div style={{ width: '100%', textAlign: 'left', fontSize: '0.95rem', color: '#444', marginBottom: 4, wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'column', alignItems: 'flex-start' }}>
+              {/* Show street on its own line if possible */}
+              {(() => {
+                const parts = profile.storeLocation.split(',');
+                return (
+                  <>
+                    <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
+                    <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
+                  </>
+                );
+              })()}
               <button
                 onClick={handleLocationEdit}
                 style={{ 
@@ -927,6 +948,48 @@ function StoreProfilePage() {
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Closing Time</label>
                   <input type="time" value={editClosingTime} onChange={e => setEditClosingTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
                 </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Closed Days (optional)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {daysOfWeek.map(day => (
+                      <label key={day} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input
+                          type="checkbox"
+                          checked={closedDays.includes(day)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setClosedDays([...closedDays, day]);
+                            } else {
+                              setClosedDays(closedDays.filter(d => d !== day));
+                            }
+                          }}
+                        />
+                        {day}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {daysOfWeek.map(day => (
+                  <div key={day} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <label style={{ minWidth: 80 }}>{day}:</label>
+                    <input
+                      type="time"
+                      value={openingTimes[day] || ''}
+                      onChange={e => setOpeningTimes({ ...openingTimes, [day]: e.target.value })}
+                      disabled={closedDays.includes(day)}
+                      style={{ width: 110, border: '1px solid #B8B8B8', borderRadius: 4, padding: '0.3rem' }}
+                    />
+                    <span>to</span>
+                    <input
+                      type="time"
+                      value={closingTimes[day] || ''}
+                      onChange={e => setClosingTimes({ ...closingTimes, [day]: e.target.value })}
+                      disabled={closedDays.includes(day)}
+                      style={{ width: 110, border: '1px solid #B8B8B8', borderRadius: 4, padding: '0.3rem' }}
+                    />
+                    {closedDays.includes(day) && <span style={{ color: '#D92D20', fontSize: '0.9rem' }}>Closed</span>}
+                  </div>
+                ))}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Thumbnail</label>
                   

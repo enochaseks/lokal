@@ -193,7 +193,7 @@ function OnboardingSellLocationPage() {
             }
             setFormError('');
             const country = origin || '';
-            const fullAddress = `${city}, ${stateRegion}, ${zip}, ${country}`;
+            const fullAddress = `${street}, ${city}, ${stateRegion}, ${zip}, ${country}`;
             let lat = null, lon = null;
             try {
               const countryCode = countryNameToCode[origin] || '';
@@ -361,7 +361,7 @@ function OnboardingSellLocationPage() {
             {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
             <button
               onClick={async () => {
-                const storeFullAddress = `${city}, ${stateRegion}, ${zip}, ${country}`;
+                const storeFullAddress = `${street}, ${city}, ${stateRegion}, ${zip}, ${country}`;
                 const { getAuth } = await import('firebase/auth');
                 const { doc, updateDoc } = await import('firebase/firestore');
                 const { db } = await import('../firebase');
@@ -529,7 +529,7 @@ function OnboardingSellLocationPage() {
             {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
             <button
               onClick={async () => {
-                const marketFullAddress = `${marketCity}, ${marketState}, ${marketZip}, ${country}`;
+                const marketFullAddress = `${marketStreet}, ${marketCity}, ${marketState}, ${marketZip}, ${country}`;
                 const { getAuth } = await import('firebase/auth');
                 const { doc, updateDoc } = await import('firebase/firestore');
                 const { db } = await import('../firebase');
@@ -699,7 +699,7 @@ function OnboardingSellLocationPage() {
             {locationVerified && <div style={{color:'green', marginTop: 8}}>Location verified!</div>}
             <button
               onClick={async () => {
-                const onlineFullAddress = `${onlineCity}, ${onlineState}, ${onlineZip}, ${country}`;
+                const onlineFullAddress = `${onlineStreet}, ${onlineCity}, ${onlineState}, ${onlineZip}, ${country}`;
                 const { getAuth } = await import('firebase/auth');
                 const { doc, updateDoc } = await import('firebase/firestore');
                 const { db } = await import('../firebase');

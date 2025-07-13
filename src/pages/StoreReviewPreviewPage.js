@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import Navbar from '../components/Navbar';
 
 function StoreReviewPreviewPage() {
@@ -10,6 +11,16 @@ function StoreReviewPreviewPage() {
   const [store, setStore] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authUser, setAuthUser] = useState(null);
+  const [isStoreOwner, setIsStoreOwner] = useState(false);
+
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const fetchStoreAndReviews = async () => {
@@ -17,7 +28,13 @@ function StoreReviewPreviewPage() {
       const storeRef = doc(db, 'stores', storeId);
       const storeSnap = await getDoc(storeRef);
       if (storeSnap.exists()) {
-        setStore({ id: storeSnap.id, ...storeSnap.data() });
+        const storeData = { id: storeSnap.id, ...storeSnap.data() };
+        setStore(storeData);
+        if (authUser && storeData.ownerId && authUser.uid === storeData.ownerId) {
+          setIsStoreOwner(true);
+        } else {
+          setIsStoreOwner(false);
+        }
         const reviewsSnap = await getDocs(collection(db, 'stores', storeId, 'reviews'));
         const reviewsArr = reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         // Sort by newest first
@@ -30,7 +47,7 @@ function StoreReviewPreviewPage() {
       setLoading(false);
     };
     fetchStoreAndReviews();
-  }, [storeId]);
+  }, [storeId, authUser]);
 
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -67,6 +84,7 @@ function StoreReviewPreviewPage() {
                 </div>
               ))
             )}
+            {/* If you want to add a review form for buyers, add it here and check !isStoreOwner */}
           </>
         )}
       </div>

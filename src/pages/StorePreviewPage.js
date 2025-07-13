@@ -235,6 +235,9 @@ function StorePreviewPage() {
     setTimeout(() => setShowAdded(false), 1500);
   };
 
+  // Helper to check if current user is the store owner
+  const isStoreOwner = authUser && store && store.ownerId && authUser.uid === store.ownerId;
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -305,13 +308,7 @@ function StorePreviewPage() {
             {store.paymentType && (
               <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 2 }}>
                 <b>Payment Method:</b> {store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType}
-                {store.paymentInfo && typeof store.paymentInfo === 'object' && (
-                  <div style={{ color: '#444', fontSize: '1rem', marginTop: 2 }}>
-                    {Object.entries(store.paymentInfo).map(([key, value]) => (
-                      <div key={key}><b>{key}:</b> {value}</div>
-                    ))}
-                  </div>
-                )}
+                {/* Removed paymentInfo details for security */}
               </div>
             )}
           </div>
@@ -341,6 +338,11 @@ function StorePreviewPage() {
               {store.openingTime} - {store.closingTime}
             </span>
           )}
+          {store && Array.isArray(store.closedDays) && store.closedDays.length > 0 && (
+            <div style={{ marginTop: 8, color: '#D92D20', fontSize: '1rem', fontWeight: 500 }}>
+              <span>Closed: {store.closedDays.join(', ')}</span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 32, borderBottom: '1.5px solid #eee', marginBottom: 24 }}>
           <button onClick={() => setTab('products')} style={{ background: 'none', border: 'none', fontWeight: tab === 'products' ? 700 : 400, fontSize: '1.1rem', color: tab === 'products' ? '#007B7F' : '#444', borderBottom: tab === 'products' ? '2.5px solid #007B7F' : 'none', padding: '0.5rem 0', cursor: 'pointer' }}>Products</button>
@@ -357,7 +359,8 @@ function StorePreviewPage() {
                   <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
                   <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
                   <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
-                  {userType === 'buyer' && open && (
+                  {/* Only show these buttons for buyers/customers who are not the store owner */}
+                  {userType === 'buyer' && !isStoreOwner && open && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button
                         style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
@@ -388,7 +391,8 @@ function StorePreviewPage() {
         )}
         {tab === 'reviews' && (
           <div style={{ marginTop: 24 }}>
-            {userType === 'buyer' && (
+            {/* Only show review form for buyers who are not the store owner */}
+            {userType === 'buyer' && !isStoreOwner && (
               <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
                 <StarRating value={userRating} onChange={setUserRating} />

@@ -39,12 +39,14 @@ function StoreReviewsPage() {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Check if user is a buyer or seller (copy logic from Navbar.js)
-        const userDoc = await import('../firebase').then(({ db }) => import('firebase/firestore').then(({ doc, getDoc }) => getDoc(doc(db, 'users', currentUser.uid))));
-        if (userDoc && userDoc.exists && userDoc.exists()) {
-          setUserType('buyer');
-        } else {
+        // FIX: Use the same logic as Navbar.js to determine if user is seller or buyer
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('../firebase');
+        const storeDoc = await getDoc(doc(db, 'stores', currentUser.uid));
+        if (storeDoc.exists()) {
           setUserType('seller');
+        } else {
+          setUserType('buyer');
         }
       } else {
         setUserType('');
