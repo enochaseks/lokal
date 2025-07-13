@@ -266,9 +266,23 @@ function StorePreviewPage() {
           80% { opacity: 1; transform: translateX(-50%) scale(1); }
           100% { opacity: 0; transform: translateX(-50%) scale(0.95); }
         }
+        @media (max-width: 600px) {
+          .store-action-buttons {
+            width: 100%;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+          }
+          .store-info {
+            text-align: left;
+            align-items: flex-start;
+          }
+        }
       `}</style>
       <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem', position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             {store.backgroundImg && (
               <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: isStoreOpenForToday(todayOpening, todayClosing) ? 'none' : 'grayscale(0.7)', opacity: isStoreOpenForToday(todayOpening, todayClosing) ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
@@ -279,7 +293,7 @@ function StorePreviewPage() {
               </div>
             )}
           </div>
-          <div style={{ flex: 1 }}>
+          <div className="store-info" style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
             <div style={{ color: '#444', fontSize: '1rem' }}>{store.storeLocation}</div>
             <div style={{ color: '#007B7F', fontSize: '1rem' }}>
@@ -289,13 +303,13 @@ function StorePreviewPage() {
             <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 2 }}><b>Delivery Type:</b> {store.deliveryType}</div>
             {store.paymentType && (
               <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 2 }}>
-                <b>Payment Method:</b> {store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType}
+                <b>Payment Method:</b> {store.paymentType === 'Own Card/Bank Details' ? 'Card Payment' : (store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType)}
                 {/* Removed paymentInfo details for security */}
               </div>
             )}
           </div>
           {userType === 'buyer' && (
-            <>
+            <div className="store-action-buttons">
               {following ? (
                 <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
                   Unfollow
@@ -308,7 +322,7 @@ function StorePreviewPage() {
               <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
                 Message
               </button>
-            </>
+            </div>
           )}
         </div>
         <div style={{ marginBottom: 16 }}>

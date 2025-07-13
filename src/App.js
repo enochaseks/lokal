@@ -87,7 +87,7 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/store-review-preview/:storeId" element={<StoreReviewPreviewPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
-                <Route path="/cart" element={<ShopCartPage />} />
+                <Route path="/shop-cart" element={<ShopCartPage />} />
               </Routes>
             </div>
             <style>{`

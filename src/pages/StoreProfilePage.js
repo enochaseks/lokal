@@ -100,7 +100,11 @@ function StoreProfilePage() {
           setEditPaymentType(data.paymentType || '');
           setEditOpeningTime(data.openingTime || '');
           setEditClosingTime(data.closingTime || '');
-          
+          setClosedDays(data.closedDays || []);
+          setOpeningTimes(data.openingTimes || {});
+          setClosingTimes(data.closingTimes || {});
+          setEditSellsAlcohol(data.sellsAlcohol || '');
+          setEditAlcoholLicense(data.alcoholLicense || null);
           // Load change history
           setChangeHistory({
             nameChanges: data.nameChanges || [],

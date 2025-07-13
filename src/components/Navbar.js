@@ -89,16 +89,16 @@ function Navbar() {
           <>
             {userType === 'buyer' ? (
               <>
-                <a href="/profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
+                <a href="/profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '0.5rem' }} title="Profile">
                   <span role="img" aria-label="profile">👤</span>
                 </a>
                 {showCart && (
                   <button
                     onClick={() => navigate('/shop-cart')}
-                    style={{ background: 'none', border: 'none', margin: '0 1.2rem', position: 'relative', cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', margin: '0 0.2rem', position: 'relative', cursor: 'pointer' }}
                     aria-label="Cart"
                   >
-                    <img src={process.env.PUBLIC_URL + '/images/cart.png'} alt="Cart" style={{ width: 32, height: 32 }} />
+                    <img src={process.env.PUBLIC_URL + '/images/cart.png'} alt="Cart" style={{ width: 20, height: 20 }} />
                     {cart && cart.length > 0 && (
                       <span style={{ position: 'absolute', top: -8, right: -8, background: '#D92D20', color: '#fff', borderRadius: '50%', padding: '2px 8px', fontSize: 14, fontWeight: 700 }}>{cart.length}</span>
                     )}
