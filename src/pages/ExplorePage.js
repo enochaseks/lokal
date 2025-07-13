@@ -235,13 +235,8 @@ function ExplorePage() {
     checkOnboarding();
   }, [navigate]);
 
-  // Only filter by country if both userCountry and shop.country exist and match, otherwise include the shop
-  let displayedShops = [...shops].filter(shop => {
-    if (userCountry && shop.country) {
-      return shop.country === userCountry;
-    }
-    return true; // If either is missing, include the shop
-  });
+  // Only filter by distance from user location
+  let displayedShops = [...shops];
 
   // Search filter
   if (searchTerm.trim() !== '') {
@@ -296,13 +291,7 @@ function ExplorePage() {
   });
 
   // Define allCities after shops is set and before render logic
-  const allCities = Array.from(new Set(shops
-    .filter(shop => {
-      if (userCountry && shop.country) {
-        return shop.country === userCountry;
-      }
-      return true;
-    })
+  const allCities = Array.from(new Set(filteredShops
     .map(shop => {
       if (shop.city) return shop.city;
       if (shop.storeLocation) {
