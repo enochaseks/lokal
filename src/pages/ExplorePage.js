@@ -106,6 +106,7 @@ function ExplorePage() {
   const navigate = useNavigate();
   // Add state for selectedCity
   const [selectedCity, setSelectedCity] = useState('');
+  const [userCountry, setUserCountry] = useState('');
 
   useEffect(() => {
     // Fetch buyer profile and use their saved location if available
@@ -129,7 +130,14 @@ function ExplorePage() {
         const data = await res.json();
         if (data && data.length > 0) {
           setUserLocation({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
-          setCity(profile.location);
+          setCity(
+            data[0].address?.city ||
+            data[0].address?.town ||
+            data[0].address?.village ||
+            data[0].address?.state ||
+            ''
+          );
+          setUserCountry(data[0].address?.country || '');
           return;
         }
       }
@@ -154,14 +162,17 @@ function ExplorePage() {
                   data.address.state ||
                   ''
                 );
+                setUserCountry(data.address.country || '');
               });
           },
           (error) => {
             setCity('');
+            setUserCountry('');
           }
         );
       } else {
         setCity('');
+        setUserCountry('');
       }
     }
     setInitialLocation();
@@ -224,9 +235,13 @@ function ExplorePage() {
     checkOnboarding();
   }, [navigate]);
 
-  // Remove any previous filtering by distance from displayedShops
-  // Only filter by distance once, right before rendering:
-  let displayedShops = [...shops];
+  // Only filter by country if both userCountry and shop.country exist and match, otherwise include the shop
+  let displayedShops = [...shops].filter(shop => {
+    if (userCountry && shop.country) {
+      return shop.country === userCountry;
+    }
+    return true; // If either is missing, include the shop
+  });
 
   // Search filter
   if (searchTerm.trim() !== '') {
@@ -281,14 +296,22 @@ function ExplorePage() {
   });
 
   // Define allCities after shops is set and before render logic
-  const allCities = Array.from(new Set(shops.map(shop => {
-    if (shop.city) return shop.city;
-    if (shop.storeLocation) {
-      const parts = shop.storeLocation.split(',');
-      return parts.length > 1 ? parts[1].trim() : '';
-    }
-    return '';
-  }))).filter(Boolean);
+  const allCities = Array.from(new Set(shops
+    .filter(shop => {
+      if (userCountry && shop.country) {
+        return shop.country === userCountry;
+      }
+      return true;
+    })
+    .map(shop => {
+      if (shop.city) return shop.city;
+      if (shop.storeLocation) {
+        const parts = shop.storeLocation.split(',');
+        return parts.length > 1 ? parts[1].trim() : '';
+      }
+      return '';
+    })
+  )).filter(Boolean);
 
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
