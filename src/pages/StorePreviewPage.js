@@ -90,32 +90,37 @@ function StorePreviewPage() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setAuthUser(user || null);
       if (user) {
-        // Check if user is a buyer or seller
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserType('buyer');
-        } else {
-          setUserType('seller');
-        }
-        
-        // Add this store to viewed stores for buyers
-        if (userDoc.exists() && id) {
-          const viewedKey = `viewedStores_${user.uid}`;
-          const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
-          
-          // Remove store if it already exists (to move it to front)
-          const filteredViewed = existingViewed.filter(storeId => storeId !== id);
-          
-          // Add store to beginning of array
-          const updatedViewed = [id, ...filteredViewed];
-          
-          // Keep only last 20 viewed stores
-          const limitedViewed = updatedViewed.slice(0, 20);
-          
-          // Save back to localStorage
-          localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
-          
-          console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid); // Debug log
+        try {
+          // Check if user is a buyer or seller
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setUserType('buyer');
+            
+            // Add this store to viewed stores for buyers only
+            if (id) {
+              const viewedKey = `viewedStores_${user.uid}`;
+              const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+              
+              // Remove store if it already exists (to move it to front)
+              const filteredViewed = existingViewed.filter(storeId => storeId !== id);
+              
+              // Add store to beginning of array
+              const updatedViewed = [id, ...filteredViewed];
+              
+              // Keep only last 20 viewed stores
+              const limitedViewed = updatedViewed.slice(0, 20);
+              
+              // Save back to localStorage
+              localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
+              
+              console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid);
+            }
+          } else {
+            setUserType('seller');
+          }
+        } catch (error) {
+          console.error('Error checking user type:', error);
+          setUserType('');
         }
       } else {
         setUserType('');
@@ -152,6 +157,57 @@ function StorePreviewPage() {
     });
     return () => unsub();
   }, [authUser, id]);
+
+  // Add useEffect to load and calculate ratings with enhanced user data fetching
+  useEffect(() => {
+    if (!id) return;
+    
+    const unsubscribe = onSnapshot(collection(db, 'stores', id, 'reviews'), async (querySnapshot) => {
+      const reviewsData = querySnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      }));
+      
+      // Fetch current user data for each review
+      const reviewsWithCurrentUserData = await Promise.all(
+        reviewsData.map(async (review) => {
+          try {
+            // Try to fetch current user data from Firestore
+            const userDoc = await getDoc(doc(db, 'users', review.userId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              return {
+                ...review,
+                userName: userData.name || userData.displayName || review.userName || 'Anonymous',
+                userPhoto: userData.photoURL || userData.profilePicture || review.userPhoto || null
+              };
+            }
+            // If user document doesn't exist, keep original review data
+            return review;
+          } catch (error) {
+            console.error('Error fetching user data for review:', error);
+            // If there's an error, keep original review data
+            return review;
+          }
+        })
+      );
+      
+      setReviews(reviewsWithCurrentUserData);
+      
+      // Calculate average rating and count
+      if (reviewsData.length > 0) {
+        const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+        const avgRating = (totalRating / reviewsData.length).toFixed(1);
+        setAvgRating(parseFloat(avgRating));
+        setRatingCount(reviewsData.length);
+      } else {
+        setAvgRating(0);
+        setRatingCount(0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [id]);
 
   const handleFollow = async () => {
     if (!authUser || !id) return;
@@ -233,21 +289,87 @@ function StorePreviewPage() {
     setTimeout(() => setShowAdded(false), 1500);
   }
 
-  // Make sure handleSubmitReview is defined (already present in your code)
-  const handleSubmitReview = async () => {
-    if (!authUser || !id) return;
-    const reviewRef = await addDoc(collection(db, 'stores', id, 'reviews'), {
-      rating: userRating,
-      text: userReview,
-      userId: authUser.uid,
-      userName: authUser.displayName || authUser.email,
-      userPhoto: authUser.photoURL,
-      createdAt: serverTimestamp(),
+  // Update the existing useEffect for auth to properly handle viewed stores
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setAuthUser(user || null);
+      if (user) {
+        // Check if user is a buyer or seller
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setUserType('buyer');
+        } else {
+          setUserType('seller');
+        }
+        
+        // Add this store to viewed stores for buyers
+        if (userDoc.exists() && id) {
+          const viewedKey = `viewedStores_${user.uid}`;
+          const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+          
+          // Remove store if it already exists (to move it to front)
+          const filteredViewed = existingViewed.filter(storeId => storeId !== id);
+          
+          // Add store to beginning of array
+          const updatedViewed = [id, ...filteredViewed];
+          
+          // Keep only last 20 viewed stores
+          const limitedViewed = updatedViewed.slice(0, 20);
+          
+          // Save back to localStorage
+          localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
+          
+          console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid); // Debug log
+        }
+      } else {
+        setUserType('');
+      }
     });
-    setReviewSent(true);
-    setTimeout(() => setReviewSent(false), 2000);
-    setUserRating(0);
-    setUserReview('');
+    return () => unsubscribe();
+  }, [id]); // Add id as dependency
+
+  // Update the handleSubmitReview function to fetch user profile data from Firestore
+  const handleSubmitReview = async () => {
+    if (!authUser || !id || userRating === 0) {
+      alert('Please select a rating before submitting.');
+      return;
+    }
+    
+    try {
+      // Fetch user profile data from Firestore
+      const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+      let userData = {
+        userName: authUser.displayName || authUser.email?.split('@')[0] || 'Anonymous',
+        userPhoto: authUser.photoURL || null
+      };
+      
+      // If user document exists in Firestore, use that data instead
+      if (userDoc.exists()) {
+        const firestoreUserData = userDoc.data();
+        userData = {
+          userName: firestoreUserData.name || firestoreUserData.displayName || authUser.displayName || authUser.email?.split('@')[0] || 'Anonymous',
+          userPhoto: firestoreUserData.photoURL || firestoreUserData.profilePicture || authUser.photoURL || null
+        };
+      }
+      
+      await addDoc(collection(db, 'stores', id, 'reviews'), {
+        rating: userRating,
+        text: userReview.trim(),
+        userId: authUser.uid,
+        userName: userData.userName,
+        userPhoto: userData.userPhoto,
+        createdAt: serverTimestamp(),
+      });
+      
+      setReviewSent(true);
+      setTimeout(() => setReviewSent(false), 2000);
+      setUserRating(0);
+      setUserReview('');
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert('Failed to submit review. Please try again.');
+    }
   };
 
   if (loading) {
@@ -327,7 +449,7 @@ function StorePreviewPage() {
             <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
             <div style={{ color: '#444', fontSize: '1rem' }}>{store.storeLocation}</div>
             <div style={{ color: '#007B7F', fontSize: '1rem' }}>
-              ⭐ {avgRating} ({ratingCount})
+              ⭐ {avgRating > 0 ? avgRating : 'No ratings'} {ratingCount > 0 && `(${ratingCount} review${ratingCount !== 1 ? 's' : ''})`}
             </div>
             <div style={{ color: '#444', fontSize: '1.05rem', marginTop: 4 }}><b>Origin:</b> {store.origin}</div>
             <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 2 }}><b>Delivery Type:</b> {store.deliveryType}</div>
@@ -417,36 +539,144 @@ function StorePreviewPage() {
         )}
         {tab === 'reviews' && (
           <div style={{ marginTop: 24 }}>
+            {/* Display overall rating summary */}
+            <div style={{ marginBottom: 24, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: '1.2rem', marginBottom: 8 }}>Customer Reviews</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: '2rem', color: '#FFD700' }}>★</div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                    {avgRating > 0 ? `${avgRating} out of 5` : 'No ratings yet'}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                    {ratingCount} review{ratingCount !== 1 ? 's' : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Only show review form for buyers who are not the store owner */}
             {userType === 'buyer' && !isStoreOwner && (
               <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
                 <StarRating value={userRating} onChange={setUserRating} />
-                <textarea value={userReview} onChange={e => setUserReview(e.target.value)} placeholder="Your review..." style={{ width: '100%', minHeight: 40, borderRadius: 4, border: '1px solid #ccc', padding: 6, marginTop: 8 }} />
-                <button onClick={handleSubmitReview} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginTop: 8, cursor: 'pointer' }}>Submit</button>
-                {reviewSent && <div style={{ color: '#3A8E3A', marginTop: 8 }}>Review submitted!</div>}
+                <textarea 
+                  value={userReview} 
+                  onChange={e => setUserReview(e.target.value)} 
+                  placeholder="Share your experience with this store..." 
+                  style={{ 
+                    width: '100%', 
+                    minHeight: 80, 
+                    borderRadius: 4, 
+                    border: '1px solid #ccc', 
+                    padding: 12, 
+                    marginTop: 12,
+                    fontFamily: 'inherit',
+                    fontSize: '1rem',
+                    resize: 'vertical'
+                  }} 
+                />
+                <button 
+                  onClick={handleSubmitReview} 
+                  disabled={userRating === 0}
+                  style={{ 
+                    background: userRating === 0 ? '#ccc' : '#007B7F', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 6, 
+                    padding: '0.5rem 1.2rem', 
+                    fontWeight: 600, 
+                    fontSize: '1rem', 
+                    marginTop: 12, 
+                    cursor: userRating === 0 ? 'not-allowed' : 'pointer' 
+                  }}
+                >
+                  Submit Review
+                </button>
+                {reviewSent && (
+                  <div style={{ color: '#3A8E3A', marginTop: 8, fontWeight: 600 }}>
+                    ✓ Review submitted successfully!
+                  </div>
+                )}
               </div>
             )}
+            
+            {/* Reviews list */}
             <div>
               {reviews.length === 0 ? (
-                <div style={{ color: '#888' }}>No reviews yet.</div>
+                <div style={{ color: '#888', textAlign: 'center', padding: '2rem' }}>
+                  No reviews yet. Be the first to review this store!
+                </div>
               ) : (
-                reviews.map(r => (
-                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-                    <img
-                      src={r.userPhoto || 'https://via.placeholder.com/32'}
-                      alt={r.userName || 'Anonymous'}
-                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', marginRight: 10 }}
-                    />
-                    <div>
-                      <div style={{ fontWeight: 600 }}>
-                        <span style={{ color: '#FFD700', marginRight: 4 }}>★</span>
-                        {r.rating} - {r.userName || 'Anonymous'}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {reviews
+                    .sort((a, b) => {
+                      // Sort by creation date, newest first
+                      if (a.createdAt && b.createdAt) {
+                        return b.createdAt.toMillis() - a.createdAt.toMillis();
+                      }
+                      return 0;
+                    })
+                    .map(r => (
+                      <div key={r.id} style={{ 
+                        display: 'flex', 
+                        gap: 12, 
+                        padding: 16, 
+                        border: '1px solid #eee', 
+                        borderRadius: 8,
+                        background: '#fafafa',
+                        alignItems: 'flex-start'
+                      }}>
+                        <img
+                          src={r.userPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userName || 'Anonymous')}&background=007B7F&color=fff&size=40`}
+                          alt={r.userName || 'Anonymous'}
+                          style={{ 
+                            width: 40, 
+                            height: 40, 
+                            borderRadius: '50%', 
+                            objectFit: 'cover', 
+                            flexShrink: 0 
+                          }}
+                          onError={(e) => {
+                            // Prevent infinite loop by checking if already using fallback
+                            if (!e.target.src.includes('ui-avatars.com')) {
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userName || 'Anonymous')}&background=007B7F&color=fff&size=40`;
+                            }
+                          }}
+                        />
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>
+                              {r.userName || 'Anonymous'}
+                            </span>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              {[...Array(5)].map((_, i) => (
+                                <span 
+                                  key={i} 
+                                  style={{ 
+                                    color: i < r.rating ? '#FFD700' : '#ddd',
+                                    fontSize: '1rem'
+                                  }}
+                                >
+                                  ★
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          {r.text && (
+                            <div style={{ color: '#444', fontSize: '0.95rem', lineHeight: 1.4, textAlign: 'left' }}>
+                              {r.text}
+                            </div>
+                          )}
+                          {r.createdAt && (
+                            <div style={{ color: '#888', fontSize: '0.8rem', marginTop: 8, textAlign: 'left' }}>
+                              {new Date(r.createdAt.toMillis()).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ color: '#444' }}>{r.text}</div>
-                    </div>
-                  </div>
-                ))
+                    ))}
+                </div>
               )}
             </div>
           </div>

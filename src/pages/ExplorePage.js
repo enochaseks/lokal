@@ -104,86 +104,119 @@ function ExplorePage() {
   const [searchRadius, setSearchRadius] = useState(30);
   const [profile, setProfile] = useState(null);
   const navigate = useNavigate();
-  // Add state for selectedCity
   const [selectedCity, setSelectedCity] = useState('');
   const [userCountry, setUserCountry] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const [locationDetected, setLocationDetected] = useState(false);
 
   // Fix the useEffect to properly set currentUser
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user); // Set the current user properly
+      setCurrentUser(user);
       if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setProfile(userDoc.data());
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setProfile(userDoc.data());
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
         }
       }
     });
     return () => unsubscribe();
   }, []);
 
+  // Separate location detection useEffect that only runs once when profile is first loaded
   useEffect(() => {
+    if (locationDetected) return; // Don't run if location already detected
+
     async function setInitialLocation() {
-      // If profile location exists, geocode it
-      if (profile && profile.location) {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(profile.location)}`);
-        const data = await res.json();
-        if (data && data.length > 0) {
-          setUserLocation({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
-          setCity(
-            data[0].address?.city ||
-            data[0].address?.town ||
-            data[0].address?.village ||
-            data[0].address?.state ||
-            ''
-          );
-          setUserCountry(data[0].address?.country || '');
-          return;
-        }
-      }
-      // Fallback to browser geolocation
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const coords = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-            };
-            setUserLocation(coords);
-            fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}`
-            )
-              .then((res) => res.json())
-              .then((data) => {
-                setCity(
-                  data.address.city ||
-                  data.address.town ||
-                  data.address.village ||
-                  data.address.state ||
-                  ''
-                );
-                setUserCountry(data.address.country || '');
-              });
-          },
-          (error) => {
-            setCity('');
-            setUserCountry('');
+      try {
+        // If profile location exists, geocode it
+        if (profile && profile.location) {
+          console.log('Using profile location:', profile.location);
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(profile.location)}`);
+          const data = await res.json();
+          if (data && data.length > 0) {
+            setUserLocation({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+            const detectedCity = data[0].address?.city ||
+              data[0].address?.town ||
+              data[0].address?.village ||
+              data[0].address?.suburb ||
+              'Unknown City';
+            setCity(detectedCity);
+            setUserCountry(data[0].address?.country || '');
+            setLocationDetected(true);
+            return;
           }
-        );
-      } else {
-        setCity('');
-        setUserCountry('');
+        }
+        
+        // Fallback to browser geolocation
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const coords = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+              };
+              setUserLocation(coords);
+              
+              try {
+                const res = await fetch(
+                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}`
+                );
+                const data = await res.json();
+                const detectedCity = data.address?.city ||
+                  data.address?.town ||
+                  data.address?.village ||
+                  data.address?.suburb ||
+                  'Unknown City';
+                setCity(detectedCity);
+                setUserCountry(data.address?.country || '');
+              } catch (error) {
+                console.error('Error reverse geocoding:', error);
+                setCity('Unknown City');
+              }
+              setLocationDetected(true);
+            },
+            (error) => {
+              console.error('Geolocation error:', error);
+              setCity('Location unavailable');
+              setLocationDetected(true);
+            },
+            {
+              timeout: 10000,
+              enableHighAccuracy: true,
+              maximumAge: 300000 // 5 minutes cache
+            }
+          );
+        } else {
+          setCity('Geolocation not supported');
+          setLocationDetected(true);
+        }
+      } catch (error) {
+        console.error('Location detection error:', error);
+        setCity('Location error');
+        setLocationDetected(true);
       }
     }
-    setInitialLocation();
+
+    // Only run location detection when we have a user (logged in) and haven't detected location yet
+    if (currentUser !== null) {
+      setInitialLocation();
+    }
+  }, [profile, currentUser, locationDetected]);
+
+  // Handle window resize separately
+  useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [profile]);
+  }, []);
 
   useEffect(() => {
     let q;
@@ -255,7 +288,7 @@ function ExplorePage() {
   if (filterBy === 'Open Now') {
     displayedShops = displayedShops.filter(shop => isStoreOpen(shop.openingTime, shop.closingTime));
   } else if (filterBy === 'Top Rated') {
-    displayedShops = displayedShops
+    displayedShops
       .map(shop => ({ ...shop, avgRating: parseFloat(ratings[shop.id]?.avg || 0), ratingCount: ratings[shop.id]?.count || 0 }))
       .filter(shop => shop.ratingCount >= 10)
       .sort((a, b) => b.avgRating - a.avgRating)
@@ -337,7 +370,9 @@ function ExplorePage() {
       <div className="explore-controls" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem', background: '#F9F5EE', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, marginRight: '1rem' }}>
           <span style={{ fontSize: '1rem', marginRight: '0.3rem' }}>📍</span>
-          <span style={{ fontSize: '1rem', color: '#1C1C1C' }}>{city ? city : 'Detecting city...'}</span>
+          <span style={{ fontSize: '1rem', color: '#1C1C1C' }}>
+            {city || (locationDetected ? 'Location unavailable' : 'Detecting city...')}
+          </span>
         </div>
         <div className={`explore-bar${isMobile ? ' mobile' : ''}${showDropdowns ? ' show-dropdowns' : ''}`} style={{ display: 'flex', background: '#fff', border: '2px solid #007B7F', borderRadius: '16px', overflow: 'visible', width: '100%', maxWidth: 900, position: 'relative' }}>
           <input
@@ -532,13 +567,28 @@ function ExplorePage() {
       </div>
       {/* Spotlight Store Section */}
       <h2 style={{ margin: '2rem 0 1rem 1rem', color: '#1C1C1C', fontWeight: 'bold', fontSize: '1.5rem', textAlign: 'left' }}>Spotlight Store</h2>
-      {filteredShops.filter(s => s.clickCount > 0).length === 0 ? (
+
+      {filteredShops.filter(s => {
+        const rating = ratings[s.id];
+        return rating && parseFloat(rating.avg) >= 4.8 && rating.count >= 8;
+      }).length === 0 ? (
         <div style={{ marginLeft: '1.5rem', color: '#888', fontWeight: 500, fontSize: '1.1rem' }}>No Spotlight Store</div>
       ) : (
         <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '1rem' }}>
           {filteredShops
-            .filter(s => s.clickCount > 0)
-            .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0))
+            .filter(s => {
+              const rating = ratings[s.id];
+              return rating && parseFloat(rating.avg) >= 4.8 && rating.count >= 8;
+            })
+            .sort((a, b) => {
+              const ratingA = ratings[a.id];
+              const ratingB = ratings[b.id];
+              // Sort by rating first (highest first), then by review count (most first)
+              if (parseFloat(ratingB.avg) !== parseFloat(ratingA.avg)) {
+                return parseFloat(ratingB.avg) - parseFloat(ratingA.avg);
+              }
+              return ratingB.count - ratingA.count;
+            })
             .slice(0, 5)
             .map(shop => {
               // New logic for open/closed status
@@ -556,6 +606,7 @@ function ExplorePage() {
                 return now >= openDate && now <= closeDate;
               }
               const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
+              const storeRating = ratings[shop.id];
               return (
                 <div
                   key={shop.id}
@@ -582,11 +633,15 @@ function ExplorePage() {
                       alt={shop.storeName}
                       style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: '12px 12px 0 0' }}
                     />
-                    <div style={{ position: 'absolute', top: 8, right: 12, background: '#fff', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: '#FFD700', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
-                      ⭐ {ratings[shop.id]?.avg || '0.0'} ({ratings[shop.id]?.count || 0})
+                    <div style={{ position: 'absolute', top: 8, right: 12, background: '#FFD700', borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: '#fff', fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
+                      ⭐ {storeRating.avg} ({storeRating.count})
                     </div>
                     <div style={{ position: 'absolute', top: 8, left: 12, background: isClosedToday ? '#fbe8e8' : (open ? '#e8fbe8' : '#fbe8e8'), borderRadius: 8, padding: '2px 10px', fontWeight: 600, color: isClosedToday ? '#D92D20' : (open ? '#3A8E3A' : '#D92D20'), fontSize: '1rem', boxShadow: '0 1px 4px #ececec' }}>
                       {isClosedToday ? 'Closed Today' : (open ? 'Open' : 'Closed')}
+                    </div>
+                    {/* Add a "Spotlight" badge */}
+                    <div style={{ position: 'absolute', bottom: 8, left: 12, background: '#FFD700', borderRadius: 16, padding: '4px 12px', fontWeight: 700, color: '#fff', fontSize: '0.85rem', boxShadow: '0 2px 6px rgba(255, 215, 0, 0.3)' }}>
+                      ✨ SPOTLIGHT
                     </div>
                     {!open && (
                       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(255,255,255,0.55)', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3rem', color: '#D92D20', pointerEvents: 'none' }}>
@@ -597,7 +652,14 @@ function ExplorePage() {
                   <div style={{ padding: '0.7rem', width: '100%' }}>
                     <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#222' }}>{shop.storeName}</div>
                     <div style={{ fontSize: '0.95rem', color: '#444' }}>{shop.storeLocation}</div>
-                    <div style={{ fontSize: '0.95rem', color: '#FFD700', fontWeight: 600 }}>Clicks: {shop.clickCount || 0}</div>
+                    <div style={{ fontSize: '0.95rem', color: '#FFD700', fontWeight: 600 }}>
+                      {parseFloat(storeRating.avg) === 5.0 ? '⭐ Perfect Rating!' : `⭐ ${storeRating.avg} Star Rating`}
+                    </div>
+                    {!isClosedToday && todayOpening && todayClosing && (
+                      <div style={{ fontSize: '0.95rem', color: '#007B7F', fontWeight: 500 }}>
+                        {todayOpening} - {todayClosing}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
