@@ -240,6 +240,15 @@ function StoreProfilePage() {
         thumbnailUrl = await getDownloadURL(imgRef);
       }
 
+      // Clear opening/closing times for closed days
+      const cleanedOpeningTimes = { ...openingTimes };
+      const cleanedClosingTimes = { ...closingTimes };
+      
+      closedDays.forEach(day => {
+        delete cleanedOpeningTimes[day];
+        delete cleanedClosingTimes[day];
+      });
+
       // Update change history
       const newChangeHistory = { ...changeHistory };
       if (editName !== profile.storeName) {
@@ -277,10 +286,10 @@ function StoreProfilePage() {
         nameChanges: newChangeHistory.nameChanges,
         locationChanges: newChangeHistory.locationChanges,
         thumbnailChanges: newChangeHistory.thumbnailChanges,
-        // Add these fields to save new info
+        // Use cleaned times that exclude closed days
         closedDays,
-        openingTimes,
-        closingTimes,
+        openingTimes: cleanedOpeningTimes,
+        closingTimes: cleanedClosingTimes,
         sellsAlcohol: editSellsAlcohol,
         alcoholLicense: editAlcoholLicense,
       };
@@ -569,18 +578,46 @@ function StoreProfilePage() {
     return { months, days: remainingDays };
   };
 
-  // Add this helper at the top or near other helpers
+  // Replace the helper functions at the top with these improved versions:
   const today = daysOfWeek[new Date().getDay()];
   const isClosedToday = profile && profile.closedDays && profile.closedDays.includes(today);
   const todayOpening = profile && profile.openingTimes && profile.openingTimes[today];
   const todayClosing = profile && profile.closingTimes && profile.closingTimes[today];
-  function isStoreOpenForToday(opening, closing) {
+
+  function isStoreOpenForToday(profile) {
+    if (!profile) return false;
+    
+    const today = daysOfWeek[new Date().getDay()];
+    
+    // Check if store is closed today
+    if (profile.closedDays && profile.closedDays.includes(today)) {
+      return false;
+    }
+    
+    // Get today's opening and closing times
+    const todayOpening = profile.openingTimes && profile.openingTimes[today];
+    const todayClosing = profile.closingTimes && profile.closingTimes[today];
+    
+    // If no specific times set for today, fall back to general opening/closing times
+    const opening = todayOpening || profile.openingTime;
+    const closing = todayClosing || profile.closingTime;
+    
     if (!opening || !closing) return false;
+    
     const now = new Date();
     const [openH, openM] = opening.split(':').map(Number);
     const [closeH, closeM] = closing.split(':').map(Number);
+    
     const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
     const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+    
+    // Handle overnight hours (e.g., 10 PM to 6 AM)
+    if (closeH < openH || (closeH === openH && closeM < openM)) {
+      const nextDayClose = new Date(closeDate);
+      nextDayClose.setDate(nextDayClose.getDate() + 1);
+      return now >= openDate || now <= nextDayClose;
+    }
+    
     return now >= openDate && now <= closeDate;
   }
 
@@ -730,9 +767,14 @@ function StoreProfilePage() {
               <span style={{ color: '#D92D20', fontWeight: 600 }}>Closed Today</span>
             ) : (
               <>
-                <b>Opening Time:</b> {todayOpening || '--:--'} &nbsp; <b>Closing Time:</b> {todayClosing || '--:--'}
-                <span style={{ marginLeft: 16, fontWeight: 600, color: isStoreOpenForToday(todayOpening, todayClosing) ? '#3A8E3A' : '#D92D20' }}>
-                  {isStoreOpenForToday(todayOpening, todayClosing) ? 'Open Now' : 'Closed Now'}
+                <b>Opening Time:</b> {todayOpening || profile.openingTime || '--:--'} &nbsp; 
+                <b>Closing Time:</b> {todayClosing || profile.closingTime || '--:--'}
+                <span style={{ 
+                  marginLeft: 16, 
+                  fontWeight: 600, 
+                  color: isStoreOpenForToday(profile) ? '#3A8E3A' : '#D92D20' 
+                }}>
+                  {isStoreOpenForToday(profile) ? 'Open Now' : 'Closed Now'}
                 </span>
               </>
             )}
@@ -997,23 +1039,51 @@ function StoreProfilePage() {
                 </div>
                 {daysOfWeek.map(day => (
                   <div key={day} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label style={{ minWidth: 80 }}>{day}:</label>
+                    <label style={{ minWidth: 80, fontWeight: closedDays.includes(day) ? 400 : 500 }}>
+                      {day}:
+                    </label>
                     <input
                       type="time"
-                      value={openingTimes[day] || ''}
-                      onChange={e => setOpeningTimes({ ...openingTimes, [day]: e.target.value })}
+                      value={closedDays.includes(day) ? '' : (openingTimes[day] || '')}
+                      onChange={e => {
+                        if (!closedDays.includes(day)) {
+                          setOpeningTimes({ ...openingTimes, [day]: e.target.value });
+                        }
+                      }}
                       disabled={closedDays.includes(day)}
-                      style={{ width: 110, border: '1px solid #B8B8B8', borderRadius: 4, padding: '0.3rem' }}
+                      placeholder="Open"
+                      style={{ 
+                        width: 110, 
+                        border: closedDays.includes(day) ? '1px solid #ddd' : '1px solid #B8B8B8', 
+                        borderRadius: 4, 
+                        padding: '0.3rem',
+                        backgroundColor: closedDays.includes(day) ? '#f5f5f5' : '#fff'
+                      }}
                     />
-                    <span>to</span>
+                    <span style={{ color: closedDays.includes(day) ? '#999' : '#000' }}>to</span>
                     <input
                       type="time"
-                      value={closingTimes[day] || ''}
-                      onChange={e => setClosingTimes({ ...closingTimes, [day]: e.target.value })}
+                      value={closedDays.includes(day) ? '' : (closingTimes[day] || '')}
+                      onChange={e => {
+                        if (!closedDays.includes(day)) {
+                          setClosingTimes({ ...closingTimes, [day]: e.target.value });
+                        }
+                      }}
                       disabled={closedDays.includes(day)}
-                      style={{ width: 110, border: '1px solid #B8B8B8', borderRadius: 4, padding: '0.3rem' }}
+                      placeholder="Close"
+                      style={{ 
+                        width: 110, 
+                        border: closedDays.includes(day) ? '1px solid #ddd' : '1px solid #B8B8B8', 
+                        borderRadius: 4, 
+                        padding: '0.3rem',
+                        backgroundColor: closedDays.includes(day) ? '#f5f5f5' : '#fff'
+                      }}
                     />
-                    {closedDays.includes(day) && <span style={{ color: '#D92D20', fontSize: '0.9rem' }}>Closed</span>}
+                    {closedDays.includes(day) && (
+                      <span style={{ color: '#D92D20', fontSize: '0.9rem', fontWeight: 600 }}>
+                        CLOSED
+                      </span>
+                    )}
                   </div>
                 ))}
                 <div style={{ marginBottom: 14 }}>
@@ -1424,4 +1494,4 @@ function isStoreOpen(opening, closing) {
   return now >= openDate && now <= closeDate;
 }
 
-export default StoreProfilePage; 
+export default StoreProfilePage;

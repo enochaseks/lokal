@@ -107,11 +107,13 @@ function ExplorePage() {
   // Add state for selectedCity
   const [selectedCity, setSelectedCity] = useState('');
   const [userCountry, setUserCountry] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
 
+  // Fix the useEffect to properly set currentUser
   useEffect(() => {
-    // Fetch buyer profile and use their saved location if available
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user); // Set the current user properly
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
@@ -302,6 +304,32 @@ function ExplorePage() {
     })
   )).filter(Boolean);
 
+  // Function to handle store click and add to viewed stores
+  const handleStoreClick = (storeId) => {
+    if (currentUser) {
+      // Get existing viewed stores from localStorage
+      const viewedKey = `viewedStores_${currentUser.uid}`;
+      const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+      
+      // Remove store if it already exists (to move it to front)
+      const filteredViewed = existingViewed.filter(id => id !== storeId);
+      
+      // Add store to beginning of array
+      const updatedViewed = [storeId, ...filteredViewed];
+      
+      // Keep only last 20 viewed stores
+      const limitedViewed = updatedViewed.slice(0, 20);
+      
+      // Save back to localStorage
+      localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
+      
+      console.log('Saved viewed store:', storeId, 'for user:', currentUser.uid); // Debug log
+    }
+    
+    // Navigate to store page
+    navigate(`/store-preview/${storeId}`);
+  };
+
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <style>{responsiveStyles}</style>
@@ -429,7 +457,7 @@ function ExplorePage() {
           return (
             <div
               key={shop.id}
-              onClick={() => navigate(`/store-preview/${shop.id}`)}
+              onClick={() => handleStoreClick(shop.id)}
               style={{
                 minWidth: 220,
                 border: '1px solid #ccc',
@@ -531,7 +559,7 @@ function ExplorePage() {
               return (
                 <div
                   key={shop.id}
-                  onClick={() => navigate(`/store-preview/${shop.id}`)}
+                  onClick={() => handleStoreClick(shop.id)}
                   style={{
                     minWidth: 220,
                     border: '2px solid #FFD700',
@@ -580,4 +608,4 @@ function ExplorePage() {
   );
 }
 
-export default ExplorePage; 
+export default ExplorePage;

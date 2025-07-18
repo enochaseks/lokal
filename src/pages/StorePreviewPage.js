@@ -97,12 +97,32 @@ function StorePreviewPage() {
         } else {
           setUserType('seller');
         }
+        
+        // Add this store to viewed stores for buyers
+        if (userDoc.exists() && id) {
+          const viewedKey = `viewedStores_${user.uid}`;
+          const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+          
+          // Remove store if it already exists (to move it to front)
+          const filteredViewed = existingViewed.filter(storeId => storeId !== id);
+          
+          // Add store to beginning of array
+          const updatedViewed = [id, ...filteredViewed];
+          
+          // Keep only last 20 viewed stores
+          const limitedViewed = updatedViewed.slice(0, 20);
+          
+          // Save back to localStorage
+          localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
+          
+          console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid); // Debug log
+        }
       } else {
         setUserType('');
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [id]); // Add id as dependency
 
   useEffect(() => {
     setLoading(true);
@@ -173,13 +193,23 @@ function StorePreviewPage() {
   const isClosedToday = store && store.closedDays && store.closedDays.includes(today);
   const todayOpening = store && store.openingTimes && store.openingTimes[today];
   const todayClosing = store && store.closingTimes && store.closingTimes[today];
+  
   function isStoreOpenForToday(opening, closing) {
+    // First check if the store is closed today - this overrides any opening times
+    if (isClosedToday) return false;
+    
     if (!opening || !closing) return false;
     const now = new Date();
     const [openH, openM] = opening.split(':').map(Number);
     const [closeH, closeM] = closing.split(':').map(Number);
     const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
     const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+    
+    // Handle case where closing time is after midnight (next day)
+    if (closeH < openH || (closeH === openH && closeM < openM)) {
+      closeDate.setDate(closeDate.getDate() + 1);
+    }
+    
     return now >= openDate && now <= closeDate;
   }
 
@@ -426,4 +456,4 @@ function StorePreviewPage() {
   );
 }
 
-export default StorePreviewPage; 
+export default StorePreviewPage;

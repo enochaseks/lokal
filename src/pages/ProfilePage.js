@@ -26,6 +26,15 @@ function ProfilePage() {
   const [editLoading, setEditLoading] = useState(false);
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // New state for viewed stores
+  const [viewedStores, setViewedStores] = useState([]);
+  const [showViewedModal, setShowViewedModal] = useState(false);
+  const [viewedLoading, setViewedLoading] = useState(false);
+
+  // Add new state for active tab
+  const [activeTab, setActiveTab] = useState('profile');
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -254,51 +263,249 @@ function ProfilePage() {
     setEditLoading(false);
   };
 
+  // New useEffect to load viewed stores from localStorage
+  useEffect(() => {
+    if (!authUser) return;
+    
+    const loadViewedStores = async () => {
+      setViewedLoading(true);
+      try {
+        const viewedData = localStorage.getItem(`viewedStores_${authUser.uid}`);
+        console.log('Loading viewed stores for user:', authUser.uid, 'Data:', viewedData); // Debug log
+        
+        if (viewedData) {
+          const storeIds = JSON.parse(viewedData);
+          const stores = [];
+          
+          // Fetch store details for each viewed store ID
+          for (const storeId of storeIds) {
+            try {
+              const storeDoc = await getDoc(doc(db, 'stores', storeId));
+              if (storeDoc.exists()) {
+                stores.push({ id: storeId, ...storeDoc.data() });
+              }
+            } catch (error) {
+              console.error('Error fetching store:', storeId, error);
+            }
+          }
+          
+          setViewedStores(stores);
+          console.log('Loaded viewed stores:', stores.length); // Debug log
+        }
+      } catch (error) {
+        console.error('Error loading viewed stores:', error);
+      }
+      setViewedLoading(false);
+    };
+
+    loadViewedStores();
+  }, [authUser, activeTab]); // Add activeTab as dependency to refresh when tab changes
+
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <Navbar />
-      <div style={{ maxWidth: 500, margin: '2rem auto', background: '#fff', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 8px #B8B8B8', textAlign: 'center' }}>
-        <h2 style={{ color: '#1C1C1C', marginBottom: '2rem' }}>Your Profile</h2>
-        {authUser === undefined || loading ? (
-          <div style={{ color: '#888', margin: '2rem 0' }}>Loading...</div>
-        ) : error ? (
-          <div style={{ color: 'red', margin: '2rem 0' }}>{`Error loading profile: ${error}`}</div>
-        ) : (
-          <>
-            {photoURL ? (
-              <img src={photoURL} alt="profile" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', marginBottom: 20 }} />
-            ) : (
-              <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#eee', margin: '0 auto 20px' }} />
-            )}
-            <div style={{ fontWeight: 600, fontSize: '1.2rem', marginBottom: 10 }}>{name || 'No name set'}</div>
-            <div style={{ color: '#888', fontSize: '1rem', marginBottom: 10 }}>{location || 'No location set'}</div>
-            {/* Message and Following section */}
-            <div style={{ margin: '1.5rem 0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div>
+      <div style={{ maxWidth: 600, margin: '2rem auto', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 8px #B8B8B8' }}>
+        
+        {/* Profile Header Section */}
+        <div style={{ padding: '2rem', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+          <h2 style={{ color: '#1C1C1C', marginBottom: '1.5rem' }}>Your Profile</h2>
+          {authUser === undefined || loading ? (
+            <div style={{ color: '#888', margin: '2rem 0' }}>Loading...</div>
+          ) : error ? (
+            <div style={{ color: 'red', margin: '2rem 0' }}>{`Error loading profile: ${error}`}</div>
+          ) : (
+            <>
+              {photoURL ? (
+                <img src={photoURL} alt="profile" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', marginBottom: 20 }} />
+              ) : (
+                <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#eee', margin: '0 auto 20px' }} />
+              )}
+              <div style={{ fontWeight: 600, fontSize: '1.2rem', marginBottom: 10 }}>{name || 'No name set'}</div>
+              <div style={{ color: '#888', fontSize: '1rem', marginBottom: 20 }}>{location || 'No location set'}</div>
+              
+              {/* Button container */}
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
-                  style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 12, cursor: 'pointer' }}
+                  style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
                   onClick={() => navigate('/messages')}
                 >
                   Messages
                 </button>
                 <button
-                  style={{ fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                  onClick={() => setShowFollowingModal(true)}
-                  disabled={followingLoading}
+                  style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+                  onClick={handleEditProfile}
                 >
-                  Following: {followingLoading ? '...' : followingStores.length}
+                  Edit Profile
                 </button>
               </div>
-            </div>
+            </>
+          )}
+        </div>
+
+        {/* Tab Navigation */}
+        <div style={{ display: 'flex', borderBottom: '2px solid #eee' }}>
+          {[
+            { key: 'profile', label: 'Overview' },
+            { key: 'following', label: 'Following' },
+            { key: 'viewed', label: 'Recently Viewed' },
+            { key: 'orders', label: 'Orders' },
+            { key: 'preferences', label: 'Preferences' }
+          ].map(tab => (
             <button
-              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginBottom: 16, cursor: 'pointer' }}
-              onClick={handleEditProfile}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                flex: 1,
+                padding: '1rem 0.5rem',
+                background: activeTab === tab.key ? '#F9F5EE' : 'transparent',
+                border: 'none',
+                borderBottom: activeTab === tab.key ? '2px solid #007B7F' : '2px solid transparent',
+                color: activeTab === tab.key ? '#007B7F' : '#888',
+                fontWeight: activeTab === tab.key ? 700 : 500,
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                outline: 'none',
+                transition: 'all 0.2s'
+              }}
             >
-              Edit Profile
+              {tab.label}
             </button>
-          </>
-        )}
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div style={{ padding: '2rem' }}>
+          {activeTab === 'profile' && (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: '#666', fontSize: '0.95rem' }}>
+                Welcome to your profile! Use the tabs above to navigate between different sections.
+              </p>
+            </div>
+          )}
+
+          {activeTab === 'following' && (
+            <div>
+              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Following Stores</h3>
+              {followingLoading ? (
+                <div style={{ color: '#888', textAlign: 'center' }}>Loading...</div>
+              ) : followingStores.length === 0 ? (
+                <div style={{ color: '#888', textAlign: 'center' }}>You are not following any stores yet.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                  {followingStores.map(store => (
+                    <div 
+                      key={store.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 12, 
+                        padding: 16,
+                        border: '1px solid #eee',
+                        borderRadius: 8,
+                        background: '#fafafa',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s'
+                      }}
+                      onClick={() => navigate(`/store-preview/${store.id}`)}
+                      onMouseEnter={e => e.target.style.background = '#f0f0f0'}
+                      onMouseLeave={e => e.target.style.background = '#fafafa'}
+                    >
+                      <img 
+                        src={store.backgroundImg || 'https://via.placeholder.com/50'} 
+                        alt={store.storeName} 
+                        style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '1rem' }}>{store.storeName}</div>
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>{store.storeLocation}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'viewed' && (
+            <div>
+              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Recently Viewed Stores</h3>
+              {viewedLoading ? (
+                <div style={{ color: '#888', textAlign: 'center' }}>Loading...</div>
+              ) : viewedStores.length === 0 ? (
+                <div style={{ color: '#888', textAlign: 'center' }}>You haven't viewed any stores yet.</div>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+                    {viewedStores.map(store => (
+                      <div 
+                        key={store.id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 12, 
+                          padding: 16,
+                          border: '1px solid #eee',
+                          borderRadius: 8,
+                          background: '#fafafa',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s'
+                        }}
+                        onClick={() => navigate(`/store-preview/${store.id}`)}
+                        onMouseEnter={e => e.target.style.background = '#f0f0f0'}
+                        onMouseLeave={e => e.target.style.background = '#fafafa'}
+                      >
+                        <img 
+                          src={store.backgroundImg || 'https://via.placeholder.com/50'} 
+                          alt={store.storeName} 
+                          style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '1rem' }}>{store.storeName}</div>
+                          <div style={{ color: '#666', fontSize: '0.9rem' }}>{store.storeLocation}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(`viewedStores_${authUser.uid}`);
+                      setViewedStores([]);
+                    }}
+                    style={{
+                      background: '#ff4444',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      display: 'block',
+                      margin: '0 auto'
+                    }}
+                  >
+                    Clear History
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'orders' && (
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Orders</h3>
+              <p style={{ color: '#666' }}>Your order history will appear here.</p>
+            </div>
+          )}
+
+          {activeTab === 'preferences' && (
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Preferences</h3>
+              <p style={{ color: '#666' }}>Your account preferences and settings will appear here.</p>
+            </div>
+          )}
+        </div>
       </div>
+
       {showModal && (
         <div style={{
           position: 'fixed',
@@ -446,8 +653,90 @@ function ProfilePage() {
           </div>
         </div>
       )}
+      {/* Modal for viewed stores */}
+      {showViewedModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10001
+        }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 32, minWidth: 320, maxWidth: 400, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 2px 16px #0008', textAlign: 'center', position: 'relative' }}>
+            <button onClick={() => setShowViewedModal(false)} style={{ position: 'absolute', top: 8, right: 8, background: '#eee', border: 'none', borderRadius: '50%', width: 28, height: 28, fontSize: 18, cursor: 'pointer' }}>×</button>
+            <h3 style={{ marginBottom: 18, color: '#007B7F' }}>Recently Viewed Stores</h3>
+            {viewedLoading ? (
+              <div style={{ color: '#888' }}>Loading...</div>
+            ) : viewedStores.length === 0 ? (
+              <div style={{ color: '#888' }}>You haven't viewed any stores yet.</div>
+            ) : (
+              <>
+                <div style={{ color: '#888', fontSize: '0.9rem', marginBottom: 16 }}>
+                  Click on any store to visit again
+                </div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {viewedStores.map(store => (
+                    <li key={store.id} style={{ 
+                      marginBottom: 14, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 12, 
+                      cursor: 'pointer',
+                      padding: 12,
+                      border: '1px solid #eee',
+                      borderRadius: 8,
+                      background: '#fafafa',
+                      transition: 'background 0.2s'
+                    }}
+                    onClick={() => { 
+                      setShowViewedModal(false); 
+                      navigate(`/store-preview/${store.id}`); 
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#f0f0f0'}
+                    onMouseLeave={e => e.target.style.background = '#fafafa'}
+                    >
+                      <img 
+                        src={store.backgroundImg || 'https://via.placeholder.com/40'} 
+                        alt={store.storeName} 
+                        style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} 
+                      />
+                      <div style={{ textAlign: 'left', flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '1rem' }}>{store.storeName}</div>
+                        <div style={{ color: '#666', fontSize: '0.85rem' }}>{store.storeLocation}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(`viewedStores_${authUser.uid}`);
+                    setViewedStores([]);
+                  }}
+                  style={{
+                    marginTop: 16,
+                    background: '#ff4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Clear History
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export default ProfilePage; 
+export default ProfilePage;
