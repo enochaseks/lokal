@@ -363,13 +363,83 @@ function ExplorePage() {
     navigate(`/store-preview/${storeId}`);
   };
 
+  // Add function to refresh location
+  const refreshLocation = () => {
+    setLocationDetected(false);
+    setCity('Detecting city...');
+    setUserLocation(null);
+    
+    // Force location detection to run again
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setUserLocation(coords);
+          
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}`
+            );
+            const data = await res.json();
+            const detectedCity = data.address?.city ||
+              data.address?.town ||
+              data.address?.village ||
+              data.address?.suburb ||
+              'Unknown City';
+            setCity(detectedCity);
+            setUserCountry(data.address?.country || '');
+          } catch (error) {
+            console.error('Error reverse geocoding:', error);
+            setCity('Unknown City');
+          }
+          setLocationDetected(true);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setCity('Location unavailable');
+          setLocationDetected(true);
+        },
+        {
+          timeout: 10000,
+          enableHighAccuracy: true,
+          maximumAge: 0 // Don't use cached location
+        }
+      );
+    } else {
+      setCity('Geolocation not supported');
+      setLocationDetected(true);
+    }
+  };
+
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <style>{responsiveStyles}</style>
       <Navbar />
       <div className="explore-controls" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem', background: '#F9F5EE', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, marginRight: '1rem' }}>
-          <span style={{ fontSize: '1rem', marginRight: '0.3rem' }}>📍</span>
+          <span 
+            onClick={refreshLocation}
+            style={{ 
+              fontSize: '1rem', 
+              marginRight: '0.3rem', 
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease',
+              userSelect: 'none'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+            }}
+            title="Click to refresh location"
+            aria-label="Refresh location"
+          >
+            📍
+          </span>
           <span style={{ fontSize: '1rem', color: '#1C1C1C' }}>
             {city || (locationDetected ? 'Location unavailable' : 'Detecting city...')}
           </span>
@@ -484,10 +554,29 @@ function ExplorePage() {
           const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
           let distance = null;
           if (userLocation && shop.latitude && shop.longitude) {
-            distance = getDistanceFromLatLonInKm(
+            const distanceKm = getDistanceFromLatLonInKm(
               Number(userLocation.lat), Number(userLocation.lng),
               Number(shop.latitude), Number(shop.longitude)
-            ).toFixed(2);
+            );
+            
+            // More accurate distance formatting
+            if (distanceKm < 0.01) {
+              // For distances less than 10 meters, show as "Here"
+              distance = "Here";
+            } else if (distanceKm < 0.1) {
+              // Convert to yards for very close distances (10m - 100m)
+              const distanceYards = Math.round(distanceKm * 1093.61);
+              distance = `${distanceYards} yds`;
+            } else if (distanceKm < 1) {
+              // Show in meters for close distances (100m - 1km)
+              distance = `${Math.round(distanceKm * 1000)} m`;
+            } else if (distanceKm < 10) {
+              // Show 1 decimal place for medium distances (1-10km)
+              distance = `${distanceKm.toFixed(1)} km`;
+            } else {
+              // Round to nearest km for longer distances (10km+)
+              distance = `${Math.round(distanceKm)} km`;
+            }
           }
           return (
             <div
@@ -550,7 +639,7 @@ function ExplorePage() {
                         position: 'relative',
                       }}
                     >
-                      {distance} km
+                      {distance}
                     </div>
                   )}
                 </div>
