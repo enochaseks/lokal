@@ -542,16 +542,45 @@ function ExplorePage() {
           const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
           const todayOpening = shop.openingTimes && shop.openingTimes[today];
           const todayClosing = shop.closingTimes && shop.closingTimes[today];
-          function isStoreOpenForToday(opening, closing) {
+          
+          function isStoreOpenForToday(shop) {
+            if (!shop) return false;
+            
+            const today = daysOfWeek[new Date().getDay()];
+            
+            // Check if store is closed today
+            if (shop.closedDays && shop.closedDays.includes(today)) {
+              return false;
+            }
+            
+            // Get today's opening and closing times
+            const todayOpening = shop.openingTimes && shop.openingTimes[today];
+            const todayClosing = shop.closingTimes && shop.closingTimes[today];
+            
+            // If no specific times set for today, fall back to general opening/closing times
+            const opening = todayOpening || shop.openingTime;
+            const closing = todayClosing || shop.closingTime;
+            
             if (!opening || !closing) return false;
+            
             const now = new Date();
             const [openH, openM] = opening.split(':').map(Number);
             const [closeH, closeM] = closing.split(':').map(Number);
+            
             const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
             const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+            
+            // Handle overnight hours (e.g., 10 PM to 6 AM)
+            if (closeH < openH || (closeH === openH && closeM < openM)) {
+              const nextDayClose = new Date(closeDate);
+              nextDayClose.setDate(nextDayClose.getDate() + 1);
+              return now >= openDate || now <= nextDayClose;
+            }
+            
             return now >= openDate && now <= closeDate;
           }
-          const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
+          
+          const open = isStoreOpenForToday(shop);
           let distance = null;
           if (userLocation && shop.latitude && shop.longitude) {
             const distanceKm = getDistanceFromLatLonInKm(
@@ -680,21 +709,50 @@ function ExplorePage() {
             })
             .slice(0, 5)
             .map(shop => {
-              // New logic for open/closed status
+              // Use the same improved logic
               const today = daysOfWeek[new Date().getDay()];
               const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
               const todayOpening = shop.openingTimes && shop.openingTimes[today];
               const todayClosing = shop.closingTimes && shop.closingTimes[today];
-              function isStoreOpenForToday(opening, closing) {
+              
+              function isStoreOpenForToday(shop) {
+                if (!shop) return false;
+                
+                const today = daysOfWeek[new Date().getDay()];
+                
+                // Check if store is closed today
+                if (shop.closedDays && shop.closedDays.includes(today)) {
+                  return false;
+                }
+                
+                // Get today's opening and closing times
+                const todayOpening = shop.openingTimes && shop.openingTimes[today];
+                const todayClosing = shop.closingTimes && shop.closingTimes[today];
+                
+                // If no specific times set for today, fall back to general opening/closing times
+                const opening = todayOpening || shop.openingTime;
+                const closing = todayClosing || shop.closingTime;
+                
                 if (!opening || !closing) return false;
+                
                 const now = new Date();
                 const [openH, openM] = opening.split(':').map(Number);
                 const [closeH, closeM] = closing.split(':').map(Number);
+                
                 const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
                 const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+                
+                // Handle overnight hours (e.g., 10 PM to 6 AM)
+                if (closeH < openH || (closeH === openH && closeM < openM)) {
+                  const nextDayClose = new Date(closeDate);
+                  nextDayClose.setDate(nextDayClose.getDate() + 1);
+                  return now >= openDate || now <= nextDayClose;
+                }
+                
                 return now >= openDate && now <= closeDate;
               }
-              const open = !isClosedToday && isStoreOpenForToday(todayOpening, todayClosing);
+              
+              const open = isStoreOpenForToday(shop);
               const storeRating = ratings[shop.id];
               return (
                 <div

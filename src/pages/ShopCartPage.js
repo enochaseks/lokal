@@ -3,7 +3,7 @@ import { useCart } from '../CartContext';
 import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const currencySymbols = {
@@ -41,12 +41,15 @@ function ShopCartPage() {
   const navigate = useNavigate();
   const [buyerProfile, setBuyerProfile] = useState(null);
   const [showLocationWarning, setShowLocationWarning] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [processing, setProcessing] = useState(false);
 
-  // Fetch buyer profile
+  // Fetch buyer profile and current user
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        setCurrentUser(user);
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           setBuyerProfile(userDoc.data());
@@ -59,22 +62,111 @@ function ShopCartPage() {
   // Group items by store and currency, and collect deliveryType
   const grouped = cart.reduce((acc, item) => {
     const key = `${item.storeId}_${item.currency}`;
-    if (!acc[key]) acc[key] = { storeName: item.storeName, currency: item.currency, deliveryType: item.deliveryType, items: [] };
+    if (!acc[key]) acc[key] = { 
+      storeId: item.storeId, 
+      storeName: item.storeName, 
+      currency: item.currency, 
+      deliveryType: item.deliveryType, 
+      items: [] 
+    };
     // If deliveryType is not set yet, set it from the item
     if (!acc[key].deliveryType && item.deliveryType) acc[key].deliveryType = item.deliveryType;
     acc[key].items.push(item);
     return acc;
   }, {});
 
-  const handlePayNow = () => {
+  const createOrderMessage = (group) => {
+    const total = group.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const itemsList = group.items.map(item => 
+      `• ${item.itemName} - ${getCurrencySymbol(group.currency)}${formatPrice(item.price, group.currency)} × ${item.quantity} = ${getCurrencySymbol(group.currency)}${formatPrice(item.price * item.quantity, group.currency)}`
+    ).join('\n');
+
+    return `🛒 NEW ORDER REQUEST
+
+Customer: ${buyerProfile?.name || currentUser?.email || 'Unknown'}
+${buyerProfile?.email ? `Email: ${buyerProfile.email}` : ''}
+${buyerProfile?.location ? `Location: ${buyerProfile.location}` : ''}
+
+📦 Items Ordered:
+${itemsList}
+
+💰 Total: ${getCurrencySymbol(group.currency)}${formatPrice(total, group.currency)}
+🚚 Delivery Type: ${group.deliveryType || 'Not specified'}
+
+Please respond to confirm this order and provide payment/pickup instructions.`;
+  };
+
+  const sendOrderToStore = async (group) => {
+    try {
+      const conversationId = `${currentUser.uid}_${group.storeId}`;
+      
+      // Create message document
+      await addDoc(collection(db, 'messages'), {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: buyerProfile?.name || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: group.storeId,
+        receiverName: group.storeName,
+        message: createOrderMessage(group),
+        timestamp: serverTimestamp(),
+        isRead: false,
+        messageType: 'order_request',
+        orderData: {
+          items: group.items,
+          total: group.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+          currency: group.currency,
+          deliveryType: group.deliveryType,
+          customerLocation: buyerProfile?.location || null
+        }
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error sending order to store:', error);
+      return false;
+    }
+  };
+
+  const handlePayNow = async () => {
+    if (!currentUser) {
+      alert('Please log in to place an order.');
+      return;
+    }
+
     const needsLocation = Object.values(grouped).some(
       group => group.deliveryType === 'Delivery'
     );
+    
     if (needsLocation && (!buyerProfile || !buyerProfile.location)) {
       setShowLocationWarning(true);
       return;
     }
-    alert('Payment functionality coming soon.');
+
+    setProcessing(true);
+    setShowLocationWarning(false);
+
+    try {
+      // Send orders to each store
+      const orderPromises = Object.values(grouped).map(group => sendOrderToStore(group));
+      const results = await Promise.all(orderPromises);
+      
+      const successCount = results.filter(result => result === true).length;
+      const totalStores = Object.keys(grouped).length;
+
+      if (successCount === totalStores) {
+        alert(`Order requests sent successfully to ${totalStores} store${totalStores > 1 ? 's' : ''}! Check your messages for responses from the sellers.`);
+        clearCart(); // Clear cart after successful order
+        navigate('/messages'); // Navigate to messages page to see conversations
+      } else {
+        alert(`Some orders failed to send. ${successCount}/${totalStores} orders sent successfully.`);
+      }
+    } catch (error) {
+      console.error('Error processing orders:', error);
+      alert('Failed to send order requests. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
@@ -115,16 +207,67 @@ function ShopCartPage() {
                 </div>
               </div>
             ))}
-            <button onClick={clearCart} style={{ background: '#888', color: '#fff', border: 'none', borderRadius: 8, padding: '0.7rem 1.2rem', fontWeight: 600, cursor: 'pointer', marginTop: 16 }}>Clear Cart</button>
-            <button
-              onClick={handlePayNow}
-              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.7rem 1.2rem', fontWeight: 600, cursor: 'pointer', marginTop: 16, marginLeft: 12 }}
-            >
-              Pay Now
-            </button>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+              <button 
+                onClick={clearCart} 
+                style={{ 
+                  background: '#888', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: 8, 
+                  padding: '0.7rem 1.2rem', 
+                  fontWeight: 600, 
+                  cursor: 'pointer' 
+                }}
+              >
+                Clear Cart
+              </button>
+              <button
+                onClick={handlePayNow}
+                disabled={processing}
+                style={{ 
+                  background: processing ? '#ccc' : '#007B7F', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: 8, 
+                  padding: '0.7rem 1.2rem', 
+                  fontWeight: 600, 
+                  cursor: processing ? 'not-allowed' : 'pointer' 
+                }}
+              >
+                {processing ? 'Sending Orders...' : 'Send Order Requests'}
+              </button>
+            </div>
+
             {showLocationWarning && (
-              <div style={{ color: '#D92D20', marginTop: 12, fontWeight: 600 }}>
-                Please set your location in your profile to order from delivery stores.
+              <div style={{ 
+                color: '#D92D20', 
+                marginTop: 12, 
+                fontWeight: 600,
+                background: '#fbe8e8',
+                padding: '0.8rem',
+                borderRadius: 8,
+                border: '1px solid #D92D20'
+              }}>
+                ⚠️ Please set your location in your profile to order from delivery stores.
+                <div style={{ marginTop: 8 }}>
+                  <button 
+                    onClick={() => navigate('/profile')}
+                    style={{
+                      background: '#D92D20',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '0.4rem 0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    Update Profile
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -134,4 +277,4 @@ function ShopCartPage() {
   );
 }
 
-export default ShopCartPage; 
+export default ShopCartPage;

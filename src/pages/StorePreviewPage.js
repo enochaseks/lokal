@@ -250,24 +250,45 @@ function StorePreviewPage() {
   const todayOpening = store && store.openingTimes && store.openingTimes[today];
   const todayClosing = store && store.closingTimes && store.closingTimes[today];
   
-  function isStoreOpenForToday(opening, closing) {
-    // First check if the store is closed today - this overrides any opening times
-    if (isClosedToday) return false;
+  function isStoreOpenForToday(store) {
+    if (!store) return false;
+    
+    const today = daysOfWeek[new Date().getDay()];
+    
+    // Check if store is closed today
+    if (store.closedDays && store.closedDays.includes(today)) {
+      return false;
+    }
+    
+    // Get today's opening and closing times
+    const todayOpening = store.openingTimes && store.openingTimes[today];
+    const todayClosing = store.closingTimes && store.closingTimes[today];
+    
+    // If no specific times set for today, fall back to general opening/closing times
+    const opening = todayOpening || store.openingTime;
+    const closing = todayClosing || store.closingTime;
     
     if (!opening || !closing) return false;
+    
     const now = new Date();
     const [openH, openM] = opening.split(':').map(Number);
     const [closeH, closeM] = closing.split(':').map(Number);
+    
     const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
     const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
     
-    // Handle case where closing time is after midnight (next day)
+    // Handle overnight hours (e.g., 10 PM to 6 AM)
     if (closeH < openH || (closeH === openH && closeM < openM)) {
-      closeDate.setDate(closeDate.getDate() + 1);
+      const nextDayClose = new Date(closeDate);
+      nextDayClose.setDate(nextDayClose.getDate() + 1);
+      return now >= openDate || now <= nextDayClose;
     }
     
     return now >= openDate && now <= closeDate;
   }
+
+  // Add this line to define storeIsOpen
+  const storeIsOpen = isStoreOpenForToday(store);
 
   // Helper to check if current user is the store owner
   const isStoreOwner = authUser && store && store.ownerId && authUser.uid === store.ownerId;
@@ -437,9 +458,9 @@ function StorePreviewPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             {store.backgroundImg && (
-              <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: isStoreOpenForToday(todayOpening, todayClosing) ? 'none' : 'grayscale(0.7)', opacity: isStoreOpenForToday(todayOpening, todayClosing) ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
+              <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: storeIsOpen ? 'none' : 'grayscale(0.7)', opacity: storeIsOpen ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
             )}
-            {!isStoreOpenForToday(todayOpening, todayClosing) && (
+            {!storeIsOpen && (
               <div style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, background: 'rgba(255,255,255,0.55)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.1rem', color: '#D92D20', pointerEvents: 'none' }}>
                 Closed
               </div>
@@ -460,7 +481,7 @@ function StorePreviewPage() {
               </div>
             )}
           </div>
-          {userType === 'buyer' && (
+          {userType === 'buyer' && !isStoreOwner && (
             <div className="store-action-buttons">
               {following ? (
                 <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
@@ -478,8 +499,8 @@ function StorePreviewPage() {
           )}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <span style={{ background: isClosedToday ? '#fbe8e8' : (isStoreOpenForToday(todayOpening, todayClosing) ? '#e8fbe8' : '#fbe8e8'), color: isClosedToday ? '#D92D20' : (isStoreOpenForToday(todayOpening, todayClosing) ? '#3A8E3A' : '#D92D20'), borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
-            {isClosedToday ? 'Closed Today' : (isStoreOpenForToday(todayOpening, todayClosing) ? 'Open' : 'Closed')}
+          <span style={{ background: isClosedToday ? '#fbe8e8' : (storeIsOpen ? '#e8fbe8' : '#fbe8e8'), color: isClosedToday ? '#D92D20' : (storeIsOpen ? '#3A8E3A' : '#D92D20'), borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
+            {isClosedToday ? 'Closed Today' : (storeIsOpen ? 'Open' : 'Closed')}
           </span>
           {!isClosedToday && todayOpening && todayClosing && (
             <span style={{ marginLeft: 16, color: '#007B7F', fontSize: '1rem' }}>
@@ -502,13 +523,13 @@ function StorePreviewPage() {
               <div style={{ color: '#888' }}>No items added yet.</div>
             ) : (
               items.map(item => (
-                <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: isStoreOpenForToday(todayOpening, todayClosing) ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isStoreOpenForToday(todayOpening, todayClosing) ? 1 : 0.5, filter: isStoreOpenForToday(todayOpening, todayClosing) ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
+                <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: storeIsOpen ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: storeIsOpen ? 1 : 0.5, filter: storeIsOpen ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
                   {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8 }} />}
                   <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
                   <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
                   <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
                   {/* Only show these buttons for buyers/customers who are not the store owner */}
-                  {userType === 'buyer' && !isStoreOwner && isStoreOpenForToday(todayOpening, todayClosing) && (
+                  {userType === 'buyer' && !isStoreOwner && storeIsOpen && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button
                         style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
@@ -530,7 +551,7 @@ function StorePreviewPage() {
                 </div>
               ))
             )}
-            {userType === 'buyer' && selectedItems.length > 0 && isStoreOpenForToday(todayOpening, todayClosing) && (
+            {userType === 'buyer' && selectedItems.length > 0 && storeIsOpen && (
               <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec' }}>
                 Total: {getCurrencySymbol(selectedItems[0].currency)}{selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
               </div>
