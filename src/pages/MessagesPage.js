@@ -1155,9 +1155,14 @@ Please proceed with payment to complete your order.`;
   }
 
   return (
-    <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
+    <div style={{ background: '#F9F5EE', minHeight: '100vh', height: '100vh', overflow: 'hidden' }}>
       <Navbar />
-      <div className="messages-container">
+      <div className="messages-container" style={{ 
+        height: 'calc(100vh - 80px)', 
+        display: 'flex', 
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
         <div className="messages-tabs">
           <button
             onClick={() => setActiveTab('messages')}
@@ -1177,7 +1182,12 @@ Please proceed with payment to complete your order.`;
         </div>
 
         {activeTab === 'messages' && (
-          <div className="messages-content">
+          <div className="messages-content" style={{
+            flex: 1,
+            display: 'flex',
+            height: 'calc(100vh - 140px)',
+            overflow: 'hidden'
+          }}>
             {/* Mobile: Show conversations or chat, not both */}
             <div className={`conversations-panel ${selectedConversation ? 'mobile-hidden' : ''}`}>
               <input
@@ -1297,9 +1307,16 @@ Please proceed with payment to complete your order.`;
                   )}
                 </div>
 
-                <div className="chat-body">
-                  <div className={`messages-area ${(showStoreItems || showCart) ? 'with-sidebar' : ''}`}>
-                    <div className="messages-list">
+                <div className="chat-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  <div className={`messages-area ${(showStoreItems || showCart) ? 'with-sidebar' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div className="messages-list" style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      WebkitOverflowScrolling: 'touch',
+                      height: '100%',
+                      maxHeight: 'calc(100vh - 200px)',
+                      padding: '1rem'
+                    }}>
                       {loadingMessages ? (
                         <div className="loading-state">Loading messages...</div>
                       ) : (
@@ -1383,6 +1400,28 @@ Please proceed with payment to complete your order.`;
                       >
                         Send
                       </button>
+                      
+                      {!isSeller && (
+                        <div className="mobile-action-buttons">
+                          <button
+                            onClick={() => setShowStoreItems(!showStoreItems)}
+                            className={`mobile-browse-btn ${showStoreItems ? 'active' : ''} ${orderStatus !== 'shopping' ? 'disabled' : ''}`}
+                            disabled={orderStatus !== 'shopping'}
+                          >
+                            {showStoreItems ? 'Hide Items' : '🛍️ Browse'}
+                            {orderStatus !== 'shopping' && ' (Order Finalized)'}
+                          </button>
+                          
+                          {cart.length > 0 && (
+                            <button
+                              onClick={() => setShowCart(!showCart)}
+                              className={`mobile-cart-btn ${showCart ? 'active' : ''}`}
+                            >
+                              🛒 Cart ({getCartItemCount()})
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1981,6 +2020,8 @@ Please proceed with payment to complete your order.`;
           flex: 1;
           display: flex;
           flex-direction: column;
+          height: 100%;
+          min-height: 0;
         }
 
         .messages-area.with-sidebar {
@@ -1989,8 +2030,29 @@ Please proceed with payment to complete your order.`;
 
         .messages-list {
           flex: 1;
-          overflow-y: auto;
+          overflow-y: scroll !important;
           padding: 1rem;
+          height: calc(100vh - 350px) !important;
+          max-height: calc(100vh - 350px) !important;
+          scrollbar-width: auto !important;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .messages-list::-webkit-scrollbar {
+          width: 12px !important;
+        }
+
+        .messages-list::-webkit-scrollbar-track {
+          background: #f1f1f1 !important;
+        }
+
+        .messages-list::-webkit-scrollbar-thumb {
+          background: #888 !important;
+          border-radius: 6px !important;
+        }
+
+        .messages-list::-webkit-scrollbar-thumb:hover {
+          background: #555 !important;
         }
 
         .message {
@@ -2036,37 +2098,82 @@ Please proceed with payment to complete your order.`;
         }
 
         .message-input-area {
-          display: flex;
+          display: flex !important;
           gap: 0.5rem;
           align-items: center;
-          padding: 1rem;
-          border-top: 1px solid #eee;
-          background: #fff;
+          padding: 1rem !important;
+          border-top: 1px solid #eee !important;
+          background: #fff !important;
           flex-wrap: wrap;
+          position: sticky !important;
+          bottom: 0 !important;
+          z-index: 10 !important;
+          box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1) !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
         }
 
         .message-input {
-          flex: 1;
-          padding: 0.75rem;
-          border: 1px solid #ccc;
-          border-radius: 8px;
-          outline: none;
-          font-size: 0.95rem;
+          flex: 1 !important;
+          padding: 0.75rem !important;
+          border: 1px solid #ccc !important;
+          border-radius: 8px !important;
+          outline: none !important;
+          font-size: 0.95rem !important;
+          min-width: 200px !important;
+          background: #fff !important;
         }
 
         .send-button {
-          padding: 0.75rem 1.5rem;
-          background: #007B7F;
-          color: #fff;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: background 0.2s;
+          padding: 0.75rem 1.5rem !important;
+          background: #007B7F !important;
+          color: #fff !important;
+          border: none !important;
+          border-radius: 8px !important;
+          cursor: pointer !important;
+          font-weight: 600 !important;
+          transition: background 0.2s !important;
         }
 
         .send-button:disabled {
           background: #ccc;
+          cursor: not-allowed;
+        }
+
+        .mobile-action-buttons {
+          display: none;
+          width: 100%;
+          gap: 0.75rem;
+          margin-top: 0.75rem;
+          padding: 0.5rem 0;
+        }
+
+        .mobile-browse-btn, .mobile-cart-btn {
+          flex: 1;
+          padding: 0.75rem 1rem;
+          background: #f1f1f1;
+          color: #007B7F;
+          border: 2px solid #007B7F;
+          border-radius: 8px;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .mobile-browse-btn.active, .mobile-cart-btn.active {
+          background: #007B7F;
+          color: #fff;
+        }
+
+        .mobile-browse-btn.disabled {
+          background: #f5f5f5;
+          color: #999;
+          border-color: #ddd;
           cursor: not-allowed;
         }
 
@@ -2413,6 +2520,10 @@ Please proceed with payment to complete your order.`;
 
           .message-input-area {
             flex-wrap: wrap;
+          }
+
+          .mobile-action-buttons {
+            display: flex !important;
           }
 
           .done-button, .order-status-indicator {
@@ -2909,6 +3020,52 @@ Please proceed with payment to complete your order.`;
 
         /* Mobile responsive updates */
         @media (max-width: 768px) {
+          .messages-container {
+            height: 100vh;
+            overflow: hidden;
+          }
+
+          .messages-content {
+            height: calc(100vh - 8rem);
+            flex-direction: column;
+          }
+
+          .conversations-panel {
+            width: 100%;
+            max-height: 40vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            border-right: none;
+            border-bottom: 1px solid #eee;
+          }
+
+          .chat-area {
+            flex: 1;
+            min-height: 0;
+          }
+
+          .chat-body {
+            flex: 1;
+            overflow: hidden;
+          }
+
+          .messages-area {
+            height: 100%;
+          }
+
+          .messages-list {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding: 0.5rem;
+            scroll-behavior: smooth;
+            height: calc(100vh - 200px) !important;
+            max-height: calc(100vh - 200px) !important;
+            min-height: 200px !important;
+            position: relative !important;
+            padding-bottom: 1rem !important;
+          }
+
           .header-buttons {
             flex-direction: column;
             gap: 0.25rem;
@@ -2921,30 +3078,159 @@ Please proceed with payment to complete your order.`;
 
           .cart-sidebar {
             width: 100%;
-            max-height: 400px;
+            max-height: 50vh;
             order: -1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
           }
 
           .cart-content-wrapper {
-            max-height: 300px;
+            max-height: 40vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
           }
 
           .cart-items {
-            max-height: 200px;
+            max-height: 25vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
           }
 
           .cart-actions {
             flex-direction: column;
           }
+
+          /* Improve message bubbles on mobile */
+          .message-bubble {
+            max-width: 85%;
+            word-wrap: break-word;
+          }
+
+          /* Ensure input area doesn't get hidden */
+          .message-input-area {
+            position: sticky !important;
+            bottom: 0 !important;
+            background: #fff !important;
+            border-top: 2px solid #007B7F !important;
+            padding: 1rem !important;
+            z-index: 1000 !important;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15) !important;
+            display: flex !important;
+            gap: 0.75rem !important;
+            align-items: center !important;
+            margin: 0 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+
+          .message-input {
+            flex: 1 !important;
+            padding: 0.75rem !important;
+            border: 2px solid #007B7F !important;
+            border-radius: 8px !important;
+            font-size: 16px !important;
+            min-height: 44px !important;
+            background: #fff !important;
+            box-sizing: border-box !important;
+          }
+
+          .send-button {
+            padding: 0.75rem 1.5rem !important;
+            background: #007B7F !important;
+            color: #fff !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 16px !important;
+            min-height: 44px !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+          }
+
+          /* Add padding to bottom of messages to account for fixed input */
+          .messages-list {
+            padding-bottom: 100px !important;
+          }
         }
 
         @media (max-width: 480px) {
+          .messages-container {
+            height: 100vh;
+            overflow: hidden;
+          }
+
+          .conversations-panel {
+            max-height: 35vh;
+          }
+
+          .messages-list {
+            padding: 0.25rem;
+            font-size: 0.9rem;
+            height: calc(100vh - 200px) !important;
+            max-height: calc(100vh - 200px) !important;
+            min-height: 150px !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          .message-bubble {
+            max-width: 90%;
+            padding: 0.5rem;
+          }
+
           .cart-btn {
             display: none;
           }
 
           .cart-sidebar {
-            max-height: 300px;
+            max-height: 45vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .cart-content-wrapper {
+            max-height: 35vh;
+          }
+
+          .cart-items {
+            max-height: 20vh;
+          }
+
+          /* Improve touch scrolling */
+          .conversations-list,
+          .messages-list,
+          .cart-sidebar,
+          .cart-content-wrapper,
+          .cart-items {
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+          }
+
+          /* Prevent zoom on input focus */
+          .message-input,
+          .search-input {
+            font-size: 16px;
+          }
+        }
+
+        /* Force mobile scrolling for all devices */
+        @media (max-width: 1024px) {
+          .messages-list {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            height: calc(100vh - 180px) !important;
+            max-height: calc(100vh - 180px) !important;
+            position: relative !important;
+          }
+          
+          .messages-area {
+            height: 100% !important;
+            max-height: calc(100vh - 120px) !important;
+          }
+          
+          .chat-body {
+            height: calc(100vh - 160px) !important;
+            overflow: hidden !important;
           }
         }
       `}</style>
