@@ -32,6 +32,10 @@ function ProfilePage() {
   const [showViewedModal, setShowViewedModal] = useState(false);
   const [viewedLoading, setViewedLoading] = useState(false);
 
+  // Orders state
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
   // Add new state for active tab
   const [activeTab, setActiveTab] = useState('profile');
 
@@ -301,6 +305,103 @@ function ProfilePage() {
     loadViewedStores();
   }, [authUser, activeTab]); // Add activeTab as dependency to refresh when tab changes
 
+  // Fetch customer orders
+  useEffect(() => {
+    if (!authUser || activeTab !== 'orders') return;
+    
+    const fetchOrders = async () => {
+      setOrdersLoading(true);
+      try {
+        // Fetch all messages where the user was involved in payments
+        const paymentsQuery = query(
+          collection(db, 'messages'),
+          where('messageType', 'in', ['payment_completed', 'payment_notification'])
+        );
+        
+        const paymentsSnapshot = await getDocs(paymentsQuery);
+        const customerOrders = [];
+        
+        paymentsSnapshot.docs.forEach(doc => {
+          const message = doc.data();
+          
+          // If this user was the customer who made the payment (senderId of payment_completed)
+          if (message.messageType === 'payment_completed' && message.senderId === authUser.uid) {
+            const orderData = {
+              id: doc.id,
+              orderId: message.paymentData?.orderId || message.orderData?.orderId,
+              items: message.paymentData?.items || message.orderData?.items || [],
+              totalAmount: message.paymentData?.amount || message.paymentData?.totalAmount || 0,
+              currency: message.paymentData?.currency || 'GBP',
+              pickupCode: message.paymentData?.pickupCode,
+              paymentMethod: message.paymentData?.paymentMethod,
+              timestamp: message.timestamp,
+              storeName: message.receiverName,
+              storeId: message.receiverId,
+              status: 'paid' // Default status
+            };
+            customerOrders.push(orderData);
+          }
+        });
+        
+        // Check orders collection for the most current status
+        for (const order of customerOrders) {
+          if (order.orderId) {
+            try {
+              const orderDoc = await getDoc(doc(db, 'orders', order.orderId));
+              if (orderDoc.exists()) {
+                const orderData = orderDoc.data();
+                if (orderData.status) {
+                  order.status = orderData.status;
+                  if (orderData.deliveredAt) {
+                    order.deliveredAt = orderData.deliveredAt;
+                  }
+                }
+              }
+            } catch (error) {
+              console.log('Error fetching order status:', error);
+            }
+          }
+        }
+
+        // Also check for delivery status updates in messages (fallback)
+        const deliveryQuery = query(collection(db, 'messages'));
+        const deliverySnapshot = await getDocs(deliveryQuery);
+        
+        deliverySnapshot.docs.forEach(doc => {
+          const message = doc.data();
+          if (message.messageType === 'delivery_completed' && message.receiverId === authUser.uid) {
+            // Find the corresponding order and update its status
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && order.status !== 'delivered') {
+              order.status = 'delivered';
+              order.deliveredAt = message.timestamp;
+            }
+          } else if (message.messageType === 'delivery_started' && message.receiverId === authUser.uid) {
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && order.status === 'paid') {
+              order.status = 'in_delivery';
+              order.deliveryStartedAt = message.timestamp;
+            }
+          }
+        });
+        
+        // Sort orders by timestamp (newest first)
+        customerOrders.sort((a, b) => {
+          const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+          const bTime = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+          return bTime - aTime;
+        });
+        
+        setOrders(customerOrders);
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+      }
+      setOrdersLoading(false);
+    };
+
+    fetchOrders();
+  }, [authUser, activeTab]);
+
   return (
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <Navbar />
@@ -491,9 +592,125 @@ function ProfilePage() {
           )}
 
           {activeTab === 'orders' && (
-            <div style={{ textAlign: 'center' }}>
-              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Orders</h3>
-              <p style={{ color: '#666' }}>Your order history will appear here.</p>
+            <div>
+              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Order History</h3>
+              {ordersLoading ? (
+                <div style={{ textAlign: 'center', color: '#888' }}>Loading orders...</div>
+              ) : orders.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#888' }}>No orders found.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                  {orders.map(order => {
+                    const formatDate = (timestamp) => {
+                      if (!timestamp) return 'Unknown date';
+                      const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+                      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    };
+
+                    const getStatusColor = (status) => {
+                      switch (status) {
+                        case 'delivered': return '#22C55E';
+                        case 'in_delivery': return '#3B82F6';
+                        case 'paid': return '#F59E0B';
+                        default: return '#6B7280';
+                      }
+                    };
+
+                    const getStatusText = (status) => {
+                      switch (status) {
+                        case 'delivered': return '✅ Delivered';
+                        case 'in_delivery': return '🚚 In Delivery';
+                        case 'paid': return '💳 Paid';
+                        default: return '📦 Processing';
+                      }
+                    };
+
+                    const formatPrice = (price, currency) => {
+                      const currencySymbols = { GBP: "£", USD: "$", EUR: "€", NGN: "₦" };
+                      const symbol = currencySymbols[currency] || currency;
+                      const currenciesWithDecimals = ["GBP", "USD", "EUR"];
+                      return currenciesWithDecimals.includes(currency) 
+                        ? `${symbol}${Number(price).toFixed(2)}`
+                        : `${symbol}${price}`;
+                    };
+
+                    return (
+                      <div 
+                        key={order.id}
+                        style={{
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '8px',
+                          padding: '1rem',
+                          background: '#fff'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                          <div>
+                            <h4 style={{ margin: '0 0 0.25rem 0', color: '#111827', fontSize: '1rem' }}>
+                              Order #{order.orderId?.slice(-8) || 'Unknown'}
+                            </h4>
+                            <p style={{ margin: '0', color: '#6B7280', fontSize: '0.875rem' }}>
+                              {order.storeName || 'Unknown Store'}
+                            </p>
+                          </div>
+                          <span 
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              color: '#fff',
+                              background: getStatusColor(order.status)
+                            }}
+                          >
+                            {getStatusText(order.status)}
+                          </span>
+                        </div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            Items: {order.items?.length || 0}
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            Total: {formatPrice(order.totalAmount, order.currency)}
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            Ordered: {formatDate(order.timestamp)}
+                          </div>
+                          {order.deliveredAt && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Delivered: {formatDate(order.deliveredAt)}
+                            </div>
+                          )}
+                          {order.pickupCode && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                              Pickup Code: <span style={{ fontWeight: '600', color: '#007B7F' }}>{order.pickupCode}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {order.items && order.items.length > 0 && (
+                          <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: '0.75rem' }}>
+                            <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                              Items:
+                            </div>
+                            {order.items.slice(0, 3).map((item, index) => (
+                              <div key={index} style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                                • {item.name || item.itemName} x{item.quantity} - {formatPrice(item.price * item.quantity, order.currency)}
+                              </div>
+                            ))}
+                            {order.items.length > 3 && (
+                              <div style={{ fontSize: '0.875rem', color: '#6B7280', fontStyle: 'italic' }}>
+                                ... and {order.items.length - 3} more items
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
