@@ -75,7 +75,9 @@ const StripePaymentForm = ({
       console.log('🔄 Creating payment intent for amount:', paymentData.total);
       
       // Step 1: Create payment intent on backend
-      const apiUrl = process.env.REACT_APP_PRODUCTION_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.NODE_ENV === 'production' 
+        ? process.env.REACT_APP_PRODUCTION_API_URL 
+        : process.env.REACT_APP_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/create-payment-intent`, {
         method: 'POST',
         headers: {
