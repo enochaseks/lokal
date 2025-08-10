@@ -8,6 +8,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint for Render
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'Server is running!', 
+    timestamp: new Date().toISOString(),
+    service: 'Lokal Stripe Payment API'
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // Create payment intent endpoint
 app.post('/create-payment-intent', async (req, res) => {
   try {
@@ -31,4 +45,6 @@ app.post('/create-payment-intent', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});

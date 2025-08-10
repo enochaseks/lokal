@@ -16,7 +16,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["stripe", "payments", "api"],
-  "author": "Your Name",
+  "keywords": ["stripe", "payments", "api", "render"],
+  "author": "Enoch Aseks",
   "license": "MIT"
 }
