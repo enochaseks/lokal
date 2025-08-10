@@ -113,6 +113,10 @@ function StorePreviewPage() {
   const [cardErrors, setCardErrors] = useState({});
   const [showCardForm, setShowCardForm] = useState(false);
   
+  // Apple Pay states
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [applePayProcessing, setApplePayProcessing] = useState(false);
+  
   // Store fee settings
   const [storeFeeSettings, setStoreFeeSettings] = useState({
     deliveryEnabled: false,

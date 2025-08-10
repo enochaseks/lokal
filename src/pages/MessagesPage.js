@@ -80,6 +80,11 @@ function MessagesPage() {
   const [cardErrors, setCardErrors] = useState({});
   const [showCardForm, setShowCardForm] = useState(false);
   
+  // Apple Pay states
+  const [showApplePayModal, setShowApplePayModal] = useState(false);
+  const [applePayProcessing, setApplePayProcessing] = useState(false);
+  const [applePayStep, setApplePayStep] = useState('auth'); // 'auth', 'processing', 'success'
+  
   // Fee settings states (for sellers)
   const [showFeeSettings, setShowFeeSettings] = useState(false);
   const [feeSettings, setFeeSettings] = useState({
@@ -1045,6 +1050,47 @@ function MessagesPage() {
     return code;
   };
 
+  // Apple Pay authentication simulation
+  const processApplePay = async () => {
+    setShowApplePayModal(true);
+    setApplePayStep('auth');
+    setApplePayProcessing(false);
+  };
+
+  const authenticateApplePay = async () => {
+    setApplePayProcessing(true);
+    setApplePayStep('processing');
+    
+    try {
+      // Simulate biometric authentication delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Simulate successful authentication
+      setApplePayStep('success');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Close Apple Pay modal and proceed with payment
+      setShowApplePayModal(false);
+      setApplePayProcessing(false);
+      setApplePayStep('auth');
+      
+      // Now process the actual payment
+      await processPayment();
+      
+    } catch (error) {
+      console.error('Apple Pay authentication failed:', error);
+      alert('Apple Pay authentication failed. Please try again.');
+      setApplePayProcessing(false);
+      setApplePayStep('auth');
+    }
+  };
+
+  const cancelApplePay = () => {
+    setShowApplePayModal(false);
+    setApplePayProcessing(false);
+    setApplePayStep('auth');
+  };
+
   // Process payment
   const processPayment = async () => {
     if (!selectedPaymentMethod) {
@@ -1100,6 +1146,18 @@ function MessagesPage() {
           // Only log safe information
           cardLast4: paymentDetails.cardInfo.last4,
           cardType: paymentDetails.cardInfo.cardType,
+          pickupCode: pickupCode
+        });
+      } else if (selectedPaymentMethod === 'apple_pay') {
+        paymentDetails.applePayInfo = {
+          deviceAccount: '****1234', // Simulated device account number
+          transactionId: `ap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          // In real implementation, this would come from Apple Pay
+        };
+        
+        console.log('Processing Apple Pay payment:', {
+          ...paymentDetails,
+          applePayTransactionId: paymentDetails.applePayInfo.transactionId,
           pickupCode: pickupCode
         });
       } else {
@@ -1182,6 +1240,13 @@ function MessagesPage() {
             expiryYear: paymentDetails.cardInfo.expiryYear
           }
         }),
+        // Store Apple Pay info if Apple Pay payment
+        ...(selectedPaymentMethod === 'apple_pay' && {
+          applePayInfo: {
+            deviceAccount: paymentDetails.applePayInfo.deviceAccount,
+            transactionId: paymentDetails.applePayInfo.transactionId
+          }
+        }),
         timestamp: serverTimestamp(),
         createdAt: new Date().toISOString()
       };
@@ -1220,7 +1285,10 @@ function MessagesPage() {
         senderEmail: buyerEmail,
         receiverId: selectedConversation?.otherUserId,
         receiverName: selectedConversation?.otherUserName,
-        message: `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${selectedPaymentMethod === 'card' ? ` (****${paymentDetails.cardInfo.last4})` : ''}\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
+        message: `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
+          selectedPaymentMethod === 'card' ? ` (****${paymentDetails.cardInfo.last4})` : 
+          selectedPaymentMethod === 'apple_pay' ? ` (${paymentDetails.applePayInfo.deviceAccount})` : ''
+        }\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
         messageType: 'payment_completed',
         timestamp: serverTimestamp(),
         paymentData: {
@@ -4458,7 +4526,17 @@ Please proceed with payment to complete your order.`;
                     <div 
                       key={method.id}
                       className={`payment-method ${selectedPaymentMethod === method.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedPaymentMethod(method.id)}
+                      onClick={() => {
+                        setSelectedPaymentMethod(method.id);
+                        if (method.id === 'apple_pay') {
+                          // Show Apple Pay form immediately when selected
+                          setShowCardForm(false);
+                        } else if (method.id === 'card') {
+                          setShowCardForm(true);
+                        } else {
+                          setShowCardForm(false);
+                        }
+                      }}
                     >
                       <div className="method-icon">{method.icon}</div>
                       <div className="method-details">
@@ -4728,7 +4806,7 @@ Please proceed with payment to complete your order.`;
               </button>
               <button 
                 className="confirm-payment-btn"
-                onClick={processPayment}
+                onClick={selectedPaymentMethod === 'apple_pay' ? processApplePay : processPayment}
                 disabled={!selectedPaymentMethod || paymentProcessing}
               >
                 {paymentProcessing ? (
@@ -4736,10 +4814,72 @@ Please proceed with payment to complete your order.`;
                     <span className="payment-spinner"></span>
                     Processing...
                   </span>
+                ) : selectedPaymentMethod === 'apple_pay' ? (
+                  `Pay with Apple Pay ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}`
                 ) : (
                   `Pay ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}`
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apple Pay Authentication Modal */}
+      {showApplePayModal && (
+        <div className="apple-pay-modal-overlay">
+          <div className="apple-pay-modal">
+            <div className="apple-pay-header">
+              <h2>Apple Pay</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={cancelApplePay}
+                disabled={applePayProcessing}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="apple-pay-content">
+              {applePayStep === 'auth' && (
+                <div className="apple-pay-auth">
+                  <div className="apple-pay-icon">🍎</div>
+                  <h3>Pay with Apple Pay</h3>
+                  <div className="payment-summary">
+                    <div className="payment-amount">
+                      {getCurrencySymbol(paymentData.currency)}{formatPrice(paymentData.total, paymentData.currency)}
+                    </div>
+                    <div className="payment-merchant">Lokal Marketplace</div>
+                  </div>
+                  <button 
+                    className="apple-pay-auth-btn"
+                    onClick={authenticateApplePay}
+                    disabled={applePayProcessing}
+                  >
+                    <span className="touch-id-icon">👆</span>
+                    Pay with Touch ID
+                  </button>
+                  <div className="apple-pay-footer">
+                    <p>Use Touch ID to authorize this payment</p>
+                  </div>
+                </div>
+              )}
+
+              {applePayStep === 'processing' && (
+                <div className="apple-pay-processing">
+                  <div className="apple-pay-spinner"></div>
+                  <h3>Processing Payment...</h3>
+                  <p>Please wait while we process your Apple Pay payment</p>
+                </div>
+              )}
+
+              {applePayStep === 'success' && (
+                <div className="apple-pay-success">
+                  <div className="success-icon">✅</div>
+                  <h3>Payment Authorized</h3>
+                  <p>Your payment has been authorized with Apple Pay</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -7772,6 +7912,182 @@ Please proceed with payment to complete your order.`;
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+
+        /* Apple Pay Modal Styles */
+        .apple-pay-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10001;
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        .apple-pay-modal {
+          background: #000000;
+          border-radius: 20px;
+          width: 100%;
+          max-width: 400px;
+          color: #ffffff;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+          animation: modalSlideIn 0.3s ease-out;
+          overflow: hidden;
+        }
+
+        .apple-pay-header {
+          padding: 1.5rem 1.5rem 1rem 1.5rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid #333;
+        }
+
+        .apple-pay-header h2 {
+          margin: 0;
+          font-size: 1.2rem;
+          font-weight: 600;
+          color: #ffffff;
+        }
+
+        .apple-pay-content {
+          padding: 2rem 1.5rem;
+          text-align: center;
+        }
+
+        .apple-pay-auth {
+          text-align: center;
+        }
+
+        .apple-pay-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+          opacity: 0.9;
+        }
+
+        .apple-pay-auth h3 {
+          margin: 0 0 1.5rem 0;
+          font-size: 1.3rem;
+          font-weight: 500;
+          color: #ffffff;
+        }
+
+        .payment-summary {
+          background: #1a1a1a;
+          border-radius: 12px;
+          padding: 1.5rem;
+          margin-bottom: 2rem;
+          border: 1px solid #333;
+        }
+
+        .payment-amount {
+          font-size: 2rem;
+          font-weight: 700;
+          color: #ffffff;
+          margin-bottom: 0.5rem;
+        }
+
+        .payment-merchant {
+          color: #999;
+          font-size: 1rem;
+        }
+
+        .apple-pay-auth-btn {
+          background: linear-gradient(135deg, #007aff, #0051d2);
+          color: #ffffff;
+          border: none;
+          border-radius: 12px;
+          padding: 1rem 2rem;
+          font-size: 1.1rem;
+          font-weight: 600;
+          cursor: pointer;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          transition: all 0.2s ease;
+          margin-bottom: 1rem;
+        }
+
+        .apple-pay-auth-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #0056b3, #003d99);
+          transform: translateY(-1px);
+        }
+
+        .apple-pay-auth-btn:disabled {
+          background: #333;
+          color: #666;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .touch-id-icon {
+          font-size: 1.5rem;
+        }
+
+        .apple-pay-footer p {
+          color: #999;
+          font-size: 0.9rem;
+          margin: 0;
+        }
+
+        .apple-pay-processing {
+          text-align: center;
+        }
+
+        .apple-pay-spinner {
+          width: 40px;
+          height: 40px;
+          border: 3px solid #333;
+          border-top: 3px solid #007aff;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 1.5rem auto;
+        }
+
+        .apple-pay-processing h3 {
+          margin: 0 0 1rem 0;
+          font-size: 1.3rem;
+          font-weight: 500;
+          color: #ffffff;
+        }
+
+        .apple-pay-processing p {
+          color: #999;
+          margin: 0;
+        }
+
+        .apple-pay-success {
+          text-align: center;
+        }
+
+        .success-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+          color: #34c759;
+        }
+
+        .apple-pay-success h3 {
+          margin: 0 0 1rem 0;
+          font-size: 1.3rem;
+          font-weight: 500;
+          color: #ffffff;
+        }
+
+        .apple-pay-success p {
+          color: #999;
+          margin: 0;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
 
         /* Mobile Responsive for Payment Modal */
