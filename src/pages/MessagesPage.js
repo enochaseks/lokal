@@ -7,15 +7,21 @@ import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, ser
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
-import StripeApplePayButton from '../components/StripeApplePayButton';
+import StripeGooglePayButton from '../components/StripeGooglePayButton';
+import BankTransferForm from '../components/BankTransferForm';
 
 function MessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('messages');
   
-  // Stripe Promise
-  const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
+  // Stripe Promise with Link disabled to force native wallets
+  const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY, {
+    disableLink: true,
+    appearance: {
+      disableAnimations: false,
+    }
+  });
   
   const [search, setSearch] = useState('');
   const [isSeller, setIsSeller] = useState(false);
@@ -87,11 +93,6 @@ function MessagesPage() {
   });
   const [cardErrors, setCardErrors] = useState({});
   const [showCardForm, setShowCardForm] = useState(false);
-  
-  // Apple Pay states
-  const [showApplePayModal, setShowApplePayModal] = useState(false);
-  const [applePayProcessing, setApplePayProcessing] = useState(false);
-  const [applePayStep, setApplePayStep] = useState('auth'); // 'auth', 'processing', 'success'
   
   // Fee settings states (for sellers)
   const [showFeeSettings, setShowFeeSettings] = useState(false);
@@ -165,25 +166,19 @@ function MessagesPage() {
       case 'USD':
         return [
           ...baseMethods,
-          { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'Quick and secure payment' },
           { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'paypal', name: 'PayPal', icon: '💙', description: 'Pay with PayPal balance or card' },
           { id: 'venmo', name: 'Venmo', icon: '📱', description: 'Split with friends' }
         ];
       case 'GBP':
         return [
           ...baseMethods,
-          { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'Quick and secure payment' },
           { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'paypal', name: 'PayPal', icon: '💙', description: 'Pay with PayPal balance or card' },
           { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Direct bank transfer' }
         ];
       case 'EUR':
         return [
           ...baseMethods,
-          { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'Quick and secure payment' },
           { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'paypal', name: 'PayPal', icon: '💙', description: 'Pay with PayPal balance or card' },
           { id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'European bank transfer' },
           { id: 'klarna', name: 'Klarna', icon: '🛡️', description: 'Buy now, pay later' }
         ];
@@ -234,7 +229,6 @@ function MessagesPage() {
       case 'JPY':
         return [
           ...baseMethods,
-          { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'Quick and secure payment' },
           { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
           { id: 'konbini', name: 'Konbini', icon: '🏪', description: 'Pay at convenience store' },
           { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Japanese bank transfer' }
@@ -242,9 +236,7 @@ function MessagesPage() {
       default:
         return [
           ...baseMethods,
-          { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'Quick and secure payment' },
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'paypal', name: 'PayPal', icon: '💙', description: 'Pay with PayPal balance or card' }
+          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' }
         ];
     }
   };
@@ -1058,47 +1050,6 @@ function MessagesPage() {
     return code;
   };
 
-  // Apple Pay authentication simulation
-  const processApplePay = async () => {
-    setShowApplePayModal(true);
-    setApplePayStep('auth');
-    setApplePayProcessing(false);
-  };
-
-  const authenticateApplePay = async () => {
-    setApplePayProcessing(true);
-    setApplePayStep('processing');
-    
-    try {
-      // Simulate biometric authentication delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Simulate successful authentication
-      setApplePayStep('success');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Close Apple Pay modal and proceed with payment
-      setShowApplePayModal(false);
-      setApplePayProcessing(false);
-      setApplePayStep('auth');
-      
-      // Now process the actual payment
-      await processPayment();
-      
-    } catch (error) {
-      console.error('Apple Pay authentication failed:', error);
-      alert('Apple Pay authentication failed. Please try again.');
-      setApplePayProcessing(false);
-      setApplePayStep('auth');
-    }
-  };
-
-  const cancelApplePay = () => {
-    setShowApplePayModal(false);
-    setApplePayProcessing(false);
-    setApplePayStep('auth');
-  };
-
   // Process payment - PRODUCTION-READY WITH STRIPE ELEMENTS
   const processPayment = async (stripePaymentData = null) => {
     console.log('🔄 processPayment called with:', {
@@ -1135,11 +1086,11 @@ function MessagesPage() {
         paymentDetails.cardInfo = stripePaymentData.cardInfo;
         console.log('✅ Using Real Stripe Elements payment:', paymentIntentId);
 
-      } else if (selectedPaymentMethod === 'apple_pay' && stripePaymentData) {
-        // Real Apple Pay payment from Stripe
-        paymentIntentId = stripePaymentData.paymentIntentId || `backup_apple_${Date.now()}`;
-        paymentDetails.applePayInfo = stripePaymentData.applePayInfo;
-        console.log('✅ Using Real Apple Pay payment:', paymentIntentId);
+      } else if (selectedPaymentMethod === 'google_pay' && stripePaymentData) {
+        // Real Google Pay payment from Stripe
+        paymentIntentId = stripePaymentData.paymentIntentId || `backup_google_${Date.now()}`;
+        paymentDetails.googlePayInfo = stripePaymentData.googlePayInfo;
+        console.log('✅ Using Real Google Pay payment:', paymentIntentId);
 
       } else if (selectedPaymentMethod === 'card') {
         // Fallback for custom card form (validate first)
@@ -1159,15 +1110,18 @@ function MessagesPage() {
           expiryYear: '20' + cardForm.expiryDate.split('/')[1]
         };
 
-      } else if (selectedPaymentMethod === 'apple_pay') {
-        // Handle Apple Pay simulation
-        console.log('⚠️ Using Simulated Apple Pay');
-        paymentIntentId = `sim_apple_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      } else if (selectedPaymentMethod === 'bank_transfer' && stripePaymentData) {
+        // Bank Transfer payment (no platform fees)
+        paymentIntentId = stripePaymentData.paymentIntentId || `bank_transfer_${Date.now()}`;
+        paymentDetails.bankTransferInfo = stripePaymentData.bankTransferInfo;
+        console.log('✅ Using Bank Transfer payment (no fees):', paymentIntentId);
 
-        paymentDetails.applePayInfo = {
-          deviceAccount: 'Apple Pay Device ****1234',
-          transactionId: `apple_pay_${Date.now()}`
-        };
+      } else if (selectedPaymentMethod === 'google_pay') {
+        // Google Pay must use StripeGooglePayButton component
+        console.log('❌ Google Pay requires Stripe integration. Please use the Google Pay button.');
+        alert('Google Pay payment must be processed through the Google Pay button above.');
+        setPaymentProcessing(false);
+        return;
 
       } else {
         // For other payment methods, create a simulated payment
@@ -1176,29 +1130,43 @@ function MessagesPage() {
       }
 
       // Calculate seller's earnings (deduct platform fees if applicable)
-      const platformFeeRate = 0.03; // 3% platform fee
-      const platformFee = paymentData.total * platformFeeRate;
-      const sellerEarnings = paymentData.total - platformFee;
-
-      // Update seller's wallet
-      const sellerWalletRef = doc(db, 'wallets', sellerId);
-      const sellerWalletSnap = await getDoc(sellerWalletRef);
+      let platformFee = 0;
+      let sellerEarnings = paymentData.total;
       
-      if (sellerWalletSnap.exists()) {
-        const currentData = sellerWalletSnap.data();
-        await updateDoc(sellerWalletRef, {
-          balance: (currentData.balance || 0) + sellerEarnings,
-          totalEarnings: (currentData.totalEarnings || 0) + sellerEarnings,
-          lastUpdated: serverTimestamp()
-        });
+      // Only apply platform fees for card and Google Pay payments
+      if (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'google_pay') {
+        const platformFeeRate = 0.03; // 3% platform fee
+        platformFee = paymentData.total * platformFeeRate;
+        sellerEarnings = paymentData.total - platformFee;
+        console.log(`💰 Platform fee applied: ${platformFee} (${selectedPaymentMethod})`);
       } else {
-        await setDoc(sellerWalletRef, {
-          balance: sellerEarnings,
-          pendingBalance: 0,
-          totalEarnings: sellerEarnings,
-          createdAt: serverTimestamp(),
-          lastUpdated: serverTimestamp()
-        });
+        console.log(`💰 No platform fee for: ${selectedPaymentMethod}`);
+      }
+
+      // Update seller's wallet (only for immediate payment methods, not bank transfers)
+      if (selectedPaymentMethod !== 'bank_transfer') {
+        const sellerWalletRef = doc(db, 'wallets', sellerId);
+        const sellerWalletSnap = await getDoc(sellerWalletRef);
+        
+        if (sellerWalletSnap.exists()) {
+          const currentData = sellerWalletSnap.data();
+          await updateDoc(sellerWalletRef, {
+            balance: (currentData.balance || 0) + sellerEarnings,
+            totalEarnings: (currentData.totalEarnings || 0) + sellerEarnings,
+            lastUpdated: serverTimestamp()
+          });
+        } else {
+          await setDoc(sellerWalletRef, {
+            balance: sellerEarnings,
+            pendingBalance: 0,
+            totalEarnings: sellerEarnings,
+            createdAt: serverTimestamp(),
+            lastUpdated: serverTimestamp()
+          });
+        }
+        console.log(`💰 Seller wallet updated with ${sellerEarnings} ${paymentData.currency}`);
+      } else {
+        console.log(`⏳ Bank transfer pending verification - wallet will be updated after confirmation`);
       }
 
       // Create transaction record for seller
@@ -1215,7 +1183,7 @@ function MessagesPage() {
         paymentMethod: selectedPaymentMethod,
         stripePaymentIntentId: paymentIntentId || `fallback_${Date.now()}`, // Ensure never undefined
         description: `Sale: ${paymentData.items?.map(item => item.name).join(', ') || 'Order items'}`,
-        status: 'completed',
+        status: selectedPaymentMethod === 'bank_transfer' ? 'pending_verification' : 'completed',
         pickupCode: pickupCode,
         pickupStatus: 'pending',
         createdAt: serverTimestamp(),
@@ -1234,7 +1202,7 @@ function MessagesPage() {
         currency: paymentData.currency,
         paymentMethod: selectedPaymentMethod,
         stripePaymentIntentId: paymentIntentId || `fallback_${Date.now()}`, // Ensure never undefined
-        status: 'completed',
+        status: selectedPaymentMethod === 'bank_transfer' ? 'pending_verification' : 'completed',
         pickupCode: pickupCode,
         pickupStatus: 'pending',
         items: paymentData.items,
@@ -1247,8 +1215,11 @@ function MessagesPage() {
         ...(selectedPaymentMethod === 'card' && paymentDetails.cardInfo && {
           cardInfo: paymentDetails.cardInfo
         }),
-        ...(selectedPaymentMethod === 'apple_pay' && paymentDetails.applePayInfo && {
-          applePayInfo: paymentDetails.applePayInfo
+        ...(selectedPaymentMethod === 'google_pay' && paymentDetails.googlePayInfo && {
+          googlePayInfo: paymentDetails.googlePayInfo
+        }),
+        ...(selectedPaymentMethod === 'bank_transfer' && paymentDetails.bankTransferInfo && {
+          bankTransferInfo: paymentDetails.bankTransferInfo
         }),
         timestamp: serverTimestamp(),
         createdAt: new Date().toISOString()
@@ -1279,10 +1250,12 @@ function MessagesPage() {
         senderEmail: buyerEmail,
         receiverId: selectedConversation?.otherUserId,
         receiverName: selectedConversation?.otherUserName,
-        message: `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
-          selectedPaymentMethod === 'card' && paymentDetails.cardInfo ? ` (****${paymentDetails.cardInfo.last4})` : 
-          selectedPaymentMethod === 'apple_pay' && paymentDetails.applePayInfo ? ` (${paymentDetails.applePayInfo.deviceAccount})` : ''
-        }\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
+        message: selectedPaymentMethod === 'bank_transfer' 
+          ? `🏦 Bank Transfer Submitted!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: Bank Transfer\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.`
+          : `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
+              selectedPaymentMethod === 'card' && paymentDetails.cardInfo ? ` (****${paymentDetails.cardInfo.last4})` : 
+              selectedPaymentMethod === 'google_pay' && paymentDetails.googlePayInfo ? ` (${paymentDetails.googlePayInfo.deviceAccount})` : ''
+            }\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
         messageType: 'payment_completed',
         timestamp: serverTimestamp(),
         paymentData: {
@@ -1312,7 +1285,9 @@ function MessagesPage() {
         senderEmail: buyerEmail,
         receiverId: sellerId,
         receiverName: selectedConversation?.otherUserName,
-        message: `💰 Payment Received!\n\nYou've received a payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPickup Code: ${pickupCode}\nPayment Method: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\nTotal Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nYour Earnings: ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\nPlatform Fee: ${getCurrencySymbol(paymentData.currency)}${formatPrice(platformFee, paymentData.currency)}\n\nFunds have been added to your wallet. \n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and enter the pickup code when the customer arrives to collect their order.`,
+        message: selectedPaymentMethod === 'bank_transfer'
+          ? `🏦 Bank Transfer Submitted!\n\nA customer has submitted a bank transfer payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPickup Code: ${pickupCode}\nPayment Method: Bank Transfer\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\n⚠️ VERIFICATION REQUIRED:\nPlease check your bank account to confirm the transfer was received.\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) should be in your bank account.\nNo platform fees are deducted for bank transfers.\n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and enter the pickup code when the customer arrives to collect their order.`
+          : `💰 Payment Received!\n\nYou've received a payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPickup Code: ${pickupCode}\nPayment Method: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\nTotal Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nYour Earnings: ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\nPlatform Fee: ${getCurrencySymbol(paymentData.currency)}${formatPrice(platformFee, paymentData.currency)}\n\nFunds have been added to your wallet. \n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and enter the pickup code when the customer arrives to collect their order.`,
         messageType: 'payment_notification',
         timestamp: serverTimestamp(),
         isRead: false,
@@ -1377,7 +1352,9 @@ function MessagesPage() {
       }
 
       // Show success message with pickup code
-      alert(`Payment successful! 🎉\n\nYour pickup code is: ${pickupCode}\n\nPlease save this code and provide it to the seller when collecting your order.\n\nThe seller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.\n\nPayment ID: ${paymentIntentId || 'N/A'}`);
+      alert(selectedPaymentMethod === 'bank_transfer'
+        ? `Bank Transfer Submitted! 🏦\n\nYour pickup code is: ${pickupCode}\n\nPlease save this code and provide it to the seller when collecting your order.\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.\n\nPayment ID: ${paymentIntentId || 'N/A'}`
+        : `Payment successful! 🎉\n\nYour pickup code is: ${pickupCode}\n\nPlease save this code and provide it to the seller when collecting your order.\n\nThe seller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.\n\nPayment ID: ${paymentIntentId || 'N/A'}`);
       
     } catch (error) {
       console.error('Payment processing error:', error);
@@ -1398,14 +1375,25 @@ function MessagesPage() {
     setPaymentProcessing(false);
   };
 
-  // Handle successful Apple Pay payment
-  const handleApplePaySuccess = (applePayData) => {
-    processPayment(applePayData);
+  // Handle Google Pay success
+  const handleGooglePaySuccess = (googlePayData) => {
+    processPayment(googlePayData);
   };
 
-  // Handle Apple Pay error
-  const handleApplePayError = (errorMessage) => {
-    alert(`Apple Pay failed: ${errorMessage}\n\nPlease try again.`);
+  // Handle Google Pay error
+  const handleGooglePayError = (errorMessage) => {
+    alert(`Google Pay failed: ${errorMessage}\n\nPlease try again.`);
+    setPaymentProcessing(false);
+  };
+
+  // Handle Bank Transfer success
+  const handleBankTransferSuccess = (bankTransferData) => {
+    processPayment(bankTransferData);
+  };
+
+  // Handle Bank Transfer error
+  const handleBankTransferError = (errorMessage) => {
+    alert(`Bank Transfer failed: ${errorMessage}\n\nPlease try again.`);
     setPaymentProcessing(false);
   };
 
@@ -1806,9 +1794,10 @@ function MessagesPage() {
       return;
     }
 
-    // Create NEW unique conversation ID for each order request (not reusing existing conversation)
+    // Use existing conversation ID to keep orders in the same chat
+    const conversationId = selectedConversation.id || 
+      [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
     const timestamp = Date.now();
-    const conversationId = `order_${timestamp}_${currentUser.uid}_${selectedConversation.otherUserId}`;
 
     const orderDetails = cart.map(item => 
       `• ${item.name} x${item.quantity} - ${getCurrencySymbol(item.currency)}${formatPrice(item.price * item.quantity, item.currency)}`
@@ -4137,13 +4126,6 @@ Please proceed with payment to complete your order.`;
                                 >
                                   Send Order
                                 </button>
-                                <button
-                                  onClick={() => openPaymentModal()}
-                                  className="quick-pay-btn"
-                                  disabled={orderStatus !== 'shopping' || cart.length === 0}
-                                >
-                                  💳 Quick Pay
-                                </button>
                               </>
                             ) : (
                               <button
@@ -4576,8 +4558,18 @@ Please proceed with payment to complete your order.`;
               {/* Card Form - Show when card payment is selected */}
               {selectedPaymentMethod === 'card' && (
                 <div className="payment-section card-form-section">
-                  {/* Stripe Elements - Production Ready */}
-                  <Elements stripe={stripePromise}>
+                  {/* Stripe Elements - Production Ready (Link disabled for native card experience) */}
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{
+                      appearance: {
+                        theme: 'stripe',
+                        disableAnimations: false,
+                      },
+                      // Disable Link to force native card input
+                      disableLink: true
+                    }}
+                  >
                     <StripePaymentForm
                       paymentData={paymentData}
                       onPaymentSuccess={handleStripePaymentSuccess}
@@ -4591,47 +4583,36 @@ Please proceed with payment to complete your order.`;
                 </div>
               )}
 
-              {/* Apple Pay Form - Show when Apple Pay is selected */}
-              {selectedPaymentMethod === 'apple_pay' && (
-                <div className="payment-section apple-pay-section">
+              {/* Google Pay Form - Show when Google Pay is selected */}
+              {selectedPaymentMethod === 'google_pay' && (
+                <div className="payment-section google-pay-section">
                   <Elements stripe={stripePromise}>
-                    <StripeApplePayButton
+                    <StripeGooglePayButton
                       paymentData={paymentData}
-                      onPaymentSuccess={handleApplePaySuccess}
-                      onPaymentError={handleApplePayError}
+                      onPaymentSuccess={handleGooglePaySuccess}
+                      onPaymentError={handleGooglePayError}
                       processing={paymentProcessing}
                       setProcessing={setPaymentProcessing}
                       currentUser={currentUser}
                       selectedConversation={selectedConversation}
                     />
                   </Elements>
-                  
-                  {/* Fallback for devices that don't support Apple Pay */}
-                  <div style={{ marginTop: '16px' }}>
-                    <p style={{ fontSize: '14px', color: '#666', textAlign: 'center' }}>
-                      If Apple Pay is not working, you can:
-                    </p>
-                    <button
-                      onClick={() => {
-                        setShowApplePayModal(true);
-                        setApplePayStep('auth');
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        backgroundColor: '#007AFF',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                        marginTop: '8px'
-                      }}
-                      disabled={paymentProcessing}
-                    >
-                      Use Simulated Apple Pay (for testing)
-                    </button>
-                  </div>
+                </div>
+              )}
+
+              {/* Bank Transfer Form - Show when Bank Transfer is selected */}
+              {selectedPaymentMethod === 'bank_transfer' && (
+                <div className="payment-section bank-transfer-section">
+                  <BankTransferForm
+                    paymentData={paymentData}
+                    onPaymentSuccess={handleBankTransferSuccess}
+                    onPaymentError={handleBankTransferError}
+                    processing={paymentProcessing}
+                    setProcessing={setPaymentProcessing}
+                    currentUser={currentUser}
+                    selectedConversation={selectedConversation}
+                    storeInfo={storeInfo}
+                  />
                 </div>
               )}
 
@@ -4652,8 +4633,8 @@ Please proceed with payment to complete your order.`;
               >
                 Cancel
               </button>
-              {/* Only show Pay button for non-card/non-apple-pay payments or legacy forms */}
-              {((selectedPaymentMethod !== 'card' && selectedPaymentMethod !== 'apple_pay') || 
+              {/* Only show Pay button for non-card/non-google-pay/non-bank-transfer payments or legacy forms */}
+              {((selectedPaymentMethod !== 'card' && selectedPaymentMethod !== 'google_pay' && selectedPaymentMethod !== 'bank_transfer') || 
                 (selectedPaymentMethod === 'card' && showCardForm)) && (
                 <button 
                   className="confirm-payment-btn"
@@ -4664,76 +4645,29 @@ Please proceed with payment to complete your order.`;
                    `Pay ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total || 0, paymentData.currency)}`}
                 </button>
               )}
-              {/* Note for Stripe Elements */}
-              {((selectedPaymentMethod === 'card' && !showCardForm) || selectedPaymentMethod === 'apple_pay') && (
+              {/* Note for Stripe Elements and Bank Transfer */}
+              {((selectedPaymentMethod === 'card' && !showCardForm) || selectedPaymentMethod === 'google_pay') && (
                 <p style={{ 
                   fontSize: '14px', 
                   color: '#666', 
                   textAlign: 'center', 
                   margin: '8px 0 0 0' 
                 }}>
-                  Use the Pay button in the {selectedPaymentMethod === 'apple_pay' ? 'Apple Pay' : 'card'} form above
+                  Use the Pay button in the {
+                    selectedPaymentMethod === 'google_pay' ? 'Google Pay' : 'card'
+                  } form above
                 </p>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Apple Pay Authentication Modal */}
-      {showApplePayModal && (
-        <div className="apple-pay-modal-overlay">
-          <div className="apple-pay-modal">
-            <div className="apple-pay-header">
-              <h2>Apple Pay</h2>
-              <button 
-                className="close-modal-btn"
-                onClick={cancelApplePay}
-                disabled={applePayProcessing}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="apple-pay-content">
-              {applePayStep === 'auth' && (
-                <div className="apple-pay-auth">
-                  <div className="apple-pay-icon">🍎</div>
-                  <h3>Pay with Apple Pay</h3>
-                  <div className="payment-summary">
-                    <div className="payment-amount">
-                      {getCurrencySymbol(paymentData.currency)}{formatPrice(paymentData.total, paymentData.currency)}
-                    </div>
-                    <div className="payment-merchant">Lokal Marketplace</div>
-                  </div>
-                  <button 
-                    className="apple-pay-auth-btn"
-                    onClick={authenticateApplePay}
-                    disabled={applePayProcessing}
-                  >
-                    <span className="touch-id-icon">👆</span>
-                    Pay with Touch ID
-                  </button>
-                  <div className="apple-pay-footer">
-                    <p>Use Touch ID to authorize this payment</p>
-                  </div>
-                </div>
-              )}
-
-              {applePayStep === 'processing' && (
-                <div className="apple-pay-processing">
-                  <div className="apple-pay-spinner"></div>
-                  <h3>Processing Payment...</h3>
-                  <p>Please wait while we process your Apple Pay payment</p>
-                </div>
-              )}
-
-              {applePayStep === 'success' && (
-                <div className="apple-pay-success">
-                  <div className="success-icon">✅</div>
-                  <h3>Payment Authorized</h3>
-                  <p>Your payment has been authorized with Apple Pay</p>
-                </div>
+              {selectedPaymentMethod === 'bank_transfer' && (
+                <p style={{ 
+                  fontSize: '14px', 
+                  color: '#007B7F', 
+                  textAlign: 'center', 
+                  margin: '8px 0 0 0',
+                  fontWeight: '500'
+                }}>
+                  Complete the bank transfer using the instructions above
+                </p>
               )}
             </div>
           </div>
@@ -6796,31 +6730,6 @@ Please proceed with payment to complete your order.`;
           font-weight: 500;
         }
 
-        .quick-pay-btn {
-          flex: 1;
-          padding: 0.75rem;
-          background: #22c55e;
-          color: #ffffff;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: 600;
-          font-size: 0.9rem;
-          transition: all 0.2s ease;
-        }
-
-        .quick-pay-btn:hover:not(:disabled) {
-          background: #16a34a;
-          transform: translateY(-1px);
-        }
-
-        .quick-pay-btn:disabled {
-          background: #d1d5db;
-          color: #9ca3af;
-          cursor: not-allowed;
-          transform: none;
-        }
-
         /* Collapsible cart sections */
         .cart-section {
           border-bottom: 1px solid #e5e7eb;
@@ -7005,8 +6914,7 @@ Please proceed with payment to complete your order.`;
           }
 
           .clear-cart-btn,
-          .send-order-btn,
-          .quick-pay-btn {
+          .send-order-btn {
             flex: 1;
             width: 100%;
           }
@@ -7767,182 +7675,6 @@ Please proceed with payment to complete your order.`;
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
-        }
-
-        /* Apple Pay Modal Styles */
-        .apple-pay-modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.8);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10001;
-          animation: fadeIn 0.3s ease-out;
-        }
-
-        .apple-pay-modal {
-          background: #000000;
-          border-radius: 20px;
-          width: 100%;
-          max-width: 400px;
-          color: #ffffff;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-          animation: modalSlideIn 0.3s ease-out;
-          overflow: hidden;
-        }
-
-        .apple-pay-header {
-          padding: 1.5rem 1.5rem 1rem 1.5rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 1px solid #333;
-        }
-
-        .apple-pay-header h2 {
-          margin: 0;
-          font-size: 1.2rem;
-          font-weight: 600;
-          color: #ffffff;
-        }
-
-        .apple-pay-content {
-          padding: 2rem 1.5rem;
-          text-align: center;
-        }
-
-        .apple-pay-auth {
-          text-align: center;
-        }
-
-        .apple-pay-icon {
-          font-size: 4rem;
-          margin-bottom: 1rem;
-          opacity: 0.9;
-        }
-
-        .apple-pay-auth h3 {
-          margin: 0 0 1.5rem 0;
-          font-size: 1.3rem;
-          font-weight: 500;
-          color: #ffffff;
-        }
-
-        .payment-summary {
-          background: #1a1a1a;
-          border-radius: 12px;
-          padding: 1.5rem;
-          margin-bottom: 2rem;
-          border: 1px solid #333;
-        }
-
-        .payment-amount {
-          font-size: 2rem;
-          font-weight: 700;
-          color: #ffffff;
-          margin-bottom: 0.5rem;
-        }
-
-        .payment-merchant {
-          color: #999;
-          font-size: 1rem;
-        }
-
-        .apple-pay-auth-btn {
-          background: linear-gradient(135deg, #007aff, #0051d2);
-          color: #ffffff;
-          border: none;
-          border-radius: 12px;
-          padding: 1rem 2rem;
-          font-size: 1.1rem;
-          font-weight: 600;
-          cursor: pointer;
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          transition: all 0.2s ease;
-          margin-bottom: 1rem;
-        }
-
-        .apple-pay-auth-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #0056b3, #003d99);
-          transform: translateY(-1px);
-        }
-
-        .apple-pay-auth-btn:disabled {
-          background: #333;
-          color: #666;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .touch-id-icon {
-          font-size: 1.5rem;
-        }
-
-        .apple-pay-footer p {
-          color: #999;
-          font-size: 0.9rem;
-          margin: 0;
-        }
-
-        .apple-pay-processing {
-          text-align: center;
-        }
-
-        .apple-pay-spinner {
-          width: 40px;
-          height: 40px;
-          border: 3px solid #333;
-          border-top: 3px solid #007aff;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 1.5rem auto;
-        }
-
-        .apple-pay-processing h3 {
-          margin: 0 0 1rem 0;
-          font-size: 1.3rem;
-          font-weight: 500;
-          color: #ffffff;
-        }
-
-        .apple-pay-processing p {
-          color: #999;
-          margin: 0;
-        }
-
-        .apple-pay-success {
-          text-align: center;
-        }
-
-        .success-icon {
-          font-size: 4rem;
-          margin-bottom: 1rem;
-          color: #34c759;
-        }
-
-        .apple-pay-success h3 {
-          margin: 0 0 1rem 0;
-          font-size: 1.3rem;
-          font-weight: 500;
-          color: #ffffff;
-        }
-
-        .apple-pay-success p {
-          color: #999;
-          margin: 0;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
         }
 
         /* Mobile Responsive for Payment Modal */

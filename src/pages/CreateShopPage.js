@@ -169,12 +169,17 @@ function CreateShopPage() {
         }
       }
       // --- Save all fields, including those for settings ---
-      // Mask sensitive payment info
+      // Store both masked (for UI display) and unmasked (for bank transfers) payment info
       let maskedPaymentInfo = { ...paymentInfo };
+      let unmaskedPaymentInfo = { ...paymentInfo }; // Keep original for bank transfers
+      
       if (maskedPaymentInfo.sortCode) maskedPaymentInfo.sortCode = maskValue(maskedPaymentInfo.sortCode);
       if (maskedPaymentInfo.accountNumber) maskedPaymentInfo.accountNumber = maskValue(maskedPaymentInfo.accountNumber);
       if (maskedPaymentInfo.expiry) maskedPaymentInfo.expiry = maskValue(maskedPaymentInfo.expiry);
-      if (cardType) maskedPaymentInfo.cardType = cardType;
+      if (cardType) {
+        maskedPaymentInfo.cardType = cardType;
+        unmaskedPaymentInfo.cardType = cardType;
+      }
       const storeProfile = {
         ownerId: user.uid,
         storeName: sellerData.storeName || sellerData.marketName || sellerData.onlineName || '',
@@ -193,7 +198,8 @@ function CreateShopPage() {
         backgroundImg: backgroundUrl,
         hasOwnDelivery: deliveryType === 'Delivery' ? hasOwnDelivery : '',
         paymentType,
-        paymentInfo: maskedPaymentInfo,
+        paymentInfo: maskedPaymentInfo, // Masked version for UI display
+        bankTransferInfo: unmaskedPaymentInfo, // Unmasked version for bank transfers
         cardType,
         createdAt: new Date().toISOString(),
         category: sellerData.category || '',

@@ -5,6 +5,13 @@ import { db } from '../firebase';
 import { doc, getDoc, updateDoc, collection, addDoc, onSnapshot, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
+// Helper function to mask sensitive values
+function maskValue(value) {
+  if (!value) return '';
+  if (value.length <= 4) return '****';
+  return '*'.repeat(value.length - 4) + value.slice(-4);
+}
+
 function SettingsPage() {
   const [user, setUser] = useState(null);
   const [userType, setUserType] = useState('');
@@ -165,10 +172,25 @@ function SettingsPage() {
         info = { country: 'Other', details: otherPayment, cardType };
       }
     }
+
+    // Store both masked (for UI display) and unmasked (for bank transfers) versions
+    let maskedInfo = { ...info };
+    let unmaskedInfo = { ...info }; // Keep original for bank transfers
+    
+    if (userType === 'seller' && paymentType === 'Own Card/Bank Details') {
+      if (maskedInfo.sortCode) maskedInfo.sortCode = maskValue(maskedInfo.sortCode);
+      if (maskedInfo.accountNumber) maskedInfo.accountNumber = maskValue(maskedInfo.accountNumber);
+      if (maskedInfo.expiry) maskedInfo.expiry = maskValue(maskedInfo.expiry);
+    }
+
     const ref = userType === 'seller' ? doc(db, 'stores', user.uid) : doc(db, 'users', user.uid);
-    await updateDoc(ref, userType === 'seller' ? { paymentType, paymentInfo: info } : { paymentType });
+    await updateDoc(ref, userType === 'seller' ? { 
+      paymentType, 
+      paymentInfo: maskedInfo,  // Masked version for UI display
+      bankTransferInfo: unmaskedInfo  // Unmasked version for bank transfers
+    } : { paymentType });
     setEditPayment(false);
-    setPaymentInfo(info);
+    setPaymentInfo(maskedInfo);
     setView('main');
   };
 
@@ -318,10 +340,25 @@ function SettingsPage() {
         info = { country: 'Other', details: otherPayment, cardType };
       }
     }
+
+    // Store both masked (for UI display) and unmasked (for bank transfers) versions
+    let maskedInfo = { ...info };
+    let unmaskedInfo = { ...info }; // Keep original for bank transfers
+    
+    if (userType === 'seller' && paymentType === 'Own Card/Bank Details') {
+      if (maskedInfo.sortCode) maskedInfo.sortCode = maskValue(maskedInfo.sortCode);
+      if (maskedInfo.accountNumber) maskedInfo.accountNumber = maskValue(maskedInfo.accountNumber);
+      if (maskedInfo.expiry) maskedInfo.expiry = maskValue(maskedInfo.expiry);
+    }
+
     const ref = userType === 'seller' ? doc(db, 'stores', user.uid) : doc(db, 'users', user.uid);
-    await updateDoc(ref, userType === 'seller' ? { paymentType, paymentInfo: info } : { paymentType });
+    await updateDoc(ref, userType === 'seller' ? { 
+      paymentType, 
+      paymentInfo: maskedInfo,  // Masked version for UI display
+      bankTransferInfo: unmaskedInfo  // Unmasked version for bank transfers
+    } : { paymentType });
     setEditPayment(false);
-    setPaymentInfo(info);
+    setPaymentInfo(maskedInfo);
     setShowPaymentModal(false);
   };
 

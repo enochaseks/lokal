@@ -97,13 +97,16 @@ const StripePaymentForm = ({
       const { clientSecret, paymentIntentId } = await response.json();
       console.log('✅ Payment intent created:', paymentIntentId);
 
-      // Step 2: Confirm payment with Stripe
-      console.log('🔄 Confirming payment with Stripe Elements...');
+      // Step 2: Confirm payment with Stripe (disable Link for native card experience)
+      console.log('🔄 Confirming payment with Stripe Elements (native card)...');
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
           card: cardElement,
           billing_details: billingDetails,
         },
+      }, {
+        // Force native card processing, avoid Link redirect
+        handleActions: false
       });
 
       if (result.error) {
@@ -175,6 +178,8 @@ const StripePaymentForm = ({
       },
     },
     hidePostalCode: true,
+    // Disable Link to force native card input experience
+    disableLink: true,
   };
 
   return (
@@ -299,6 +304,21 @@ const StripePaymentForm = ({
             {cardError.message}
           </div>
         )}
+        
+        {/* Security Notice */}
+        <div style={{
+          marginTop: '0.75rem',
+          padding: '0.75rem',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '6px',
+          fontSize: '12px',
+          color: '#666',
+          textAlign: 'center',
+        }}>
+          🔒 Native secure card processing - Your card details are encrypted and never stored
+          <br />
+          Powered by Stripe with industry-standard security
+        </div>
       </div>
 
       {/* Pay Button */}
