@@ -91,7 +91,8 @@ function StorePreviewPage() {
     serviceFeeType: 'percentage',
     serviceFeeRate: 2.5,
     serviceFeeAmount: 0,
-    serviceFeeMax: 0
+    serviceFeeMax: 0,
+    refundsEnabled: true
   });
 
   // Only declare daysOfWeek ONCE at the top of the file
@@ -171,7 +172,10 @@ function StorePreviewPage() {
         
         if (storeData.feeSettings) {
           console.log('Fee settings found:', storeData.feeSettings);
-          setStoreFeeSettings(storeData.feeSettings);
+          setStoreFeeSettings({
+            ...storeData.feeSettings,
+            refundsEnabled: storeData.feeSettings.refundsEnabled !== false // default to true
+          });
         } else {
           console.log('No fee settings found in store data, using defaults');
           // Set default values if no settings found
@@ -183,7 +187,8 @@ function StorePreviewPage() {
             serviceFeeType: 'percentage',
             serviceFeeRate: 2.5,
             serviceFeeAmount: 0,
-            serviceFeeMax: 0
+            serviceFeeMax: 0,
+            refundsEnabled: true
           });
         }
       } else {
@@ -197,7 +202,8 @@ function StorePreviewPage() {
           serviceFeeType: 'percentage',
           serviceFeeRate: 2.5,
           serviceFeeAmount: 0,
-          serviceFeeMax: 0
+          serviceFeeMax: 0,
+          refundsEnabled: true
         });
       }
     }, (error) => {
@@ -211,7 +217,8 @@ function StorePreviewPage() {
         serviceFeeType: 'percentage',
         serviceFeeRate: 2.5,
         serviceFeeAmount: 0,
-        serviceFeeMax: 0
+        serviceFeeMax: 0,
+        refundsEnabled: true
       });
     });
 
@@ -565,6 +572,16 @@ function StorePreviewPage() {
                       : `${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeAmount, store.currency || 'GBP')}`}
                   </div>
                 )}
+              </div>
+            )}
+            
+            {/* Display refunds policy notification */}
+            {!storeFeeSettings.refundsEnabled && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 6, fontSize: '0.9rem', border: '1px solid #f87171' }}>
+                <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: 4 }}>❌ Refund Policy:</div>
+                <div style={{ color: '#7f1d1d' }}>
+                  This store does not offer refunds. Please review your order carefully before purchasing.
+                </div>
               </div>
             )}
             

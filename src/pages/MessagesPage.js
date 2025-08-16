@@ -98,6 +98,31 @@ function MessagesPage() {
   
   // Fee settings states (for sellers)
   const [showFeeSettings, setShowFeeSettings] = useState(false);
+  
+  // Withdrawal states
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawalProcessing, setWithdrawalProcessing] = useState(false);
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amount: '',
+    accountNumber: '',
+    sortCode: '', // UK
+    routingNumber: '', // US
+    swiftCode: '', // International
+    accountHolderName: '',
+    bankName: '',
+    cardNumber: '', // For card withdrawals
+    expiryDate: '',
+    country: 'GB',
+    withdrawalMethod: 'bank_account' // 'bank_account' or 'card'
+  });
+  const [withdrawalHistory, setWithdrawalHistory] = useState([]);
+  const [withdrawalEligibility, setWithdrawalEligibility] = useState({
+    eligible: false,
+    daysOnPlatform: 0,
+    monthlyWithdrawals: 0,
+    lastWithdrawal: null,
+    accountCreated: null
+  });
   const [feeSettings, setFeeSettings] = useState({
     deliveryEnabled: false,
     deliveryFee: 0,
@@ -106,7 +131,8 @@ function MessagesPage() {
     serviceFeeType: 'percentage', // 'percentage' or 'fixed'
     serviceFeeRate: 2.5, // percentage
     serviceFeeAmount: 0, // fixed amount
-    serviceFeeMax: 0 // max cap for percentage
+    serviceFeeMax: 0, // max cap for percentage
+    refundsEnabled: true // allow refunds by default
   });
 
   // Delivery states
@@ -146,6 +172,9 @@ function MessagesPage() {
   const [pendingComplaintRefund, setPendingComplaintRefund] = useState(null);
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
   
+  // Store refunds policy state
+  const [storeRefundsEnabled, setStoreRefundsEnabled] = useState(true);
+  
   // Store operating hours (you can make this configurable per store)
   const storeHours = {
     monday: { open: '09:00', close: '18:00' },
@@ -169,6 +198,76 @@ function MessagesPage() {
     GBP: "£", USD: "$", EUR: "€", NGN: "₦", CAD: "C$", AUD: "A$",
     ZAR: "R", GHS: "₵", KES: "KSh", XOF: "CFA", XAF: "CFA",
     INR: "₹", JPY: "¥", CNY: "¥"
+  };
+
+  // Country-specific withdrawal configurations
+  const withdrawalConfigs = {
+    GB: { // United Kingdom
+      currency: 'GBP',
+      minAmount: 5,
+      maxAmount: 550,
+      taxRate: 0.20, // 20% income tax (handled by Stripe)
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'sortCode', 'accountHolderName'],
+      accountNumberLabel: 'Account Number',
+      sortCodeLabel: 'Sort Code',
+      bankNameRequired: true
+    },
+    US: { // United States
+      currency: 'USD',
+      minAmount: 5,
+      maxAmount: 600,
+      taxRate: 0.22, // 22% federal tax (handled by Stripe)
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'routingNumber', 'accountHolderName'],
+      accountNumberLabel: 'Account Number',
+      sortCodeLabel: 'Routing Number',
+      bankNameRequired: true
+    },
+    NG: { // Nigeria
+      currency: 'NGN',
+      minAmount: 2000,
+      maxAmount: 230000,
+      taxRate: 0.05, // 5% withholding tax
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'bankName', 'accountHolderName'],
+      accountNumberLabel: 'Account Number',
+      sortCodeLabel: 'Bank Code',
+      bankNameRequired: true
+    },
+    DE: { // Germany
+      currency: 'EUR',
+      minAmount: 5,
+      maxAmount: 500,
+      taxRate: 0.25, // 25% income tax (handled by Stripe)
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'swiftCode', 'accountHolderName'],
+      accountNumberLabel: 'IBAN',
+      sortCodeLabel: 'SWIFT/BIC Code',
+      bankNameRequired: true
+    },
+    IN: { // India
+      currency: 'INR',
+      minAmount: 400,
+      maxAmount: 42000,
+      taxRate: 0.30, // 30% income tax
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'swiftCode', 'accountHolderName'],
+      accountNumberLabel: 'Account Number',
+      sortCodeLabel: 'IFSC Code',
+      bankNameRequired: true
+    },
+    CA: { // Canada
+      currency: 'CAD',
+      minAmount: 7,
+      maxAmount: 750,
+      taxRate: 0.26, // 26% income tax (handled by Stripe)
+      monthlyLimit: 3,
+      requiredFields: ['accountNumber', 'routingNumber', 'accountHolderName'],
+      accountNumberLabel: 'Account Number',
+      sortCodeLabel: 'Transit Number',
+      bankNameRequired: true
+    }
   };
 
   const getCurrencySymbol = (code) => currencySymbols[code] || code;
@@ -281,6 +380,204 @@ function MessagesPage() {
       console.error('❌ Refund processing error:', error);
       return { success: false, error: error.message };
     }
+  };
+
+  // Check withdrawal eligibility for sellers
+  const checkWithdrawalEligibility = async () => {
+    if (!currentUser || !isSeller) {
+      return { eligible: false, reason: 'Not a seller account' };
+    }
+
+    try {
+      // Get user creation date
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      const userData = userDoc.data();
+      const accountCreated = userData?.createdAt?.toDate() || new Date();
+      
+      // Calculate days on platform
+      const now = new Date();
+      const daysOnPlatform = Math.floor((now - accountCreated) / (1000 * 60 * 60 * 24));
+      
+      // Check if 14 days have passed
+      const minimumDays = 14;
+      const eligible = daysOnPlatform >= minimumDays;
+      
+      // Get withdrawal history for this month
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      
+      const withdrawalsRef = collection(db, 'withdrawals');
+      const monthlyQuery = query(
+        withdrawalsRef,
+        where('sellerId', '==', currentUser.uid),
+        where('status', 'in', ['completed', 'processing']),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const monthlySnapshot = await getDocs(monthlyQuery);
+      const monthlyWithdrawals = monthlySnapshot.docs.filter(doc => {
+        const withdrawalDate = doc.data().createdAt.toDate();
+        return withdrawalDate.getMonth() === currentMonth && 
+               withdrawalDate.getFullYear() === currentYear;
+      }).length;
+
+      // Get last withdrawal
+      const lastWithdrawalDoc = monthlySnapshot.docs[0];
+      const lastWithdrawal = lastWithdrawalDoc ? lastWithdrawalDoc.data().createdAt.toDate() : null;
+
+      const eligibilityData = {
+        eligible,
+        daysOnPlatform,
+        monthlyWithdrawals,
+        lastWithdrawal,
+        accountCreated,
+        reason: !eligible ? `Must wait ${minimumDays - daysOnPlatform} more days` : null
+      };
+
+      setWithdrawalEligibility(eligibilityData);
+      return eligibilityData;
+    } catch (error) {
+      console.error('Error checking withdrawal eligibility:', error);
+      return { eligible: false, reason: 'Error checking eligibility' };
+    }
+  };
+
+  // Process withdrawal request
+  const processWithdrawal = async () => {
+    if (!withdrawalForm.amount || !withdrawalForm.accountHolderName) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    const userCountry = withdrawalForm.country;
+    const config = withdrawalConfigs[userCountry] || withdrawalConfigs.GB;
+    const amount = parseFloat(withdrawalForm.amount);
+
+    // Validate amount
+    if (amount < config.minAmount || amount > config.maxAmount) {
+      alert(`Withdrawal amount must be between ${getCurrencySymbol(config.currency)}${config.minAmount} and ${getCurrencySymbol(config.currency)}${config.maxAmount}`);
+      return;
+    }
+
+    // Check monthly limit
+    if (withdrawalEligibility.monthlyWithdrawals >= config.monthlyLimit) {
+      alert(`You have reached the monthly withdrawal limit of ${config.monthlyLimit} withdrawals`);
+      return;
+    }
+
+    // Check wallet balance
+    if (walletData.balance < amount) {
+      alert(`Insufficient balance. Available: ${getCurrencySymbol(config.currency)}${walletData.balance.toFixed(2)}`);
+      return;
+    }
+
+    setWithdrawalProcessing(true);
+
+    try {
+      // Call backend to process withdrawal
+      const withdrawalPayload = {
+        amount: amount,
+        currency: config.currency,
+        country: userCountry,
+        accountDetails: {
+          accountNumber: withdrawalForm.accountNumber,
+          sortCode: withdrawalForm.sortCode,
+          routingNumber: withdrawalForm.routingNumber,
+          swiftCode: withdrawalForm.swiftCode,
+          accountHolderName: withdrawalForm.accountHolderName,
+          bankName: withdrawalForm.bankName
+        },
+        sellerId: currentUser.uid,
+        sellerEmail: currentUser.email,
+        withdrawalMethod: withdrawalForm.withdrawalMethod
+      };
+
+      console.log('💸 Processing withdrawal:', withdrawalPayload);
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-withdrawal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(withdrawalPayload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Update local wallet balance
+        const newBalance = walletData.balance - amount;
+        setWalletData(prev => ({
+          ...prev,
+          balance: newBalance
+        }));
+
+        // Update wallet in Firestore
+        const walletRef = doc(db, 'wallets', currentUser.uid);
+        await updateDoc(walletRef, {
+          balance: newBalance,
+          lastUpdated: serverTimestamp()
+        });
+
+        // Create withdrawal record
+        await addDoc(collection(db, 'withdrawals'), {
+          sellerId: currentUser.uid,
+          sellerEmail: currentUser.email,
+          amount: amount,
+          currency: config.currency,
+          country: userCountry,
+          accountDetails: withdrawalPayload.accountDetails,
+          withdrawalMethod: withdrawalForm.withdrawalMethod,
+          status: 'processing',
+          stripeTransferId: result.transferId,
+          createdAt: serverTimestamp(),
+          estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) // 2 days
+        });
+
+        // Create transaction record
+        await addDoc(collection(db, 'transactions'), {
+          sellerId: currentUser.uid,
+          type: 'withdrawal',
+          amount: -amount,
+          currency: config.currency,
+          paymentMethod: withdrawalForm.withdrawalMethod,
+          stripeTransferId: result.transferId,
+          description: `Withdrawal to ${withdrawalForm.withdrawalMethod === 'card' ? 'card' : 'bank account'}`,
+          status: 'processing',
+          createdAt: serverTimestamp(),
+          timestamp: serverTimestamp()
+        });
+
+        alert(`✅ Withdrawal of ${getCurrencySymbol(config.currency)}${amount.toFixed(2)} has been processed!\n\nTransfer ID: ${result.transferId}\n\nFunds will arrive in your account within 1-2 business days.`);
+        
+        setShowWithdrawModal(false);
+        setWithdrawalForm({
+          amount: '',
+          accountNumber: '',
+          sortCode: '',
+          routingNumber: '',
+          swiftCode: '',
+          accountHolderName: '',
+          bankName: '',
+          cardNumber: '',
+          expiryDate: '',
+          country: 'GB',
+          withdrawalMethod: 'bank_account'
+        });
+
+        // Refresh eligibility data
+        checkWithdrawalEligibility();
+
+      } else {
+        throw new Error(result.error || 'Withdrawal processing failed');
+      }
+
+    } catch (error) {
+      console.error('❌ Withdrawal error:', error);
+      alert(`❌ Withdrawal failed: ${error.message}\n\nPlease check your details and try again.`);
+    }
+
+    setWithdrawalProcessing(false);
   };
 
   // Update seller wallet when refund is processed
@@ -642,6 +939,12 @@ function MessagesPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (isSeller && currentUser) {
+      checkWithdrawalEligibility();
+    }
+  }, [isSeller, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Handle navigation state (for wallet tab redirect)
   useEffect(() => {
     if (location.state?.activeTab) {
@@ -772,7 +1075,7 @@ function MessagesPage() {
     return () => unsubscribe();
   }, [selectedConversation, currentUser]);
 
-  // Fetch store info when conversation is selected (for displaying correct email)
+  // Fetch store info when conversation is selected (for displaying correct email and refunds policy)
   useEffect(() => {
     if (!selectedConversation || isSeller) return;
 
@@ -780,10 +1083,19 @@ function MessagesPage() {
       try {
         const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
         if (storeDoc.exists()) {
-          setStoreInfo(storeDoc.data());
+          const storeData = storeDoc.data();
+          setStoreInfo(storeData);
+          
+          // Check refunds policy
+          const feeSettings = storeData.feeSettings || {};
+          setStoreRefundsEnabled(feeSettings.refundsEnabled !== false); // default to true
+        } else {
+          // If store doesn't exist, default to allowing refunds
+          setStoreRefundsEnabled(true);
         }
       } catch (error) {
         console.error('Error fetching store info:', error);
+        setStoreRefundsEnabled(true); // default to allowing refunds on error
       }
     };
 
@@ -1865,6 +2177,22 @@ function MessagesPage() {
       }
     } catch (error) {
       console.error('Error loading fee settings:', error);
+    }
+  };
+
+  // Check if refunds are enabled for a store
+  const checkStoreRefundsPolicy = async (storeId) => {
+    try {
+      const storeDoc = await getDoc(doc(db, 'stores', storeId));
+      if (storeDoc.exists()) {
+        const storeData = storeDoc.data();
+        const feeSettings = storeData.feeSettings || {};
+        return feeSettings.refundsEnabled !== false; // default to true if not set
+      }
+      return true; // default to allowing refunds
+    } catch (error) {
+      console.error('Error checking store refunds policy:', error);
+      return true; // default to allowing refunds on error
     }
   };
 
@@ -3885,6 +4213,15 @@ Customer is done adding items. Please prepare and bag these items.`;
       return;
     }
 
+    // Check if store allows refunds
+    const storeId = selectedConversation.otherUserId; // seller's ID
+    const refundsAllowed = await checkStoreRefundsPolicy(storeId);
+    
+    if (!refundsAllowed) {
+      alert('❌ Refunds Not Available\n\nThis store does not offer refunds. Please contact the seller directly if you have concerns about your order.');
+      return;
+    }
+
     // Open refund modal with order data
     setPendingRefundOrder(orderData);
     setRefundReason('');
@@ -5007,13 +5344,20 @@ Please proceed with payment to complete your order.`;
                                     >
                                       📋 Reschedule Delivery
                                     </button>
-                                    <button 
-                                      className="action-btn refund-btn"
-                                      onClick={() => requestRefund(message.paymentData)}
-                                      disabled={isRefundRequested(message.paymentData?.orderId)}
-                                    >
-                                      {isRefundRequested(message.paymentData?.orderId) ? '� Refund Requested' : '� Cancel & Request Refund'}
-                                    </button>
+                                    {storeRefundsEnabled && (
+                                      <button 
+                                        className="action-btn refund-btn"
+                                        onClick={() => requestRefund(message.paymentData)}
+                                        disabled={isRefundRequested(message.paymentData?.orderId)}
+                                      >
+                                        {isRefundRequested(message.paymentData?.orderId) ? '❌ Refund Requested' : '❌ Cancel & Request Refund'}
+                                      </button>
+                                    )}
+                                    {!storeRefundsEnabled && (
+                                      <div className="refund-disabled-notice">
+                                        ℹ️ This store does not offer refunds
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -5073,13 +5417,20 @@ Please proceed with payment to complete your order.`;
                                         >
                                           ❌ Cancel & Reschedule
                                         </button>
-                                        <button 
-                                          className="action-btn refund-btn"
-                                          onClick={() => requestRefund(message.orderData)}
-                                          disabled={isRefundRequested(message.orderData?.orderId)}
-                                        >
-                                          {isRefundRequested(message.orderData?.orderId) ? '� Refund Requested' : '� Cancel & Request Refund'}
-                                        </button>
+                                        {storeRefundsEnabled && (
+                                          <button 
+                                            className="action-btn refund-btn"
+                                            onClick={() => requestRefund(message.orderData)}
+                                            disabled={isRefundRequested(message.orderData?.orderId)}
+                                          >
+                                            {isRefundRequested(message.orderData?.orderId) ? '❌ Refund Requested' : '❌ Cancel & Request Refund'}
+                                          </button>
+                                        )}
+                                        {!storeRefundsEnabled && (
+                                          <div className="refund-disabled-notice">
+                                            ℹ️ This store does not offer refunds
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
@@ -5803,12 +6154,25 @@ Please proceed with payment to complete your order.`;
                 <div className="wallet-overview">
                   <div className="wallet-header">
                     <h3 className="section-title">Wallet Overview</h3>
-                    <button
-                      onClick={() => setShowFeeSettings(true)}
-                      className="fee-settings-btn"
-                    >
-                      ⚙️ Fee Settings
-                    </button>
+                    <div className="wallet-actions">
+                      <button
+                        onClick={() => {
+                          checkWithdrawalEligibility();
+                          setShowWithdrawModal(true);
+                        }}
+                        className="withdraw-btn"
+                        disabled={!withdrawalEligibility.eligible || walletData.balance < 5}
+                        title={!withdrawalEligibility.eligible ? withdrawalEligibility.reason : walletData.balance < 5 ? 'Minimum withdrawal amount is £5' : 'Withdraw your earnings'}
+                      >
+                        💸 Withdraw
+                      </button>
+                      <button
+                        onClick={() => setShowFeeSettings(true)}
+                        className="fee-settings-btn"
+                      >
+                        ⚙️ Fee Settings
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="balance-cards">
@@ -6217,6 +6581,238 @@ Please proceed with payment to complete your order.`;
         </div>
       )}
 
+      {/* Withdrawal Modal */}
+      {showWithdrawModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowWithdrawModal(false)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-header">
+              <h2>💸 Withdraw Earnings</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowWithdrawModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-content">
+              {/* Withdrawal Eligibility Info */}
+              <div style={{ 
+                background: withdrawalEligibility.eligible ? '#dcfce7' : '#fef3c7', 
+                padding: '1rem', 
+                borderRadius: '8px', 
+                marginBottom: '1rem',
+                border: `1px solid ${withdrawalEligibility.eligible ? '#16a34a' : '#d97706'}`
+              }}>
+                <h3 style={{ margin: '0 0 0.5rem 0', color: withdrawalEligibility.eligible ? '#15803d' : '#92400e' }}>
+                  {withdrawalEligibility.eligible ? '✅ Withdrawal Available' : '⏳ Withdrawal Pending'}
+                </h3>
+                <p style={{ margin: '0', fontSize: '0.9rem' }}>
+                  {withdrawalEligibility.eligible ? 
+                    `You can withdraw up to ${getCurrencySymbol(withdrawalConfigs[withdrawalForm.country]?.currency || 'GBP')}${walletData.balance.toFixed(2)}` :
+                    withdrawalEligibility.reason || 'Checking eligibility...'
+                  }
+                </p>
+                <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8 }}>
+                  Days on platform: {withdrawalEligibility.daysOnPlatform} | Monthly withdrawals: {withdrawalEligibility.monthlyWithdrawals}/3
+                </div>
+              </div>
+
+              {withdrawalEligibility.eligible && (
+                <div className="withdrawal-form">
+                  {/* Country Selection */}
+                  <div className="form-group">
+                    <label>Country</label>
+                    <select 
+                      value={withdrawalForm.country}
+                      onChange={(e) => setWithdrawalForm(prev => ({ ...prev, country: e.target.value }))}
+                      className="form-input"
+                    >
+                      <option value="GB">🇬🇧 United Kingdom</option>
+                      <option value="US">🇺🇸 United States</option>
+                      <option value="NG">🇳🇬 Nigeria</option>
+                      <option value="DE">🇩🇪 Germany</option>
+                      <option value="IN">🇮🇳 India</option>
+                      <option value="CA">🇨🇦 Canada</option>
+                    </select>
+                  </div>
+
+                  {/* Withdrawal Method */}
+                  <div className="form-group">
+                    <label>Withdrawal Method</label>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input 
+                          type="radio" 
+                          value="bank_account"
+                          checked={withdrawalForm.withdrawalMethod === 'bank_account'}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, withdrawalMethod: e.target.value }))}
+                        />
+                        🏦 Bank Account
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input 
+                          type="radio" 
+                          value="card"
+                          checked={withdrawalForm.withdrawalMethod === 'card'}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, withdrawalMethod: e.target.value }))}
+                        />
+                        💳 Card
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="form-group">
+                    <label>Amount ({getCurrencySymbol(withdrawalConfigs[withdrawalForm.country]?.currency || 'GBP')})</label>
+                    <input 
+                      type="number"
+                      value={withdrawalForm.amount}
+                      onChange={(e) => setWithdrawalForm(prev => ({ ...prev, amount: e.target.value }))}
+                      min={withdrawalConfigs[withdrawalForm.country]?.minAmount || 5}
+                      max={Math.min(withdrawalConfigs[withdrawalForm.country]?.maxAmount || 550, walletData.balance)}
+                      step="0.01"
+                      className="form-input"
+                      placeholder={`Min: ${withdrawalConfigs[withdrawalForm.country]?.minAmount || 5}, Max: ${withdrawalConfigs[withdrawalForm.country]?.maxAmount || 550}`}
+                    />
+                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
+                      Available balance: {getCurrencySymbol(withdrawalConfigs[withdrawalForm.country]?.currency || 'GBP')}{walletData.balance.toFixed(2)}
+                    </div>
+                  </div>
+
+                  {/* Account Holder Name */}
+                  <div className="form-group">
+                    <label>Account Holder Name *</label>
+                    <input 
+                      type="text"
+                      value={withdrawalForm.accountHolderName}
+                      onChange={(e) => setWithdrawalForm(prev => ({ ...prev, accountHolderName: e.target.value }))}
+                      className="form-input"
+                      placeholder="Full name as on account"
+                    />
+                  </div>
+
+                  {withdrawalForm.withdrawalMethod === 'bank_account' && (
+                    <>
+                      {/* Account Number */}
+                      <div className="form-group">
+                        <label>{withdrawalConfigs[withdrawalForm.country]?.accountNumberLabel || 'Account Number'} *</label>
+                        <input 
+                          type="text"
+                          value={withdrawalForm.accountNumber}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                          className="form-input"
+                          placeholder={withdrawalForm.country === 'DE' ? 'IBAN' : 'Account number'}
+                        />
+                      </div>
+
+                      {/* Sort Code / Routing Number */}
+                      <div className="form-group">
+                        <label>{withdrawalConfigs[withdrawalForm.country]?.sortCodeLabel || 'Sort Code'} *</label>
+                        <input 
+                          type="text"
+                          value={withdrawalForm.sortCode || withdrawalForm.routingNumber || withdrawalForm.swiftCode}
+                          onChange={(e) => {
+                            if (withdrawalForm.country === 'GB') {
+                              setWithdrawalForm(prev => ({ ...prev, sortCode: e.target.value }));
+                            } else if (withdrawalForm.country === 'US' || withdrawalForm.country === 'CA') {
+                              setWithdrawalForm(prev => ({ ...prev, routingNumber: e.target.value }));
+                            } else {
+                              setWithdrawalForm(prev => ({ ...prev, swiftCode: e.target.value }));
+                            }
+                          }}
+                          className="form-input"
+                          placeholder={
+                            withdrawalForm.country === 'GB' ? '12-34-56' :
+                            withdrawalForm.country === 'US' ? '123456789' :
+                            withdrawalForm.country === 'CA' ? '12345' :
+                            withdrawalForm.country === 'IN' ? 'IFSC Code' :
+                            'SWIFT/BIC Code'
+                          }
+                        />
+                      </div>
+
+                      {/* Bank Name */}
+                      <div className="form-group">
+                        <label>Bank Name *</label>
+                        <input 
+                          type="text"
+                          value={withdrawalForm.bankName}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, bankName: e.target.value }))}
+                          className="form-input"
+                          placeholder="Name of your bank"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {withdrawalForm.withdrawalMethod === 'card' && (
+                    <>
+                      {/* Card Number */}
+                      <div className="form-group">
+                        <label>Card Number *</label>
+                        <input 
+                          type="text"
+                          value={withdrawalForm.cardNumber}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, cardNumber: e.target.value }))}
+                          className="form-input"
+                          placeholder="1234 5678 9012 3456"
+                          maxLength="19"
+                        />
+                      </div>
+
+                      {/* Expiry Date */}
+                      <div className="form-group">
+                        <label>Expiry Date *</label>
+                        <input 
+                          type="text"
+                          value={withdrawalForm.expiryDate}
+                          onChange={(e) => setWithdrawalForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+                          className="form-input"
+                          placeholder="MM/YY"
+                          maxLength="5"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Tax Information */}
+                  {withdrawalConfigs[withdrawalForm.country]?.taxRate && (
+                    <div style={{ 
+                      background: '#f3f4f6', 
+                      padding: '0.75rem', 
+                      borderRadius: '6px', 
+                      fontSize: '0.9rem',
+                      margin: '1rem 0'
+                    }}>
+                      <strong>📊 Tax Information:</strong> 
+                      <br />
+                      {(withdrawalConfigs[withdrawalForm.country].taxRate * 100).toFixed(0)}% tax may be applied by Stripe according to {withdrawalForm.country} regulations.
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <div className="payment-actions">
+                    <button 
+                      className="payment-btn"
+                      onClick={processWithdrawal}
+                      disabled={withdrawalProcessing || !withdrawalForm.amount || !withdrawalForm.accountHolderName}
+                      style={{ 
+                        background: withdrawalProcessing ? '#d1d5db' : '#16a34a',
+                        color: 'white',
+                        width: '100%'
+                      }}
+                    >
+                      {withdrawalProcessing ? '⏳ Processing...' : `💸 Withdraw ${getCurrencySymbol(withdrawalConfigs[withdrawalForm.country]?.currency || 'GBP')}${withdrawalForm.amount || '0.00'}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delivery Scheduling Modal */}
       {showDeliveryModal && (
         <div className="payment-modal-overlay" onClick={() => setShowDeliveryModal(false)}>
@@ -6561,6 +7157,29 @@ Please proceed with payment to complete your order.`;
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Refunds Settings */}
+              <div className="payment-section">
+                <h3>Refunds Policy</h3>
+                <div className="fee-setting-group">
+                  <label className="fee-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={feeSettings.refundsEnabled}
+                      onChange={(e) => setFeeSettings(prev => ({
+                        ...prev,
+                        refundsEnabled: e.target.checked
+                      }))}
+                    />
+                    Allow refunds for this store
+                  </label>
+                  <p className="fee-setting-description">
+                    {feeSettings.refundsEnabled 
+                      ? "Customers can request refunds for orders from your store." 
+                      : "⚠️ Customers will see that this store does not offer refunds. This cannot be changed for existing orders."}
+                  </p>
                 </div>
               </div>
 
@@ -7543,6 +8162,18 @@ Please proceed with payment to complete your order.`;
           width: 18px;
           height: 18px;
           cursor: pointer;
+        }
+
+        .fee-setting-description {
+          margin-top: 0.5rem;
+          font-size: 0.85rem;
+          line-height: 1.4;
+          color: #6b7280;
+          font-weight: normal;
+          padding: 0.5rem;
+          background: #f9fafb;
+          border-radius: 4px;
+          border-left: 3px solid #d1d5db;
         }
 
         .fee-inputs {
@@ -8555,6 +9186,18 @@ Please proceed with payment to complete your order.`;
           background: #9ca3af;
           cursor: not-allowed;
           transform: none;
+        }
+
+        .refund-disabled-notice {
+          margin: 0.5rem 0;
+          padding: 0.75rem;
+          background: #fef2f2;
+          border: 1px solid #f87171;
+          border-radius: 8px;
+          text-align: center;
+          font-size: 0.9rem;
+          color: #dc2626;
+          font-weight: 500;
         }
 
         .delivery-status-info {
@@ -9875,6 +10518,78 @@ Please proceed with payment to complete your order.`;
           cursor: not-allowed;
         }
 
+        /* Withdrawal Styles */
+        .wallet-actions {
+          display: flex;
+          gap: 0.75rem;
+          align-items: center;
+        }
+
+        .withdraw-btn {
+          background: linear-gradient(135deg, #16a34a, #22c55e);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 0.75rem 1.25rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .withdraw-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #15803d, #16a34a);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+        }
+
+        .withdraw-btn:disabled {
+          background: #d1d5db;
+          color: #9ca3af;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .withdrawal-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .form-group label {
+          font-weight: 600;
+          color: #374151;
+          font-size: 0.9rem;
+        }
+
+        .form-input {
+          padding: 0.75rem;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-size: 1rem;
+          transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+          outline: none;
+          border-color: #16a34a;
+          box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+        }
+
+        .form-input:invalid {
+          border-color: #dc2626;
+        }
+
         @media (max-width: 640px) {
           .modal-actions {
             flex-direction: column;
@@ -9889,8 +10604,21 @@ Please proceed with payment to complete your order.`;
           .wallet-redirect-btn {
             width: 100%;
           }
+
+          .wallet-actions {
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 100%;
+          }
+
+          .withdraw-btn,
+          .fee-settings-btn {
+            width: 100%;
+            justify-content: center;
+          }
         }
-      `}</style>
+      `}
+</style>
     </div>
   );
 }
