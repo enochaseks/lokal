@@ -199,6 +199,162 @@ function MessagesPage() {
     }
   };
 
+  // Refund validation and processing helper
+  const validateRefundData = (refundData) => {
+    const errors = [];
+    
+    if (!refundData) {
+      errors.push('Refund data is missing');
+      return { isValid: false, errors };
+    }
+
+    if (!refundData.orderId) {
+      errors.push('Order ID is required');
+    }
+
+    if (!refundData.amount || refundData.amount <= 0) {
+      errors.push('Valid refund amount is required');
+    }
+
+    if (!refundData.currency) {
+      errors.push('Currency is required');
+    }
+
+    if (refundData.requiresStripeRefund && !refundData.paymentIntentId) {
+      errors.push('Payment Intent ID is required for Stripe refunds');
+    }
+
+    // Check if environment variables are set
+    if (!process.env.REACT_APP_API_URL) {
+      errors.push('Backend API URL not configured');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
+  // Enhanced refund processing with validation
+  const processRefundSafely = async (refundData) => {
+    const validation = validateRefundData(refundData);
+    
+    if (!validation.isValid) {
+      console.error('❌ Refund validation failed:', validation.errors);
+      alert(`Cannot process refund:\n\n${validation.errors.join('\n')}`);
+      return { success: false, error: validation.errors.join(', ') };
+    }
+
+    try {
+      const refundPayload = {
+        paymentIntentId: refundData.paymentIntentId,
+        amount: refundData.amount,
+        currency: refundData.currency || 'GBP',
+        reason: 'requested_by_customer'
+      };
+
+      console.log('🔄 Processing refund with payload:', refundPayload);
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-refund`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(refundPayload)
+      });
+
+      const result = await response.json();
+      console.log('📋 API Response:', { status: response.status, result });
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Refund processing failed');
+      }
+
+      console.log('✅ Refund processed successfully:', result.refundId);
+      return { success: true, data: result };
+
+    } catch (error) {
+      console.error('❌ Refund processing error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Update seller wallet when refund is processed
+  const updateSellerWalletForRefund = async (refundData, refundAmount) => {
+    const paymentMethod = refundData.paymentMethod || 'unknown';
+    
+    // Bank transfers never go to seller wallet, so no deduction needed
+    if (paymentMethod === 'bank_transfer') {
+      console.log('ℹ️ Bank transfer refund - no wallet deduction needed (payment was direct to seller)');
+      return;
+    }
+
+    if (!refundData.sellerId) {
+      console.warn('⚠️ No seller ID provided for wallet refund deduction');
+      return;
+    }
+
+    try {
+      console.log(`💰 Updating seller wallet for ${paymentMethod} refund deduction...`);
+      
+      const sellerWalletRef = doc(db, 'wallets', refundData.sellerId);
+      const sellerWalletSnap = await getDoc(sellerWalletRef);
+      
+      if (sellerWalletSnap.exists()) {
+        const currentData = sellerWalletSnap.data();
+        const currentBalance = currentData.balance || 0;
+        const newBalance = Math.max(0, currentBalance - refundAmount); // Prevent negative balance
+        
+        await updateDoc(sellerWalletRef, {
+          balance: newBalance,
+          lastUpdated: serverTimestamp()
+        });
+
+        // Create refund transaction record
+        await addDoc(collection(db, 'transactions'), {
+          sellerId: refundData.sellerId,
+          orderId: refundData.orderId,
+          customerId: refundData.customerId || 'unknown',
+          customerName: refundData.customerName || 'Unknown Customer',
+          type: 'refund_deduction',
+          amount: -refundAmount, // Negative amount for deduction
+          currency: refundData.currency || 'GBP',
+          paymentMethod: paymentMethod,
+          stripeRefundId: refundData.stripeRefundId || null,
+          description: `${paymentMethod.toUpperCase()} refund deduction for order: ${refundData.orderId}`,
+          status: 'completed',
+          createdAt: serverTimestamp(),
+          timestamp: serverTimestamp()
+        });
+
+        console.log(`💰 Seller wallet updated for ${paymentMethod}: deducted ${refundAmount} ${refundData.currency}. New balance: ${newBalance}`);
+        
+        // Special logging for digital wallet refunds
+        if (['google_pay', 'apple_pay'].includes(paymentMethod)) {
+          console.log(`🏦 ${paymentMethod.toUpperCase()} refund processed - customer will see refund in their ${paymentMethod.replace('_', ' ')} account within 2-5 business days`);
+        }
+      } else {
+        console.warn('⚠️ Seller wallet not found - cannot deduct refund amount');
+        
+        // Create wallet with negative balance if needed (edge case)
+        await setDoc(sellerWalletRef, {
+          balance: Math.max(0, -refundAmount), // Prevent negative balance
+          pendingBalance: 0,
+          totalEarnings: 0,
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp()
+        });
+        console.log('ℹ️ Created new wallet entry for seller');
+      }
+    } catch (error) {
+      console.error('❌ Error updating seller wallet for refund:', error);
+    }
+  };
+
   // Payment methods by region/currency
   const getPaymentMethods = (currency) => {
     const baseMethods = [
@@ -3788,11 +3944,17 @@ Customer is done adding items. Please prepare and bag these items.`;
                                pendingRefundOrder.displayInfo?.paymentMethod || 
                                pendingRefundOrder.method || 
                                'unknown';
-          return paymentMethod !== 'bank_transfer' && paymentMethod !== 'unknown';
+          // All digital payment methods (card, Google Pay, Apple Pay, etc.) require Stripe refund
+          // Only bank transfers are manual
+          const digitalPaymentMethods = ['card', 'google_pay', 'apple_pay', 'paypal', 'klarna'];
+          return digitalPaymentMethods.includes(paymentMethod) || 
+                 (paymentMethod !== 'bank_transfer' && paymentMethod !== 'unknown');
         })(),
         refundRequestedAt: new Date().toISOString(),
         orderCancelled: true,
-        customerName: buyerName
+        customerName: buyerName,
+        customerId: currentUser.uid,
+        sellerId: selectedConversation.otherUserId // Add seller ID for wallet updates
       };
 
       // Only add paymentIntentId if it exists and is not undefined
@@ -3825,52 +3987,51 @@ Customer is done adding items. Please prepare and bag these items.`;
         
         if (refundMessage.refundData.requiresStripeRefund && refundMessage.refundData.paymentIntentId) {
           // Automatic Stripe refund for card/digital payments
-          try {
-            const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-refund`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                paymentIntentId: refundMessage.refundData.paymentIntentId,
-                amount: refundMessage.refundData.amount,
-                currency: refundMessage.refundData.currency || 'GBP',
-                reason: 'requested_by_customer'
-              })
-            });
-
-            const result = await response.json();
+          console.log('🚀 Starting automatic Stripe refund process');
+          
+          const refundResult = await processRefundSafely(refundMessage.refundData);
+          
+          if (refundResult.success) {
+            const result = refundResult.data;
             
-            if (response.ok) {
-              // Send automatic approval message to customer
-              const autoApprovalMessage = {
-                conversationId: conversationId,
-                senderId: 'system',
-                senderName: 'Refund System',
-                receiverId: currentUser.uid,
-                receiverName: currentUser.displayName || currentUser.email,
-                message: `✅ REFUND PROCESSED AUTOMATICALLY\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n💳 Your money has been refunded to your original payment method!\n\n⏱️ You will receive your refund within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}\n\nThank you for using our service!`,
-                messageType: 'refund_approved',
-                timestamp: serverTimestamp(),
-                isRead: false,
-                orderData: {
-                  ...refundMessage.refundData,
-                  refundApproved: true,
-                  refundAmount: refundMessage.refundData.amount,
-                  refundProcessedAt: new Date().toISOString(),
-                  stripeRefundId: result.refundId,
-                  customerName: refundMessage.refundData.customerName
-                }
-              };
-
-              if (selectedConversation.otherUserEmail) {
-                autoApprovalMessage.receiverEmail = selectedConversation.otherUserEmail;
+            // Update seller wallet for refund deduction
+            await updateSellerWalletForRefund({
+              ...refundMessage.refundData,
+              stripeRefundId: result.refundId
+            }, refundMessage.refundData.amount);
+            
+            // Send automatic approval message to customer
+            const autoApprovalMessage = {
+              conversationId: conversationId,
+              senderId: 'system',
+              senderName: 'Refund System',
+              receiverId: currentUser.uid,
+              receiverName: currentUser.displayName || currentUser.email,
+              message: `✅ REFUND PROCESSED AUTOMATICALLY\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n💳 Your money has been refunded to your original payment method!\n\n⏱️ You will receive your refund within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}\n\nThank you for using our service!`,
+              messageType: 'refund_approved',
+              timestamp: serverTimestamp(),
+              isRead: false,
+              orderData: {
+                ...refundMessage.refundData,
+                refundApproved: true,
+                refundAmount: refundMessage.refundData.amount,
+                refundProcessedAt: new Date().toISOString(),
+                stripeRefundId: result.refundId,
+                customerName: refundMessage.refundData.customerName
               }
+            };
 
-              await addDoc(collection(db, 'messages'), autoApprovalMessage);
+            if (selectedConversation.otherUserEmail) {
+              autoApprovalMessage.receiverEmail = selectedConversation.otherUserEmail;
             }
-          } catch (stripeError) {
-            console.error('Automatic Stripe refund failed:', stripeError);
+
+            await addDoc(collection(db, 'messages'), autoApprovalMessage);
+            
+            console.log('✅ Automatic Stripe refund processed successfully');
+            alert(`✅ Refund Processed!\n\nYour refund of ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)} has been processed automatically.\n\nRefund ID: ${result.refundId}\n\nYou will receive your money within 2-5 business days.`);
+          } else {
+            console.error('❌ Automatic Stripe refund failed:', refundResult.error);
+            alert(`⚠️ Automatic refund failed: ${refundResult.error}\n\nPlease contact customer support for manual processing.`);
             // Fall back to manual notification if auto-refund fails
           }
         } else {
@@ -3986,26 +4147,23 @@ Customer is done adding items. Please prepare and bag these items.`;
       
       if (isStripePayment) {
         // For Stripe payments, process actual refund
-        try {
-          // Call backend to process Stripe refund
-          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-refund`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              paymentIntentId: refundOrderData.paymentIntentId,
-              amount: refundAmount,
-              currency: refundOrderData.currency || 'GBP',
-              reason: 'requested_by_customer'
-            })
-          });
-
-          const result = await response.json();
+        console.log('🚀 Processing Stripe refund for seller approval');
+        
+        const refundResult = await processRefundSafely({
+          ...refundOrderData,
+          amount: refundAmount
+        });
+        
+        if (refundResult.success) {
+          const result = refundResult.data;
           
-          if (!response.ok) {
-            throw new Error(result.error || 'Failed to process refund');
-          }
+          // Update seller wallet for refund deduction
+          await updateSellerWalletForRefund({
+            ...refundOrderData,
+            stripeRefundId: result.refundId,
+            sellerId: currentUser.uid, // Current user is the seller approving the refund
+            customerId: selectedConversation.otherUserId
+          }, refundAmount);
 
           const approvalMessage = {
             conversationId: conversationId,
@@ -4033,10 +4191,13 @@ Customer is done adding items. Please prepare and bag these items.`;
           }
 
           await addDoc(collection(db, 'messages'), approvalMessage);
+          
+          console.log('✅ Seller-approved Stripe refund processed successfully');
+          alert(`✅ Refund Approved & Processed!\n\nRefund of ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)} has been processed through Stripe.\n\nRefund ID: ${result.refundId}\n\nThe customer will receive their money within 2-5 business days.`);
 
-        } catch (stripeError) {
-          console.error('Error processing Stripe refund:', stripeError);
-          alert('Failed to process Stripe refund: ' + stripeError.message);
+        } else {
+          console.error('❌ Error processing Stripe refund:', refundResult.error);
+          alert(`❌ Failed to process Stripe refund:\n\n${refundResult.error}\n\nPlease try again or contact support.`);
           return;
         }
 
