@@ -63,6 +63,7 @@ function MessagesPage() {
   const [orderStatus, setOrderStatus] = useState('shopping'); // 'shopping', 'done_adding', 'bagging', 'ready_for_payment', 'completed'
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [persistedOrderItems, setPersistedOrderItems] = useState([]);
+  const [isOrderLockedForever, setIsOrderLockedForever] = useState(false); // Permanent lock state
   
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -462,6 +463,7 @@ function MessagesPage() {
             setOrderStatus(orderState.status || 'shopping');
             setCurrentOrderId(orderState.orderId || null);
             setPersistedOrderItems(orderState.items || []);
+            setIsOrderLockedForever(orderState.lockedForever || false); // Check permanent lock
             
             // If user had items locked, clear the cart but keep the persisted items
             if (orderState.status === 'done_adding' || orderState.status === 'bagging') {
@@ -829,6 +831,7 @@ function MessagesPage() {
             setOrderStatus(orderState.status || 'shopping');
             setCurrentOrderId(orderState.orderId || null);
             setPersistedOrderItems(orderState.items || []);
+            setIsOrderLockedForever(orderState.lockedForever || false); // Check permanent lock
             
             // If order is locked (done_adding/bagging), clear cart but keep persisted items
             if (orderState.status === 'done_adding' || orderState.status === 'bagging') {
@@ -839,12 +842,15 @@ function MessagesPage() {
             setOrderStatus('shopping');
             setCurrentOrderId(null);
             setPersistedOrderItems([]);
+            setIsOrderLockedForever(false); // Reset lock state
             setCart([]); // Clear cart when switching conversations
           }
         } else {
           // No persisted order state - reset to shopping
           setOrderStatus('shopping');
           setCurrentOrderId(null);
+          setPersistedOrderItems([]);
+          setIsOrderLockedForever(false); // Reset lock state
           setPersistedOrderItems([]);
           setCart([]); // Clear cart when switching conversations
         }
@@ -891,11 +897,54 @@ function MessagesPage() {
 
     if (window.confirm('Are you sure you want to delete this message?')) {
       try {
+        // Get the message before deleting to check if it's a refund transfer confirmation
+        const messageDoc = await getDoc(doc(db, 'messages', messageId));
+        const messageData = messageDoc.data();
+        
         await updateDoc(doc(db, 'messages', messageId), {
           deleted: true,
           deletedBy: currentUser.uid,
           deletedAt: serverTimestamp()
         });
+
+        // If this was a refund transfer confirmation message, reset the approval states
+        if (messageData && messageData.messageType === 'refund_transfer_confirmed' && messageData.orderData?.orderId) {
+          const orderId = messageData.orderData.orderId;
+          
+          // Reset approval states in local state
+          setMessages(prevMessages => {
+            return prevMessages.map(msg => {
+              if (msg.orderData && msg.orderData.orderId === orderId) {
+                return {
+                  ...msg,
+                  orderData: {
+                    ...msg.orderData,
+                    customerApproved: false,
+                    complaintFiled: false
+                  }
+                };
+              }
+              return msg;
+            });
+          });
+
+          // Also update other messages in Firestore with the same orderId
+          try {
+            const messagesRef = collection(db, 'messages');
+            const q = query(messagesRef, where('orderData.orderId', '==', orderId));
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach((doc) => {
+              if (doc.id !== messageId) { // Don't update the deleted message
+                updateDoc(doc.ref, {
+                  'orderData.customerApproved': false,
+                  'orderData.complaintFiled': false
+                });
+              }
+            });
+          } catch (error) {
+            console.error("Error resetting approval states in Firestore:", error);
+          }
+        }
       } catch (error) {
         console.error('Error deleting message:', error);
         alert('Failed to delete message. Please try again.');
@@ -2073,7 +2122,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
       const storeData = storeDoc.exists() ? storeDoc.data() : {};
 
-      // Save order state to Firebase for persistence
+      // Save order state to Firebase for persistence - PERMANENT LOCK
       await setDoc(doc(db, 'orderStates', currentUser.uid), {
         status: 'done_adding',
         orderId: orderId,
@@ -2086,7 +2135,9 @@ Customer is done adding items. Please prepare and bag these items.`;
         totalAmount: totalAmount,
         totalItems: totalItems,
         currency: currency,
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
+        lockedForever: true, // This order can never be modified again
+        lockedAt: serverTimestamp()
       });
 
       // Prepare message data with proper validation for receiverEmail
@@ -2554,6 +2605,30 @@ Customer is done adding items. Please prepare and bag these items.`;
   // Refund approval functions
   const approveRefundByCustomer = async (refundData) => {
     try {
+      // Set customerApproved flag on the related message/orderData so buttons grey out
+      if (refundData && refundData.orderId) {
+        // First update the UI state immediately
+        setMessages(prevMessages => {
+          console.log("Updating messages in approveRefundByCustomer");
+          const updatedMessages = prevMessages.map(msg => {
+            if (msg.orderData && msg.orderData.orderId === refundData.orderId) {
+              const updatedMsg = {
+                ...msg,
+                orderData: {
+                  ...msg.orderData,
+                  customerApproved: true
+                  // Don't set complaintFiled here since this is for approvals
+                }
+              };
+              console.log("Updated message in approveRefundByCustomer:", updatedMsg);
+              return updatedMsg;
+            }
+            return msg;
+          });
+          return [...updatedMessages]; // force new array reference for re-render
+        });
+      }
+
       const conversationId = selectedConversation.id || 
         [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
 
@@ -2581,6 +2656,20 @@ Customer is done adding items. Please prepare and bag these items.`;
       }
 
       await addDoc(collection(db, 'messages'), approvalMessage);
+      
+      // Also update the existing message in Firestore to ensure both buttons stay greyed out
+      try {
+        const messagesRef = collection(db, 'messages');
+        const q = query(messagesRef, where('orderData.orderId', '==', refundData.orderId));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach((doc) => {
+          updateDoc(doc.ref, {
+            'orderData.customerApproved': true
+          });
+        });
+      } catch (error) {
+        console.error("Error updating existing message in Firestore:", error);
+      }
 
       // Show success notification
       const notification = document.createElement('div');
@@ -2611,6 +2700,121 @@ Customer is done adding items. Please prepare and bag these items.`;
     }
   };
 
+  // Cancel complaint function
+  const cancelComplaint = async (refundData) => {
+    if (!refundData || !refundData.orderId) return;
+
+    if (window.confirm('Are you sure you want to cancel your complaint? This will reset the refund approval buttons.')) {
+      try {
+        // Reset the approval states for this order
+        setMessages(prevMessages => {
+          return prevMessages.map(msg => {
+            if (msg.orderData && msg.orderData.orderId === refundData.orderId) {
+              return {
+                ...msg,
+                orderData: {
+                  ...msg.orderData,
+                  customerApproved: false,
+                  complaintFiled: false
+                }
+              };
+            }
+            return msg;
+          });
+        });
+
+        // Update Firestore to reset states
+        try {
+          const messagesRef = collection(db, 'messages');
+          const q = query(messagesRef, where('orderData.orderId', '==', refundData.orderId));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((doc) => {
+            updateDoc(doc.ref, {
+              'orderData.customerApproved': false,
+              'orderData.complaintFiled': false
+            });
+          });
+        } catch (error) {
+          console.error("Error resetting complaint states in Firestore:", error);
+        }
+
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `✅ Complaint cancelled. You can now approve or file a new complaint.`;
+        notification.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: #10B981;
+          color: white;
+          padding: 1rem;
+          border-radius: 8px;
+          z-index: 1000;
+          font-weight: 600;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          if (document.body.contains(notification)) {
+            document.body.removeChild(notification);
+          }
+        }, 4000);
+
+      } catch (error) {
+        console.error('Error cancelling complaint:', error);
+        alert('Failed to cancel complaint. Please try again.');
+      }
+    }
+  };
+
+  // Close complaint modal and reset states if complaint wasn't submitted
+  const closeComplaintModal = () => {
+    if (pendingComplaintRefund && pendingComplaintRefund.orderId) {
+      // Reset the approval states since complaint was cancelled
+      setMessages(prevMessages => {
+        return prevMessages.map(msg => {
+          if (msg.orderData && msg.orderData.orderId === pendingComplaintRefund.orderId) {
+            return {
+              ...msg,
+              orderData: {
+                ...msg.orderData,
+                customerApproved: false,
+                complaintFiled: false
+              }
+            };
+          }
+          return msg;
+        });
+      });
+
+      // Also reset in Firestore
+      try {
+        const messagesRef = collection(db, 'messages');
+        const q = query(messagesRef, where('orderData.orderId', '==', pendingComplaintRefund.orderId));
+        getDocs(q).then((querySnapshot) => {
+          querySnapshot.forEach((doc) => {
+            updateDoc(doc.ref, {
+              'orderData.customerApproved': false,
+              'orderData.complaintFiled': false
+            });
+          });
+        });
+      } catch (error) {
+        console.error("Error resetting complaint states in Firestore:", error);
+      }
+    }
+
+    setShowComplaintModal(false);
+    setPendingComplaintRefund(null);
+    setComplaintData({
+      email: '',
+      explanation: '',
+      complaintType: 'incorrect_amount'
+    });
+    setComplaintScreenshots([]);
+  };
+
   // Open complaint modal
   const openComplaintModal = (refundData) => {
     setPendingComplaintRefund(refundData);
@@ -2621,6 +2825,46 @@ Customer is done adding items. Please prepare and bag these items.`;
     });
     setComplaintScreenshots([]);
     setShowComplaintModal(true);
+    
+    // Immediately grey out both buttons when complaint modal is opened
+    if (refundData && refundData.orderId) {
+      // Update the message state to grey out buttons, but only set complaintFiled
+      setMessages(prevMessages => {
+        return prevMessages.map(msg => {
+          if (msg.orderData && msg.orderData.orderId === refundData.orderId) {
+            // Create a deep copy to ensure React detects the change
+            const updatedMsg = {
+              ...msg,
+              orderData: {
+                ...msg.orderData,
+                complaintFiled: true
+                // Don't set customerApproved here since this is for complaints
+              }
+            };
+            console.log("Updated message in openComplaintModal:", updatedMsg);
+            return updatedMsg;
+          }
+          return msg;
+        });
+      });
+      
+      // Also update Firestore if needed to make the change permanent
+      try {
+        const messagesRef = collection(db, 'messages');
+        const q = query(messagesRef, where('orderData.orderId', '==', refundData.orderId));
+        getDocs(q).then((querySnapshot) => {
+          querySnapshot.forEach((doc) => {
+            const msgData = doc.data();
+            updateDoc(doc.ref, {
+              'orderData.complaintFiled': true
+              // Don't set customerApproved for complaints
+            });
+          });
+        });
+      } catch (error) {
+        console.error("Error updating message state in Firestore:", error);
+      }
+    }
   };
 
   // Handle complaint screenshot upload
@@ -2754,7 +2998,28 @@ Customer is done adding items. Please prepare and bag these items.`;
 
       await addDoc(collection(db, 'messages'), sellerNotification);
 
-      // Close modal and reset states
+      // Set complaintFiled flag on the related message/orderData so buttons grey out
+      if (pendingComplaintRefund && pendingComplaintRefund.orderId) {
+        setMessages(prevMessages => {
+          const updated = prevMessages.map(msg => {
+            if (msg.orderData && msg.orderData.orderId === pendingComplaintRefund.orderId) {
+              return {
+                ...msg,
+                orderData: {
+                  ...msg.orderData,
+                  complaintFiled: true
+                  // Don't set customerApproved for complaints
+                }
+              };
+            }
+            return msg;
+          });
+          return [...updated]; // force new array reference for re-render
+        });
+      }
+
+      // Close modal and reset states after successful submission
+      // Don't use closeComplaintModal() here since complaint was successfully submitted
       setShowComplaintModal(false);
       setPendingComplaintRefund(null);
       setComplaintData({
@@ -4397,12 +4662,17 @@ Please proceed with payment to complete your order.`;
                   {!isSeller && (
                     <div className="header-buttons">
                       <button
-                        onClick={() => setShowStoreItems(!showStoreItems)}
-                        className={`browse-items-btn ${showStoreItems ? 'active' : ''} ${orderStatus !== 'shopping' ? 'disabled' : ''}`}
-                        disabled={orderStatus !== 'shopping'}
+                        onClick={() => !isOrderLockedForever && setShowStoreItems(!showStoreItems)}
+                        className={`browse-items-btn ${showStoreItems ? 'active' : ''} ${isOrderLockedForever ? 'disabled permanently-locked' : orderStatus !== 'shopping' ? 'disabled' : ''}`}
+                        disabled={isOrderLockedForever || orderStatus !== 'shopping'}
+                        style={{
+                          backgroundColor: isOrderLockedForever ? '#d1d5db' : '',
+                          color: isOrderLockedForever ? '#6B7280' : '',
+                          cursor: isOrderLockedForever ? 'not-allowed' : ''
+                        }}
                       >
-                        {showStoreItems ? 'Hide Items' : '🛍️ Browse'}
-                        {orderStatus !== 'shopping' && ' (Order Finalized)'}
+                        {isOrderLockedForever ? '🔒 Browsing Locked' : showStoreItems ? 'Hide Items' : '🛍️ Browse'}
+                        {!isOrderLockedForever && orderStatus !== 'shopping' && ' (Order Finalized)'}
                       </button>
                       
                       {cart.length > 0 && (
@@ -4443,44 +4713,12 @@ Please proceed with payment to complete your order.`;
                                   {message.message}
                                 </div>
                                 
-                                {/* Render attachments if they exist */}
+                                {/* Don't render image attachments here - they'll be shown after the buttons */}
                                 {message.attachments && message.attachments.length > 0 && (
-                                  <div className="message-attachments">
+                                  <div className="message-attachments" style={{ marginTop: '12px' }}>
                                     {message.attachments.map((attachment, index) => (
                                       <div key={index} className="attachment">
-                                        {attachment.type === 'image' ? (
-                                          <div className="image-attachment">
-                                            <img 
-                                              src={attachment.url} 
-                                              alt={attachment.name || 'Attachment'}
-                                              className="attachment-image"
-                                              style={{
-                                                maxWidth: '100%',
-                                                width: '280px',
-                                                height: 'auto',
-                                                borderRadius: '8px',
-                                                marginTop: '10px',
-                                                cursor: 'pointer',
-                                                border: '1px solid #e0e0e0',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                                              }}
-                                              onClick={() => window.open(attachment.url, '_blank')}
-                                              onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                e.target.nextSibling.textContent = '❌ Image failed to load';
-                                              }}
-                                            />
-                                            <p className="attachment-name" style={{
-                                              fontSize: '12px',
-                                              color: '#666',
-                                              marginTop: '5px',
-                                              fontStyle: 'italic',
-                                              textAlign: 'center'
-                                            }}>
-                                              📸 {attachment.name || 'Image'} (Click to view full size)
-                                            </p>
-                                          </div>
-                                        ) : (
+                                        {attachment.type !== 'image' && (
                                           <div className="file-attachment">
                                             <a 
                                               href={attachment.url} 
@@ -4518,14 +4756,20 @@ Please proceed with payment to complete your order.`;
                               </div>
                               
                               {/* Special handling for order workflow messages */}
-                              {message.messageType === 'order_request' && message.senderId === currentUser.uid && !isSeller && orderStatus === 'shopping' && (
+                              {message.messageType === 'order_request' && message.senderId === currentUser.uid && !isSeller && !isOrderLockedForever && (
                                 <div className="message-actions">
                                   <button
                                     onClick={() => signalDoneAddingFromMessage(message.orderData)}
-                                    className="action-btn done-message-btn"
-                                    disabled={orderStatus !== 'shopping'}
+                                    className={`action-btn done-message-btn ${isOrderLockedForever ? 'disabled' : ''}`}
+                                    disabled={isOrderLockedForever}
+                                    style={{
+                                      backgroundColor: isOrderLockedForever ? '#d1d5db' : '#10B981',
+                                      color: isOrderLockedForever ? '#6B7280' : 'white',
+                                      cursor: isOrderLockedForever ? 'not-allowed' : 'pointer',
+                                      opacity: isOrderLockedForever ? 0.7 : 1
+                                    }}
                                   >
-                                    ✅ Done Adding Items
+                                    {isOrderLockedForever ? '✅ Order Finalized' : '✅ Done Adding Items'}
                                   </button>
                                 </div>
                               )}
@@ -4545,10 +4789,17 @@ Please proceed with payment to complete your order.`;
                               {message.messageType === 'items_bagged' && message.receiverId === currentUser.uid && !isSeller && (
                                 <div className="message-actions">
                                   <button 
-                                    className="action-btn payment-btn"
-                                    onClick={() => openPaymentModal(message.orderData)}
+                                    className={`action-btn payment-btn ${isOrderPaid(message.orderData?.orderId) ? 'disabled' : ''}`}
+                                    onClick={() => !isOrderPaid(message.orderData?.orderId) && openPaymentModal(message.orderData)}
+                                    disabled={isOrderPaid(message.orderData?.orderId)}
+                                    style={{
+                                      backgroundColor: isOrderPaid(message.orderData?.orderId) ? '#d1d5db' : '#10B981',
+                                      color: isOrderPaid(message.orderData?.orderId) ? '#6B7280' : 'white',
+                                      cursor: isOrderPaid(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
+                                      opacity: isOrderPaid(message.orderData?.orderId) ? 0.7 : 1
+                                    }}
                                   >
-                                    💳 Proceed to Payment
+                                    {isOrderPaid(message.orderData?.orderId) ? '✅ Payment Completed' : '💳 Proceed to Payment'}
                                   </button>
                                 </div>
                               )}
@@ -4837,7 +5088,7 @@ Please proceed with payment to complete your order.`;
                               )}
 
                               {/* Refund approval/complaint buttons for customers on refund transfer confirmations */}
-                              {message.messageType === 'refund_transfer_confirmed' && !message.orderData?.customerApproved && (
+                              {message.messageType === 'refund_transfer_confirmed' && (
                                 <div className="message-actions">
                                   <div className="refund-approval-section">
                                     <div className="approval-header">
@@ -4848,34 +5099,49 @@ Please proceed with payment to complete your order.`;
                                       <p>Have you received the correct refund amount in your bank account?</p>
                                     </div>
                                     <div className="approval-buttons" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                                      {/* Force button style update with key={Date.now()} */}
                                       <button 
+                                        key={message.orderData?.customerApproved || message.orderData?.complaintFiled ? "disabled-approve" : "active-approve"}
                                         className="action-btn approve-btn"
-                                        onClick={() => approveRefundByCustomer(message.orderData)}
+                                        onClick={() => {
+                                          if (!message.orderData?.customerApproved && !message.orderData?.complaintFiled) {
+                                            approveRefundByCustomer(message.orderData);
+                                          }
+                                        }}
+                                        disabled={message.orderData?.customerApproved || message.orderData?.complaintFiled}
                                         style={{
-                                          backgroundColor: '#10B981',
-                                          color: 'white',
+                                          backgroundColor: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? '#d1d5db' : '#10B981',
+                                          color: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? '#6B7280' : 'white',
                                           border: 'none',
                                           padding: '12px 20px',
                                           borderRadius: '8px',
                                           fontWeight: '600',
-                                          cursor: 'pointer',
-                                          flex: '1'
+                                          cursor: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? 'not-allowed' : 'pointer',
+                                          flex: '1',
+                                          opacity: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? 0.7 : 1
                                         }}
                                       >
                                         ✅ Yes, Received Correctly
                                       </button>
                                       <button 
+                                        key={message.orderData?.customerApproved || message.orderData?.complaintFiled ? "disabled-complaint" : "active-complaint"}
                                         className="action-btn complaint-btn"
-                                        onClick={() => openComplaintModal(message.orderData)}
+                                        onClick={() => {
+                                          if (!message.orderData?.customerApproved && !message.orderData?.complaintFiled) {
+                                            openComplaintModal(message.orderData);
+                                          }
+                                        }}
+                                        disabled={message.orderData?.customerApproved || message.orderData?.complaintFiled}
                                         style={{
-                                          backgroundColor: '#EF4444',
-                                          color: 'white',
+                                          backgroundColor: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? '#d1d5db' : '#EF4444',
+                                          color: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? '#6B7280' : 'white',
                                           border: 'none',
                                           padding: '12px 20px',
                                           borderRadius: '8px',
                                           fontWeight: '600',
-                                          cursor: 'pointer',
-                                          flex: '1'
+                                          cursor: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? 'not-allowed' : 'pointer',
+                                          flex: '1',
+                                          opacity: (message.orderData?.customerApproved || message.orderData?.complaintFiled) ? 0.7 : 1
                                         }}
                                       >
                                         ❌ Issue/Complaint
@@ -4885,8 +5151,8 @@ Please proceed with payment to complete your order.`;
                                 </div>
                               )}
 
-                              {/* Show approval confirmation if customer already approved */}
-                              {message.messageType === 'refund_transfer_confirmed' && message.orderData?.customerApproved && (
+                              {/* Show approval confirmation if customer already approved (but not if they filed a complaint) */}
+                              {message.messageType === 'refund_transfer_confirmed' && message.orderData?.customerApproved && !message.orderData?.complaintFiled && (
                                 <div className="approval-confirmed">
                                   <div style={{
                                     backgroundColor: '#F0FDF4',
@@ -4901,6 +5167,109 @@ Please proceed with payment to complete your order.`;
                                       Customer confirmed receipt of correct amount
                                     </p>
                                   </div>
+                                </div>
+                              )}
+                              
+                              {/* Show complaint filed confirmation if customer filed a complaint */}
+                              {message.messageType === 'refund_transfer_confirmed' && message.orderData?.complaintFiled && !message.orderData?.customerApproved && (
+                                <div className="complaint-filed-confirmed">
+                                  <div style={{
+                                    backgroundColor: '#FEF2F2',
+                                    border: '1px solid #EF4444',
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    marginTop: '10px',
+                                    textAlign: 'center'
+                                  }}>
+                                    <strong style={{ color: '#EF4444' }}>⚠️ Complaint Filed</strong>
+                                    <p style={{ margin: '5px 0 10px 0', fontSize: '14px', color: '#DC2626' }}>
+                                      Your complaint has been submitted to admin for review
+                                    </p>
+                                    <button
+                                      onClick={() => cancelComplaint(message.orderData)}
+                                      style={{
+                                        backgroundColor: '#6B7280',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '8px 16px',
+                                        borderRadius: '6px',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.2s ease'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.target.style.backgroundColor = '#4B5563';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.target.style.backgroundColor = '#6B7280';
+                                      }}
+                                    >
+                                      Cancel Complaint
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Display screenshot attachments separately after all UI elements for refund transfer messages */}
+                              {message.messageType === 'refund_transfer_confirmed' && message.attachments && message.attachments.length > 0 && (
+                                <div className="screenshot-attachments" style={{ marginTop: '15px' }}>
+                                  {message.attachments.map((attachment, index) => (
+                                    attachment.type === 'image' && (
+                                      <div key={index} className="screenshot-container">
+                                        <div style={{
+                                          backgroundColor: '#F8F9FA',
+                                          border: '1px solid #E5E7EB',
+                                          borderRadius: '12px',
+                                          padding: '12px',
+                                          textAlign: 'center'
+                                        }}>
+                                          <img 
+                                            src={attachment.url} 
+                                            alt={attachment.name || 'Transfer Screenshot'}
+                                            className="transfer-screenshot"
+                                            style={{
+                                              maxWidth: '100%',
+                                              width: '100%',
+                                              maxWidth: '280px',
+                                              height: 'auto',
+                                              borderRadius: '8px',
+                                              cursor: 'pointer',
+                                              border: '2px solid #D1D5DB',
+                                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                                              objectFit: 'contain',
+                                              backgroundColor: '#ffffff'
+                                            }}
+                                            onClick={() => window.open(attachment.url, '_blank')}
+                                            onMouseEnter={(e) => {
+                                              e.target.style.transform = 'scale(1.02)';
+                                              e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.target.style.transform = 'scale(1)';
+                                              e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                                            }}
+                                            onError={(e) => {
+                                              e.target.style.display = 'none';
+                                              e.target.nextSibling.textContent = '❌ Screenshot failed to load';
+                                            }}
+                                          />
+                                          <div style={{
+                                            fontSize: '12px',
+                                            color: '#6B7280',
+                                            marginTop: '8px',
+                                            padding: '4px 8px',
+                                            cursor: 'pointer'
+                                          }}
+                                          onClick={() => window.open(attachment.url, '_blank')}
+                                          >
+                                            📸 {attachment.name || 'Transfer Screenshot'} • Tap to enlarge
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  ))}
                                 </div>
                               )}
                               
@@ -4933,12 +5302,17 @@ Please proceed with payment to complete your order.`;
                       {!isSeller && (
                         <div className="mobile-action-buttons">
                           <button
-                            onClick={() => setShowStoreItems(!showStoreItems)}
-                            className={`mobile-browse-btn ${showStoreItems ? 'active' : ''} ${orderStatus !== 'shopping' ? 'disabled' : ''}`}
-                            disabled={orderStatus !== 'shopping'}
+                            onClick={() => !isOrderLockedForever && setShowStoreItems(!showStoreItems)}
+                            className={`mobile-browse-btn ${showStoreItems ? 'active' : ''} ${isOrderLockedForever ? 'disabled permanently-locked' : orderStatus !== 'shopping' ? 'disabled' : ''}`}
+                            disabled={isOrderLockedForever || orderStatus !== 'shopping'}
+                            style={{
+                              backgroundColor: isOrderLockedForever ? '#d1d5db' : '',
+                              color: isOrderLockedForever ? '#6B7280' : '',
+                              cursor: isOrderLockedForever ? 'not-allowed' : ''
+                            }}
                           >
-                            {showStoreItems ? 'Hide Items' : '🛍️ Browse'}
-                            {orderStatus !== 'shopping' && ' (Order Finalized)'}
+                            {isOrderLockedForever ? '🔒 Browsing Locked' : showStoreItems ? 'Hide Items' : '🛍️ Browse'}
+                            {!isOrderLockedForever && orderStatus !== 'shopping' && ' (Order Finalized)'}
                           </button>
                           
                           {cart.length > 0 && (
@@ -6313,14 +6687,14 @@ Please proceed with payment to complete your order.`;
 
       {/* Refund Complaint Modal */}
       {showComplaintModal && (
-        <div className="payment-modal-overlay" onClick={() => setShowComplaintModal(false)}>
+        <div className="payment-modal-overlay" onClick={() => closeComplaintModal()}>
           <div className="payment-modal complaint-modal" onClick={(e) => e.stopPropagation()}>
             <div className="payment-modal-content">
               <div className="modal-header">
                 <h3>📧 File Refund Complaint</h3>
                 <button 
                   className="close-modal"
-                  onClick={() => setShowComplaintModal(false)}
+                  onClick={() => closeComplaintModal()}
                 >
                   ✕
                 </button>
@@ -6450,7 +6824,7 @@ Please proceed with payment to complete your order.`;
               }}>
                 <button 
                   className="cancel-payment-btn"
-                  onClick={() => setShowComplaintModal(false)}
+                  onClick={() => closeComplaintModal()}
                   style={{
                     backgroundColor: '#6B7280',
                     color: 'white',
