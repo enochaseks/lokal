@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
@@ -121,6 +122,29 @@ function MessagesPage() {
   });
   const [selectedOrderForDelivery, setSelectedOrderForDelivery] = useState(null);
 
+  // Refund modal states
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundDetails, setRefundDetails] = useState('');
+  const [pendingRefundOrder, setPendingRefundOrder] = useState(null);
+  
+  // Refund transfer confirmation states
+  const [showRefundTransferModal, setShowRefundTransferModal] = useState(false);
+  const [refundTransferScreenshot, setRefundTransferScreenshot] = useState(null);
+  const [pendingRefundTransfer, setPendingRefundTransfer] = useState(null);
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  
+  // Refund complaint states
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [complaintData, setComplaintData] = useState({
+    email: '',
+    explanation: '',
+    complaintType: 'incorrect_amount' // 'incorrect_amount', 'not_received', 'other'
+  });
+  const [complaintScreenshots, setComplaintScreenshots] = useState([]);
+  const [pendingComplaintRefund, setPendingComplaintRefund] = useState(null);
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
+  
   // Store operating hours (you can make this configurable per store)
   const storeHours = {
     monday: { open: '09:00', close: '18:00' },
@@ -154,6 +178,24 @@ function MessagesPage() {
       return Number(price).toFixed(2);
     }
     return price;
+  };
+
+  // Helper function to fetch user information from Firestore
+  const fetchUserInfo = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        return {
+          name: userData.displayName || userData.name || userData.username || userData.email || 'Unknown User',
+          email: userData.email || 'Unknown Email'
+        };
+      }
+      return { name: 'Unknown User', email: 'Unknown Email' };
+    } catch (error) {
+      console.warn('Could not fetch user details:', error);
+      return { name: 'Unknown User', email: 'Unknown Email' };
+    }
   };
 
   // Payment methods by region/currency
@@ -1066,6 +1108,11 @@ function MessagesPage() {
     setPaymentProcessing(true);
     
     try {
+      // Fetch buyer's complete information from Firestore at the start
+      const buyerInfo = await fetchUserInfo(currentUser.uid);
+      const buyerName = buyerInfo.name;
+      const buyerEmail = buyerInfo.email;
+
       // Generate unique pickup verification code
       const pickupCode = generatePickupCode();
       const sellerId = selectedConversation?.otherUserId;
@@ -1174,7 +1221,7 @@ function MessagesPage() {
         sellerId: sellerId,
         orderId: paymentData.orderId,
         customerId: currentUser.uid,
-        customerName: currentUser.displayName || currentUser.email,
+        customerName: buyerName,
         type: 'sale',
         amount: sellerEarnings,
         platformFee: platformFee,
@@ -1194,7 +1241,7 @@ function MessagesPage() {
       const paymentRecord = {
         orderId: paymentData.orderId,
         customerId: currentUser.uid,
-        customerName: currentUser.displayName || currentUser.email,
+        customerName: buyerName,
         sellerId: sellerId,
         amount: paymentData.total,
         sellerEarnings: sellerEarnings,
@@ -1226,21 +1273,6 @@ function MessagesPage() {
       };
 
       await addDoc(collection(db, 'payments'), paymentRecord);
-
-      // Fetch buyer's complete information from Firestore
-      let buyerName = currentUser.displayName || currentUser.email;
-      let buyerEmail = currentUser.email;
-      
-      try {
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          buyerName = userData.displayName || userData.name || buyerName;
-          buyerEmail = userData.email || buyerEmail;
-        }
-      } catch (error) {
-        console.warn('Could not fetch user details:', error);
-      }
 
       // Send payment confirmation message to conversation
       const paymentMessage = {
@@ -2396,6 +2428,379 @@ Customer is done adding items. Please prepare and bag these items.`;
     );
   };
 
+  // Open refund transfer confirmation modal
+  const openRefundTransferModal = (refundData) => {
+    setPendingRefundTransfer(refundData);
+    setRefundTransferScreenshot(null);
+    setShowRefundTransferModal(true);
+  };
+
+  // Handle screenshot file selection
+  const handleScreenshotSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert('Screenshot file size must be under 5MB');
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      setRefundTransferScreenshot(file);
+    }
+  };
+
+  // Confirm refund transfer with screenshot
+  const confirmRefundTransfer = async () => {
+    if (!refundTransferScreenshot) {
+      alert('Please attach a screenshot of the transfer confirmation');
+      return;
+    }
+
+    if (!pendingRefundTransfer || !selectedConversation || !currentUser) {
+      alert('Cannot confirm transfer - invalid session');
+      return;
+    }
+
+    try {
+      setUploadingScreenshot(true);
+
+      // Upload screenshot to Firebase Storage
+      const storageRef = ref(storage, `refund-screenshots/${Date.now()}_${refundTransferScreenshot.name}`);
+      const uploadTask = await uploadBytes(storageRef, refundTransferScreenshot);
+      const screenshotUrl = await getDownloadURL(uploadTask.ref);
+
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Send confirmation to customer with screenshot
+      const transferConfirmationMessage = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `✅ REFUND TRANSFERRED!\n\nOrder ID: ${pendingRefundTransfer.orderId}\nRefund Amount: ${getCurrencySymbol(pendingRefundTransfer.currency)}${formatPrice(pendingRefundTransfer.amount, pendingRefundTransfer.currency)}\n\n💰 Your refund has been transferred to your bank account!\n\n📸 Transfer confirmation screenshot is attached below.\n\n⏱️ You should see the money in your account within 1-2 business days.\n\nThank you for your patience!`,
+        messageType: 'refund_transfer_confirmed',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          ...pendingRefundTransfer,
+          transferConfirmed: true,
+          transferConfirmedAt: new Date().toISOString(),
+          screenshotUrl: screenshotUrl,
+          customerName: pendingRefundTransfer.customerName || selectedConversation.otherUserName || 'Unknown Customer'
+        },
+        attachments: [{
+          type: 'image',
+          url: screenshotUrl,
+          name: 'Transfer Confirmation Screenshot'
+        }]
+      };
+
+      if (selectedConversation.otherUserEmail) {
+        transferConfirmationMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), transferConfirmationMessage);
+
+      // Close modal and reset states
+      setShowRefundTransferModal(false);
+      setPendingRefundTransfer(null);
+      setRefundTransferScreenshot(null);
+      setUploadingScreenshot(false);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Refund transfer confirmed and customer notified!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error confirming refund transfer:', error);
+      setUploadingScreenshot(false);
+      
+      if (error.code === 'storage/unauthorized') {
+        alert('Upload failed: You do not have permission to upload screenshots. Please contact support.');
+      } else if (error.code === 'storage/quota-exceeded') {
+        alert('Upload failed: Storage quota exceeded. Please try again later.');
+      } else if (error.code === 'storage/invalid-format') {
+        alert('Upload failed: Invalid file format. Please upload an image file.');
+      } else {
+        alert(`Failed to confirm transfer: ${error.message || 'Unknown error'}. Please try again.`);
+      }
+    }
+  };
+
+  // Refund approval functions
+  const approveRefundByCustomer = async (refundData) => {
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Send approval confirmation message
+      const approvalMessage = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `✅ REFUND APPROVED BY CUSTOMER\n\nOrder ID: ${refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundData.currency)}${formatPrice(refundData.amount, refundData.currency)}\n\n💚 Customer has confirmed they received the correct refund amount.\n\nRefund process completed successfully.`,
+        messageType: 'refund_approved_by_customer',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          ...refundData,
+          customerApproved: true,
+          customerApprovedAt: new Date().toISOString()
+        }
+      };
+
+      if (selectedConversation.otherUserEmail) {
+        approvalMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), approvalMessage);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Refund approved! Seller has been notified.`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error approving refund:', error);
+      alert('Failed to approve refund. Please try again.');
+    }
+  };
+
+  // Open complaint modal
+  const openComplaintModal = (refundData) => {
+    setPendingComplaintRefund(refundData);
+    setComplaintData({
+      email: currentUser.email || '',
+      explanation: '',
+      complaintType: 'incorrect_amount'
+    });
+    setComplaintScreenshots([]);
+    setShowComplaintModal(true);
+  };
+
+  // Handle complaint screenshot upload
+  const handleComplaintScreenshots = (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length + complaintScreenshots.length > 5) {
+      alert('You can upload maximum 5 screenshots');
+      return;
+    }
+
+    // Validate files
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        alert(`${file.name} is not an image file`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert(`${file.name} is too large. Maximum size is 5MB`);
+        return false;
+      }
+      return true;
+    });
+
+    setComplaintScreenshots(prev => [...prev, ...validFiles]);
+  };
+
+  // Remove complaint screenshot
+  const removeComplaintScreenshot = (index) => {
+    setComplaintScreenshots(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Submit complaint to admin
+  const submitComplaint = async () => {
+    if (!complaintData.email.trim()) {
+      alert('Please enter your email address');
+      return;
+    }
+    if (!complaintData.explanation.trim()) {
+      alert('Please explain what happened');
+      return;
+    }
+
+    try {
+      setSubmittingComplaint(true);
+
+      // Upload screenshots if any
+      const screenshotUrls = [];
+      for (const screenshot of complaintScreenshots) {
+        const storageRef = ref(storage, `complaint-screenshots/${Date.now()}_${screenshot.name}`);
+        const uploadTask = await uploadBytes(storageRef, screenshot);
+        const url = await getDownloadURL(uploadTask.ref);
+        screenshotUrls.push({
+          url: url,
+          name: screenshot.name
+        });
+      }
+
+      // Fetch shop information - try multiple sources
+      let shopInfo = { businessName: 'Unknown Shop', email: 'Unknown' };
+      let sellerEmail = 'Unknown';
+      try {
+        // Always try to get seller email from users collection
+        const userDoc = await getDoc(doc(db, 'users', selectedConversation.otherUserId));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          sellerEmail = userData.email || userData.userEmail || 'Unknown';
+          shopInfo = {
+            businessName: userData.storeName || userData.businessName || selectedConversation.otherUserName || 'Unknown Shop',
+            email: sellerEmail,
+            address: userData.storeLocation || userData.address || 'Unknown'
+          };
+        } else {
+          // Fallback to conversation data
+          sellerEmail = selectedConversation.otherUserEmail || selectedConversation.receiverEmail || selectedConversation.senderEmail || 'Unknown';
+          shopInfo = {
+            businessName: selectedConversation.otherUserName || 'Unknown Shop',
+            email: sellerEmail,
+            address: 'Unknown'
+          };
+        }
+      } catch (error) {
+        sellerEmail = selectedConversation.otherUserEmail || selectedConversation.receiverEmail || selectedConversation.senderEmail || 'Unknown';
+        shopInfo = {
+          businessName: selectedConversation.otherUserName || 'Unknown Shop',
+          email: sellerEmail,
+          address: 'Unknown'
+        };
+      }
+
+      // Create complaint record for admin
+      const complaintRecord = {
+        complaintId: `complaint_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        customerId: currentUser.uid,
+        customerEmail: complaintData.email,
+        customerName: currentUser.displayName || currentUser.email,
+        refundData: pendingComplaintRefund,
+        complaintType: complaintData.complaintType,
+        explanation: complaintData.explanation,
+        screenshots: screenshotUrls,
+        status: 'pending_review',
+        submittedAt: new Date().toISOString(),
+        timestamp: serverTimestamp(),
+        conversationId: selectedConversation.id || 
+          [currentUser.uid, selectedConversation.otherUserId].sort().join('_'),
+        sellerId: selectedConversation.otherUserId,
+        sellerName: selectedConversation.otherUserName,
+        sellerEmail: sellerEmail,
+        shopInfo: shopInfo
+      };
+
+      await addDoc(collection(db, 'admin_complaints'), complaintRecord);
+
+      // Send notification to seller about complaint
+      const sellerNotification = {
+        conversationId: selectedConversation.id || 
+          [currentUser.uid, selectedConversation.otherUserId].sort().join('_'),
+        senderId: 'system',
+        senderName: 'Admin System',
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `⚠️ REFUND COMPLAINT FILED\n\nOrder ID: ${pendingComplaintRefund.orderId}\nComplaint Type: ${complaintData.complaintType.replace('_', ' ').toUpperCase()}\n\nA customer has filed a complaint about their refund. The admin has been notified and will review this case.\n\nComplaint ID: ${complaintRecord.complaintId}`,
+        messageType: 'refund_complaint_notice',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        complaintData: complaintRecord
+      };
+
+      if (selectedConversation.otherUserEmail) {
+        sellerNotification.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), sellerNotification);
+
+      // Close modal and reset states
+      setShowComplaintModal(false);
+      setPendingComplaintRefund(null);
+      setComplaintData({
+        email: '',
+        explanation: '',
+        complaintType: 'incorrect_amount'
+      });
+      setComplaintScreenshots([]);
+      setSubmittingComplaint(false);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `📧 Complaint submitted to admin. You will receive an email response within 24-48 hours.`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #F59E0B;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        max-width: 300px;
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 5000);
+
+    } catch (error) {
+      console.error('Error submitting complaint:', error);
+      setSubmittingComplaint(false);
+      
+      if (error.code === 'storage/unauthorized') {
+        alert('Upload failed: Storage permission denied. Please contact support.');
+      } else {
+        alert(`Failed to submit complaint: ${error.message || 'Unknown error'}. Please try again.`);
+      }
+    }
+  };
+
   // Helper function to check if current time is within delivery window
   const isWithinDeliveryWindow = (deliverySettings, scheduledDateTime) => {
     if (!deliverySettings) return false;
@@ -2623,7 +3028,6 @@ Customer is done adding items. Please prepare and bag these items.`;
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        receiverEmail: selectedConversation.otherUserEmail,
         message: customerMessage,
         messageType: 'delivery_started',
         timestamp: serverTimestamp(),
@@ -2636,6 +3040,11 @@ Customer is done adding items. Please prepare and bag these items.`;
           pickupCode: pickupCode
         }
       };
+
+      // Only add receiverEmail if it exists and is not empty
+      if (selectedConversation.otherUserEmail) {
+        deliveryMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
 
       await addDoc(collection(db, 'messages'), deliveryMessage);
 
@@ -2894,7 +3303,6 @@ Customer is done adding items. Please prepare and bag these items.`;
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        receiverEmail: selectedConversation.otherUserEmail,
         message: `✅ DELIVERY COMPLETED!\n\nOrder ID: ${orderData.orderId}\n\n📦 DELIVERED ITEMS:\n${completionOrderDetails}\n\nTotal: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\n\nYour order has been delivered successfully!\n\nThank you for your business. We hope you enjoy your order!`,
         messageType: 'delivery_completed',
         timestamp: serverTimestamp(),
@@ -2904,6 +3312,11 @@ Customer is done adding items. Please prepare and bag these items.`;
           deliveryCompleted: new Date().toISOString()
         }
       };
+
+      // Only add receiverEmail if it exists and is not empty
+      if (selectedConversation.otherUserEmail) {
+        completionMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
 
       await addDoc(collection(db, 'messages'), completionMessage);
 
@@ -3039,7 +3452,7 @@ Customer is done adding items. Please prepare and bag these items.`;
     }
   };
 
-  // Request refund (for customers)
+  // Request refund (for customers) - opens modal
   const requestRefund = async (orderData) => {
     if (!selectedConversation || !currentUser || isSeller) {
       alert('Cannot request refund - invalid session.');
@@ -3051,10 +3464,26 @@ Customer is done adding items. Please prepare and bag these items.`;
       return;
     }
 
-    const reason = prompt('Please provide a reason for the refund request:');
-    if (!reason) return;
+    // Open refund modal with order data
+    setPendingRefundOrder(orderData);
+    setRefundReason('');
+    setRefundDetails('');
+    setShowRefundModal(true);
+  };
+
+  // Process refund request from modal
+  const processRefundRequest = async () => {
+    if (!refundReason.trim()) {
+      alert('Please select a reason for the refund.');
+      return;
+    }
 
     try {
+      // Fetch buyer's complete information from Firestore
+      const buyerInfo = await fetchUserInfo(currentUser.uid);
+      const buyerName = buyerInfo.name;
+      const buyerEmail = buyerInfo.email;
+
       const conversationId = selectedConversation.id || 
         [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
 
@@ -3065,27 +3494,197 @@ Customer is done adding items. Please prepare and bag these items.`;
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        receiverEmail: selectedConversation.otherUserEmail,
-        message: `💰 REFUND REQUESTED\n\nOrder ID: ${orderData.orderId}\nReason: ${reason}\n\nCustomer has requested a refund for this order.\n\nPlease review and process the refund request.`,
+        message: `� ORDER CANCELLED & REFUND REQUESTED\n\nOrder ID: ${pendingRefundOrder.orderId}\nReason: ${refundReason}\n${refundDetails.trim() ? `Details: ${refundDetails}\n` : ''}\nCustomer has cancelled the order and requested a refund.\n\nPlease review and process the refund request.`,
         messageType: 'refund_requested',
         timestamp: serverTimestamp(),
         isRead: false,
         orderData: {
-          ...orderData,
-          refundReason: reason,
-          refundRequestedAt: new Date().toISOString()
+          ...pendingRefundOrder,
+          refundReason: refundReason,
+          refundDetails: refundDetails,
+          refundRequestedAt: new Date().toISOString(),
+          orderCancelled: true
         }
       };
 
+      // Add structured refund data for UI display
+      refundMessage.refundData = {
+        orderId: pendingRefundOrder.orderId,
+        amount: pendingRefundOrder.totalAmount || pendingRefundOrder.total || pendingRefundOrder.amount || 0,
+        currency: pendingRefundOrder.currency || 'GBP',
+        reason: refundReason,
+        details: refundDetails,
+        paymentMethod: pendingRefundOrder.paymentMethod || 
+                      pendingRefundOrder.displayInfo?.paymentMethod || 
+                      pendingRefundOrder.method || 
+                      'unknown',
+        requiresStripeRefund: (function() {
+          const paymentMethod = pendingRefundOrder.paymentMethod || 
+                               pendingRefundOrder.displayInfo?.paymentMethod || 
+                               pendingRefundOrder.method || 
+                               'unknown';
+          return paymentMethod !== 'bank_transfer' && paymentMethod !== 'unknown';
+        })(),
+        refundRequestedAt: new Date().toISOString(),
+        orderCancelled: true,
+        customerName: buyerName
+      };
+
+      // Only add paymentIntentId if it exists and is not undefined
+      const paymentIntentId = pendingRefundOrder.paymentIntentId || 
+                             pendingRefundOrder.stripePaymentIntentId ||
+                             pendingRefundOrder.displayInfo?.paymentIntentId;
+      if (paymentIntentId) {
+        refundMessage.refundData.paymentIntentId = paymentIntentId;
+      }
+
+      // Add other order data fields that exist
+      Object.keys(pendingRefundOrder).forEach(key => {
+        if (pendingRefundOrder[key] !== undefined && pendingRefundOrder[key] !== null && !refundMessage.refundData.hasOwnProperty(key)) {
+          refundMessage.refundData[key] = pendingRefundOrder[key];
+        }
+      });
+
+      // Only add receiverEmail if it exists and is not empty
+      const receiverEmail = selectedConversation.otherUserEmail;
+      if (receiverEmail) {
+        refundMessage.receiverEmail = receiverEmail;
+      }
+
       await addDoc(collection(db, 'messages'), refundMessage);
+      
+      // Automatically process the refund based on payment method
+      try {
+        const conversationId = selectedConversation.id || 
+          [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+        
+        if (refundMessage.refundData.requiresStripeRefund && refundMessage.refundData.paymentIntentId) {
+          // Automatic Stripe refund for card/digital payments
+          try {
+            const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-refund`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                paymentIntentId: refundMessage.refundData.paymentIntentId,
+                amount: refundMessage.refundData.amount,
+                currency: refundMessage.refundData.currency || 'GBP',
+                reason: 'requested_by_customer'
+              })
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+              // Send automatic approval message to customer
+              const autoApprovalMessage = {
+                conversationId: conversationId,
+                senderId: 'system',
+                senderName: 'Refund System',
+                receiverId: currentUser.uid,
+                receiverName: currentUser.displayName || currentUser.email,
+                message: `✅ REFUND PROCESSED AUTOMATICALLY\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n💳 Your money has been refunded to your original payment method!\n\n⏱️ You will receive your refund within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}\n\nThank you for using our service!`,
+                messageType: 'refund_approved',
+                timestamp: serverTimestamp(),
+                isRead: false,
+                orderData: {
+                  ...refundMessage.refundData,
+                  refundApproved: true,
+                  refundAmount: refundMessage.refundData.amount,
+                  refundProcessedAt: new Date().toISOString(),
+                  stripeRefundId: result.refundId,
+                  customerName: refundMessage.refundData.customerName
+                }
+              };
+
+              if (selectedConversation.otherUserEmail) {
+                autoApprovalMessage.receiverEmail = selectedConversation.otherUserEmail;
+              }
+
+              await addDoc(collection(db, 'messages'), autoApprovalMessage);
+            }
+          } catch (stripeError) {
+            console.error('Automatic Stripe refund failed:', stripeError);
+            // Fall back to manual notification if auto-refund fails
+          }
+        } else {
+          // Bank transfer - send notification to seller about manual refund
+          const manualRefundNotice = {
+            conversationId: conversationId,
+            senderId: 'system',
+            senderName: 'Refund System',
+            receiverId: selectedConversation.otherUserId,
+            receiverName: selectedConversation.otherUserName,
+            message: `🏦 MANUAL REFUND REQUIRED\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\nCustomer: ${buyerName}\n\n💰 Please transfer the refund amount manually from your bank account to the customer.\n\n📸 IMPORTANT: After completing the transfer, you MUST click "Refund Transferred" and attach a screenshot of the transfer confirmation as proof.\n\nThe customer will receive an approval message with your screenshot once you confirm the transfer.`,
+            messageType: 'manual_refund_notice',
+            timestamp: serverTimestamp(),
+            isRead: false,
+            orderData: {
+              ...refundMessage.refundData,
+              refundApproved: true,
+              refundAmount: refundMessage.refundData.amount,
+              manualRefundRequired: true,
+              notifiedAt: new Date().toISOString(),
+              awaitingTransferConfirmation: true,
+              customerName: refundMessage.refundData.customerName
+            }
+          };
+
+          if (selectedConversation.otherUserEmail) {
+            manualRefundNotice.receiverEmail = selectedConversation.otherUserEmail;
+          }
+
+          await addDoc(collection(db, 'messages'), manualRefundNotice);
+
+          // Also send confirmation to customer for bank transfer
+          const customerNotice = {
+            conversationId: conversationId,
+            senderId: 'system',
+            senderName: 'Refund System',
+            receiverId: currentUser.uid,
+            receiverName: currentUser.displayName || currentUser.email,
+            message: `✅ REFUND APPROVED\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n🏦 Since this was paid by bank transfer, the seller will transfer the refund manually to your bank account.\n\n📱 You will receive an approval message with a screenshot confirmation once the seller completes the transfer.\n\nExpected timeframe: 1-2 business days`,
+            messageType: 'refund_approved',
+            timestamp: serverTimestamp(),
+            isRead: false,
+            orderData: {
+              ...refundMessage.refundData,
+              refundApproved: true,
+              refundAmount: refundMessage.refundData.amount,
+              manualRefundNotified: true,
+              approvedAt: new Date().toISOString(),
+              awaitingTransferConfirmation: true,
+              customerName: refundMessage.refundData.customerName
+            }
+          };
+
+          if (currentUser.email) {
+            customerNotice.receiverEmail = currentUser.email;
+          }
+
+          await addDoc(collection(db, 'messages'), customerNotice);
+        }
+      } catch (autoRefundError) {
+        console.error('Auto-refund processing error:', autoRefundError);
+        // Continue with the original flow if auto-processing fails
+      }
+      
+      // Close modal and reset states
+      setShowRefundModal(false);
+      setPendingRefundOrder(null);
+      setRefundReason('');
+      setRefundDetails('');
 
       const notification = document.createElement('div');
-      notification.innerHTML = `💰 Refund request sent to seller.`;
+      notification.innerHTML = refundMessage.refundData.requiresStripeRefund 
+        ? `✅ Order cancelled and refund processing automatically!`
+        : `✅ Order cancelled and seller notified to process manual refund!`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #3B82F6;
+        background: #10B981;
         color: white;
         padding: 1rem;
         border-radius: 8px;
@@ -3104,6 +3703,197 @@ Customer is done adding items. Please prepare and bag these items.`;
     } catch (error) {
       console.error('Error requesting refund:', error);
       alert('Failed to request refund. Please try again.');
+    }
+  };
+
+  // Approve refund (for sellers)
+  const approveRefund = async (refundOrderData, refundAmount) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot approve refund - invalid session.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      const isStripePayment = refundOrderData.requiresStripeRefund;
+      
+      if (isStripePayment) {
+        // For Stripe payments, process actual refund
+        try {
+          // Call backend to process Stripe refund
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/process-refund`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              paymentIntentId: refundOrderData.paymentIntentId,
+              amount: refundAmount,
+              currency: refundOrderData.currency || 'GBP',
+              reason: 'requested_by_customer'
+            })
+          });
+
+          const result = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(result.error || 'Failed to process refund');
+          }
+
+          const approvalMessage = {
+            conversationId: conversationId,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName || currentUser.email,
+            senderEmail: currentUser.email,
+            receiverId: selectedConversation.otherUserId,
+            receiverName: selectedConversation.otherUserName,
+                message: `✅ REFUND APPROVED & PROCESSED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}\n\n💳 Your refund has been processed by Stripe and will appear in your bank account within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}`,
+            messageType: 'refund_approved',
+            timestamp: serverTimestamp(),
+            isRead: false,
+            orderData: {
+              ...refundOrderData,
+              refundApproved: true,
+              refundAmount: refundAmount,
+              refundProcessedAt: new Date().toISOString(),
+              stripeRefundId: result.refundId
+            }
+          };
+
+          // Only add receiverEmail if it exists and is not empty
+          if (selectedConversation.otherUserEmail) {
+            approvalMessage.receiverEmail = selectedConversation.otherUserEmail;
+          }
+
+          await addDoc(collection(db, 'messages'), approvalMessage);
+
+        } catch (stripeError) {
+          console.error('Error processing Stripe refund:', stripeError);
+          alert('Failed to process Stripe refund: ' + stripeError.message);
+          return;
+        }
+
+      } else {
+        // For bank transfer, just send approval message
+        const approvalMessage = {
+          conversationId: conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: selectedConversation.otherUserId,
+          receiverName: selectedConversation.otherUserName,
+            message: `✅ REFUND APPROVED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}\n\n🏦 Since this was paid by bank transfer, please handle the refund directly. You can transfer the money back to the customer's account or arrange an alternative refund method.`,
+          messageType: 'refund_approved',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          orderData: {
+            ...refundOrderData,
+            refundApproved: true,
+            refundAmount: refundAmount,
+            refundApprovedAt: new Date().toISOString()
+          }
+        };
+
+        // Only add receiverEmail if it exists and is not empty
+        if (selectedConversation.otherUserEmail) {
+          approvalMessage.receiverEmail = selectedConversation.otherUserEmail;
+        }
+
+        await addDoc(collection(db, 'messages'), approvalMessage);
+      }
+
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Refund approved and ${isStripePayment ? 'processed automatically' : 'awaiting manual processing'}.`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #22C55E;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 4000);
+
+    } catch (error) {
+      console.error('Error approving refund:', error);
+      alert('Failed to approve refund. Please try again.');
+    }
+  };
+
+  // Deny refund (for sellers)
+  const denyRefund = async (refundOrderData, reason) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot deny refund - invalid session.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      const denialMessage = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `❌ REFUND DENIED\n\nOrder ID: ${refundOrderData.orderId}\nReason: ${reason}\n\nYour refund request has been denied by the seller. If you disagree with this decision, please contact customer support.`,
+        messageType: 'refund_denied',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          ...refundOrderData,
+          refundDenied: true,
+          refundDenialReason: reason,
+          refundDeniedAt: new Date().toISOString()
+        }
+      };
+
+      // Only add receiverEmail if it exists and is not empty
+      if (selectedConversation.otherUserEmail) {
+        denialMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), denialMessage);
+
+      const notification = document.createElement('div');
+      notification.innerHTML = `❌ Refund request denied.`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #EF4444;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error denying refund:', error);
+      alert('Failed to deny refund. Please try again.');
     }
   };
 
@@ -3293,7 +4083,6 @@ Please proceed with payment to complete your order.`;
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        receiverEmail: selectedConversation.otherUserEmail,
         message: baggedMessage,
         timestamp: serverTimestamp(),
         isRead: false,
@@ -3653,6 +4442,70 @@ Please proceed with payment to complete your order.`;
                                 <div className="message-text">
                                   {message.message}
                                 </div>
+                                
+                                {/* Render attachments if they exist */}
+                                {message.attachments && message.attachments.length > 0 && (
+                                  <div className="message-attachments">
+                                    {message.attachments.map((attachment, index) => (
+                                      <div key={index} className="attachment">
+                                        {attachment.type === 'image' ? (
+                                          <div className="image-attachment">
+                                            <img 
+                                              src={attachment.url} 
+                                              alt={attachment.name || 'Attachment'}
+                                              className="attachment-image"
+                                              style={{
+                                                maxWidth: '100%',
+                                                width: '280px',
+                                                height: 'auto',
+                                                borderRadius: '8px',
+                                                marginTop: '10px',
+                                                cursor: 'pointer',
+                                                border: '1px solid #e0e0e0',
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                              }}
+                                              onClick={() => window.open(attachment.url, '_blank')}
+                                              onError={(e) => {
+                                                e.target.style.display = 'none';
+                                                e.target.nextSibling.textContent = '❌ Image failed to load';
+                                              }}
+                                            />
+                                            <p className="attachment-name" style={{
+                                              fontSize: '12px',
+                                              color: '#666',
+                                              marginTop: '5px',
+                                              fontStyle: 'italic',
+                                              textAlign: 'center'
+                                            }}>
+                                              📸 {attachment.name || 'Image'} (Click to view full size)
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <div className="file-attachment">
+                                            <a 
+                                              href={attachment.url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="attachment-link"
+                                              style={{
+                                                color: '#007bff',
+                                                textDecoration: 'none',
+                                                padding: '8px 12px',
+                                                border: '1px solid #007bff',
+                                                borderRadius: '4px',
+                                                display: 'inline-block',
+                                                marginTop: '10px'
+                                              }}
+                                            >
+                                              📎 {attachment.name || 'Download File'}
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
                                 {message.senderId === currentUser.uid && (
                                   <button
                                     onClick={() => deleteMessage(message.id)}
@@ -3747,7 +4600,7 @@ Please proceed with payment to complete your order.`;
                                       onClick={() => requestRefund(message.paymentData)}
                                       disabled={isRefundRequested(message.paymentData?.orderId)}
                                     >
-                                      {isRefundRequested(message.paymentData?.orderId) ? '💰 Refund Requested' : '💰 Request Refund'}
+                                      {isRefundRequested(message.paymentData?.orderId) ? '� Refund Requested' : '� Cancel & Request Refund'}
                                     </button>
                                   </div>
                                 </div>
@@ -3813,7 +4666,7 @@ Please proceed with payment to complete your order.`;
                                           onClick={() => requestRefund(message.orderData)}
                                           disabled={isRefundRequested(message.orderData?.orderId)}
                                         >
-                                          {isRefundRequested(message.orderData?.orderId) ? '💰 Refund Requested' : '💰 Request Refund'}
+                                          {isRefundRequested(message.orderData?.orderId) ? '� Refund Requested' : '� Cancel & Request Refund'}
                                         </button>
                                       </div>
                                     </div>
@@ -3893,6 +4746,161 @@ Please proceed with payment to complete your order.`;
                                       </button>
                                     );
                                   })()}
+                                </div>
+                              )}
+
+                              {/* Refund approval buttons for sellers when they receive refund requests */}
+                              {message.messageType === 'refund_requested' && message.receiverId === currentUser?.uid && isSeller && (
+                                <div className="message-actions">
+                                  <div className="refund-request-header">
+                                    <strong>🔄 Refund Request</strong>
+                                    <div className="refund-details">
+                                      {message.refundData?.reason && (
+                                        <div className="refund-reason">
+                                          <strong>Reason:</strong> {message.refundData.reason}
+                                        </div>
+                                      )}
+                                      {message.refundData?.details && (
+                                        <div className="refund-details-text">
+                                          <strong>Details:</strong> {message.refundData.details}
+                                        </div>
+                                      )}
+                                      <div className="refund-amount">
+                                        <strong>Amount:</strong> {getCurrencySymbol(message.refundData?.currency || 'GBP')}{formatPrice(message.refundData?.amount || 0, message.refundData?.currency || 'GBP')}
+                                      </div>
+                                      <div className="refund-payment-method">
+                                        <strong>Payment Method:</strong> {
+                                          message.refundData?.paymentMethod === 'card' ? '💳 Card Payment' :
+                                          message.refundData?.paymentMethod === 'google_pay' ? '📱 Google Pay' :
+                                          message.refundData?.paymentMethod === 'apple_pay' ? '🍎 Apple Pay' :
+                                          message.refundData?.paymentMethod === 'bank_transfer' ? '🏦 Bank Transfer' :
+                                          '❓ Unknown'
+                                        }
+                                      </div>
+                                      {message.refundData?.requiresStripeRefund ? (
+                                        <div className="refund-note">
+                                          <p><strong>💳 Automatic Refund:</strong> This payment will be automatically refunded to the customer's payment method. Refunds typically appear within 2-5 business days depending on the customer's bank.</p>
+                                        </div>
+                                      ) : (
+                                        <div className="refund-note">
+                                          <p><strong>🏦 Manual Refund Required:</strong> This was paid by bank transfer. You will need to send the refund manually from your bank account to the customer.</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Refund Transfer Confirmation button for sellers on manual refund notices */}
+                              {message.messageType === 'manual_refund_notice' && message.receiverId === currentUser?.uid && isSeller && message.orderData?.awaitingTransferConfirmation && (
+                                <div className="message-actions">
+                                  <div className="refund-transfer-notice">
+                                    <strong>🏦 Manual Refund Required</strong>
+                                    <div className="refund-details">
+                                      <div className="refund-amount">
+                                        <strong>Amount:</strong> {getCurrencySymbol(message.orderData?.currency || 'GBP')}{formatPrice(message.orderData?.refundAmount || 0, message.orderData?.currency || 'GBP')}
+                                      </div>
+                                      <div className="refund-customer">
+                                        <strong>Customer:</strong> {
+                                          message.orderData?.customerName || 
+                                          message.refundData?.customerName || 
+                                          selectedConversation?.otherUserName || 
+                                          'Unknown Customer'
+                                        }
+                                      </div>
+                                      <div className="refund-instructions">
+                                        <p><strong>📋 Instructions:</strong></p>
+                                        <p>1. Transfer the refund amount to the customer's bank account</p>
+                                        <p>2. Take a screenshot of the transfer confirmation</p>
+                                        <p>3. Click "Refund Transferred" and attach the screenshot</p>
+                                      </div>
+                                    </div>
+                                    <button 
+                                      className="action-btn transfer-confirm-btn"
+                                      onClick={() => openRefundTransferModal(message.orderData)}
+                                      style={{
+                                        backgroundColor: '#10B981',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        width: '100%',
+                                        marginTop: '12px'
+                                      }}
+                                    >
+                                      📸 Refund Transferred (Attach Screenshot)
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Refund approval/complaint buttons for customers on refund transfer confirmations */}
+                              {message.messageType === 'refund_transfer_confirmed' && !message.orderData?.customerApproved && (
+                                <div className="message-actions">
+                                  <div className="refund-approval-section">
+                                    <div className="approval-header">
+                                      <strong>💰 Please confirm your refund receipt:</strong>
+                                    </div>
+                                    <div className="approval-info">
+                                      <p>Expected Amount: <strong>{getCurrencySymbol(message.orderData?.currency || 'GBP')}{formatPrice(message.orderData?.amount || 0, message.orderData?.currency || 'GBP')}</strong></p>
+                                      <p>Have you received the correct refund amount in your bank account?</p>
+                                    </div>
+                                    <div className="approval-buttons" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                                      <button 
+                                        className="action-btn approve-btn"
+                                        onClick={() => approveRefundByCustomer(message.orderData)}
+                                        style={{
+                                          backgroundColor: '#10B981',
+                                          color: 'white',
+                                          border: 'none',
+                                          padding: '12px 20px',
+                                          borderRadius: '8px',
+                                          fontWeight: '600',
+                                          cursor: 'pointer',
+                                          flex: '1'
+                                        }}
+                                      >
+                                        ✅ Yes, Received Correctly
+                                      </button>
+                                      <button 
+                                        className="action-btn complaint-btn"
+                                        onClick={() => openComplaintModal(message.orderData)}
+                                        style={{
+                                          backgroundColor: '#EF4444',
+                                          color: 'white',
+                                          border: 'none',
+                                          padding: '12px 20px',
+                                          borderRadius: '8px',
+                                          fontWeight: '600',
+                                          cursor: 'pointer',
+                                          flex: '1'
+                                        }}
+                                      >
+                                        ❌ Issue/Complaint
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Show approval confirmation if customer already approved */}
+                              {message.messageType === 'refund_transfer_confirmed' && message.orderData?.customerApproved && (
+                                <div className="approval-confirmed">
+                                  <div style={{
+                                    backgroundColor: '#F0FDF4',
+                                    border: '1px solid #10B981',
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    marginTop: '10px',
+                                    textAlign: 'center'
+                                  }}>
+                                    <strong style={{ color: '#10B981' }}>✅ Refund Approved by Customer</strong>
+                                    <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#059669' }}>
+                                      Customer confirmed receipt of correct amount
+                                    </p>
+                                  </div>
                                 </div>
                               )}
                               
@@ -5130,6 +6138,342 @@ Please proceed with payment to complete your order.`;
                     📱 Go to Wallet to Validate Code
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Request Modal */}
+      {showRefundModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowRefundModal(false)}>
+          <div className="payment-modal refund-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-header">
+              <h2>🚫 Cancel Order & Request Refund</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowRefundModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-content">
+              <div className="refund-form">
+                {pendingRefundOrder && (
+                  <div className="order-summary-box">
+                    <h4>Order to Cancel:</h4>
+                    <p><strong>Order ID:</strong> {pendingRefundOrder.orderId}</p>
+                    <p><strong>Total:</strong> {getCurrencySymbol(pendingRefundOrder.currency)}{formatPrice(pendingRefundOrder.totalAmount, pendingRefundOrder.currency)}</p>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label htmlFor="refundReason">Reason for cancellation & refund: *</label>
+                  <select 
+                    id="refundReason"
+                    value={refundReason} 
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    className="refund-select"
+                  >
+                    <option value="">Select a reason...</option>
+                    <option value="Items damaged">Items damaged during delivery</option>
+                    <option value="No longer want items">No longer want the items</option>
+                    <option value="Wrong items received">Wrong items received</option>
+                    <option value="Items not as described">Items not as described</option>
+                    <option value="Delivery took too long">Delivery took too long</option>
+                    <option value="Changed my mind">Changed my mind</option>
+                    <option value="Found better price elsewhere">Found better price elsewhere</option>
+                    <option value="Quality not satisfactory">Quality not satisfactory</option>
+                    <option value="Other">Other reason</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="refundDetails">Additional details (optional):</label>
+                  <textarea 
+                    id="refundDetails"
+                    value={refundDetails} 
+                    onChange={(e) => setRefundDetails(e.target.value)}
+                    className="refund-textarea"
+                    placeholder="Please provide any additional details about your refund request..."
+                    rows="4"
+                  />
+                </div>
+
+                <div className="refund-warning">
+                  <p>⚠️ <strong>Warning:</strong> This will cancel your order and send a refund request to the seller. This action cannot be undone.</p>
+                </div>
+
+                <div className="modal-actions">
+                  <button 
+                    className="cancel-btn"
+                    onClick={() => setShowRefundModal(false)}
+                  >
+                    Keep Order
+                  </button>
+                  <button 
+                    className="confirm-payment-btn refund-request-btn"
+                    onClick={processRefundRequest}
+                    disabled={!refundReason.trim()}
+                  >
+                    🚫 Cancel Order & Request Refund
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Transfer Confirmation Modal */}
+      {showRefundTransferModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowRefundTransferModal(false)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📸 Confirm Refund Transfer</h2>
+              <button 
+                className="close-btn"
+                onClick={() => setShowRefundTransferModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal-content">
+              <div className="refund-transfer-info">
+                <div className="transfer-details">
+                  <p><strong>Order ID:</strong> {pendingRefundTransfer?.orderId}</p>
+                  <p><strong>Refund Amount:</strong> {getCurrencySymbol(pendingRefundTransfer?.currency || 'GBP')}{formatPrice(pendingRefundTransfer?.refundAmount || 0, pendingRefundTransfer?.currency || 'GBP')}</p>
+                  <p><strong>Customer:</strong> {pendingRefundTransfer?.customerName || selectedConversation?.otherUserName || 'Unknown Customer'}</p>
+                </div>
+
+                <div className="screenshot-upload">
+                  <label htmlFor="refund-screenshot" className="upload-label">
+                    <strong>📸 Upload Transfer Screenshot (Required)</strong>
+                    <p>Please attach a screenshot of your bank transfer confirmation</p>
+                  </label>
+                  <input
+                    id="refund-screenshot"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScreenshotSelect}
+                    className="screenshot-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px dashed #ccc',
+                      borderRadius: '8px',
+                      marginTop: '8px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  {refundTransferScreenshot && (
+                    <div className="selected-file" style={{ marginTop: '8px', color: '#10B981', fontWeight: '600' }}>
+                      ✅ Selected: {refundTransferScreenshot.name}
+                    </div>
+                  )}
+                </div>
+
+                <div className="transfer-instructions">
+                  <p><strong>⚠️ Important:</strong></p>
+                  <ul style={{ paddingLeft: '20px', marginTop: '8px' }}>
+                    <li>Make sure you have transferred the exact refund amount</li>
+                    <li>The screenshot must clearly show the transfer confirmation</li>
+                    <li>This confirms to the customer that their refund has been sent</li>
+                    <li>Screenshot files must be under 5MB</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button 
+                  className="cancel-btn"
+                  onClick={() => setShowRefundTransferModal(false)}
+                  disabled={uploadingScreenshot}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="confirm-payment-btn transfer-confirm-btn"
+                  onClick={confirmRefundTransfer}
+                  disabled={!refundTransferScreenshot || uploadingScreenshot}
+                  style={{
+                    backgroundColor: refundTransferScreenshot ? '#10B981' : '#ccc',
+                    opacity: uploadingScreenshot ? 0.7 : 1
+                  }}
+                >
+                  {uploadingScreenshot ? '📤 Uploading...' : '✅ Confirm Transfer & Notify Customer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Complaint Modal */}
+      {showComplaintModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowComplaintModal(false)}>
+          <div className="payment-modal complaint-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-modal-content">
+              <div className="modal-header">
+                <h3>📧 File Refund Complaint</h3>
+                <button 
+                  className="close-modal"
+                  onClick={() => setShowComplaintModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="modal-content">
+                <div className="complaint-info">
+                  <div className="refund-details">
+                    <p><strong>Order ID:</strong> {pendingComplaintRefund?.orderId}</p>
+                    <p><strong>Expected Amount:</strong> {getCurrencySymbol(pendingComplaintRefund?.currency || 'GBP')}{formatPrice(pendingComplaintRefund?.amount || 0, pendingComplaintRefund?.currency || 'GBP')}</p>
+                  </div>
+
+                  <div className="complaint-form">
+                    <div className="form-group">
+                      <label htmlFor="complaint-email"><strong>Your Email Address:</strong></label>
+                      <input
+                        id="complaint-email"
+                        type="email"
+                        value={complaintData.email}
+                        onChange={(e) => setComplaintData(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="Enter your email for response"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          marginTop: '5px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px'
+                        }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '15px' }}>
+                      <label htmlFor="complaint-type"><strong>Issue Type:</strong></label>
+                      <select
+                        id="complaint-type"
+                        value={complaintData.complaintType}
+                        onChange={(e) => setComplaintData(prev => ({ ...prev, complaintType: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          marginTop: '5px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        <option value="incorrect_amount">Incorrect refund amount</option>
+                        <option value="not_received">Haven't received refund</option>
+                        <option value="other">Other issue</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '15px' }}>
+                      <label htmlFor="complaint-explanation"><strong>Explain what happened:</strong></label>
+                      <textarea
+                        id="complaint-explanation"
+                        value={complaintData.explanation}
+                        onChange={(e) => setComplaintData(prev => ({ ...prev, explanation: e.target.value }))}
+                        placeholder="Please provide details about the issue with your refund..."
+                        rows={4}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          marginTop: '5px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginTop: '15px' }}>
+                      <label htmlFor="complaint-screenshots"><strong>Screenshots (Optional, max 5):</strong></label>
+                      <input
+                        id="complaint-screenshots"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleComplaintScreenshots}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          marginTop: '5px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px'
+                        }}
+                      />
+                      
+                      {complaintScreenshots.length > 0 && (
+                        <div className="screenshot-preview" style={{ marginTop: '10px' }}>
+                          <p style={{ fontSize: '14px', color: '#666' }}>Selected files:</p>
+                          {complaintScreenshots.map((file, index) => (
+                            <div key={index} style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center',
+                              padding: '5px 0',
+                              borderBottom: '1px solid #eee'
+                            }}>
+                              <span style={{ fontSize: '14px' }}>{file.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeComplaintScreenshot(index)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{
+                display: 'flex',
+                gap: '10px',
+                marginTop: '20px',
+                justifyContent: 'flex-end'
+              }}>
+                <button 
+                  className="cancel-payment-btn"
+                  onClick={() => setShowComplaintModal(false)}
+                  style={{
+                    backgroundColor: '#6B7280',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="confirm-payment-btn submit-complaint-btn"
+                  onClick={submitComplaint}
+                  disabled={!complaintData.email.trim() || !complaintData.explanation.trim() || submittingComplaint}
+                  style={{
+                    backgroundColor: complaintData.email.trim() && complaintData.explanation.trim() ? '#EF4444' : '#ccc',
+                    opacity: submittingComplaint ? 0.7 : 1
+                  }}
+                >
+                  {submittingComplaint ? '📧 Submitting...' : '📧 Submit Complaint to Admin'}
+                </button>
               </div>
             </div>
           </div>
@@ -6730,6 +8074,64 @@ Please proceed with payment to complete your order.`;
           font-weight: 500;
         }
 
+        /* Refund approval styles */
+        .refund-request-header {
+          margin-bottom: 0.75rem;
+          padding: 0.75rem;
+          background: #fef3f3;
+          border: 1px solid #f87171;
+          border-radius: 8px;
+        }
+
+        .refund-request-header strong {
+          color: #dc2626;
+          font-size: 0.95rem;
+        }
+
+        .refund-details {
+          margin-top: 0.5rem;
+          font-size: 0.85rem;
+          color: #374151;
+        }
+
+        .refund-reason, .refund-details-text, .refund-amount {
+          margin: 0.25rem 0;
+        }
+
+        .refund-amount {
+          font-weight: 600;
+          color: #dc2626;
+        }
+
+        .refund-actions {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+
+        .refund-actions .action-btn {
+          flex: 1;
+          min-width: 120px;
+        }
+
+        .approve-refund-btn {
+          background: #16a34a !important;
+          color: white !important;
+        }
+
+        .approve-refund-btn:hover {
+          background: #15803d !important;
+        }
+
+        .deny-refund-btn {
+          background: #dc2626 !important;
+          color: white !important;
+        }
+
+        .deny-refund-btn:hover {
+          background: #b91c1c !important;
+        }
+
         /* Collapsible cart sections */
         .cart-section {
           border-bottom: 1px solid #e5e7eb;
@@ -7838,7 +9240,111 @@ Please proceed with payment to complete your order.`;
           background: #005a5d;
         }
 
+        /* Refund Modal Styles */
+        .refund-modal {
+          max-width: 550px;
+          width: 90%;
+        }
+
+        .refund-form {
+          padding: 1rem 0;
+        }
+
+        .form-group {
+          margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+          display: block;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 0.5rem;
+          font-size: 0.95rem;
+        }
+
+        .refund-select {
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          font-size: 1rem;
+          background: white;
+          color: #374151;
+          cursor: pointer;
+          transition: border-color 0.2s;
+        }
+
+        .refund-select:focus {
+          outline: none;
+          border-color: #EF4444;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }
+
+        .refund-textarea {
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-family: inherit;
+          resize: vertical;
+          min-height: 100px;
+          transition: border-color 0.2s;
+        }
+
+        .refund-textarea:focus {
+          outline: none;
+          border-color: #EF4444;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }
+
+        .refund-warning {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          padding: 1rem;
+          margin: 1.5rem 0;
+        }
+
+        .refund-warning p {
+          margin: 0;
+          color: #dc2626;
+          font-size: 0.9rem;
+          line-height: 1.4;
+        }
+
+        .modal-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          margin-top: 2rem;
+          padding-top: 1rem;
+          border-top: 1px solid #e5e7eb;
+        }
+
+        .refund-request-btn {
+          background: #EF4444;
+          color: white;
+          font-size: 1rem;
+          padding: 0.75rem 1.5rem;
+          min-width: 200px;
+        }
+
+        .refund-request-btn:hover:not(:disabled) {
+          background: #dc2626;
+        }
+
+        .refund-request-btn:disabled {
+          background: #d1d5db;
+          color: #9ca3af;
+          cursor: not-allowed;
+        }
+
         @media (max-width: 640px) {
+          .modal-actions {
+            flex-direction: column;
+          }
+          
           .confirmation-actions {
             flex-direction: column;
             gap: 0.75rem;

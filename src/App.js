@@ -21,6 +21,10 @@ import StoreReviewPreviewPage from './pages/StoreReviewPreviewPage';
 import MessagesPage from './pages/MessagesPage';
 import { CartProvider } from './CartContext';
 import ShopCartPage from './pages/ShopCartPage';
+import ReportsPage from './pages/ReportsPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminSetupPage from './pages/AdminSetupPage';
 import { useEffect } from 'react';
 import { getAuth } from 'firebase/auth';
 import { db } from './firebase';
@@ -88,6 +92,10 @@ function App() {
                 <Route path="/store-review-preview/:storeId" element={<StoreReviewPreviewPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/shop-cart" element={<ShopCartPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/admin-setup" element={<AdminSetupPage />} />
+                <Route path="/admin-login" element={<AdminLoginPage />} />
+                <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
               </Routes>
             </div>
             <style>{`

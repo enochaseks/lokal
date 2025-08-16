@@ -140,8 +140,14 @@ function Navbar() {
           {user && (
             <button onClick={() => { setSidebarOpen(false); navigate('/messages'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Messages</button>
           )}
+          {user && userType === 'seller' && (
+            <button onClick={() => { setSidebarOpen(false); navigate('/reports'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Reports</button>
+          )}
           {!user ? (
-            <a href="/about" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>About</a>
+            <>
+              <a href="/about" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>About</a>
+              <a href="/admin-login" style={{ color: '#DC2626', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>🛡️ Admin Login</a>
+            </>
           ) : (
             <>
               <Link to="/explore" onClick={() => setSidebarOpen(false)} style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Explore</Link>
