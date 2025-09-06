@@ -79,8 +79,8 @@ function CreateShopPage() {
       return;
     }
 
-    if (deliveryType === 'Delivery' && paymentType === 'Other') {
-      alert("'Pay at Store' is not available with 'Delivery'. Please choose another payment method.");
+    if ((deliveryType === 'Delivery' || deliveryType === 'Collection') && paymentType === 'Other') {
+      alert("'Pay at Store' is only available with 'Pay At Store' delivery type. Please choose another payment method or change delivery type.");
       return;
     }
 
@@ -282,6 +282,9 @@ function CreateShopPage() {
                 if (newDeliveryType === 'Delivery' && paymentType === 'Other') {
                   setPaymentType(''); // Reset payment type if it was 'Pay at Store'
                 }
+                if (newDeliveryType === 'Pay At Store') {
+                  setPaymentType('Other'); // Automatically set to 'Pay at Store' payment type
+                }
                 setHasOwnDelivery('');
                 setShowDeliveryMsg(false);
               }}
@@ -289,6 +292,7 @@ function CreateShopPage() {
             >
               <option value="Collection">Collection</option>
               <option value="Delivery">Delivery</option>
+              <option value="Pay At Store">Pay At Store</option>
             </select>
           </div>
           {deliveryType === 'Delivery' && (

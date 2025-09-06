@@ -4,6 +4,7 @@ import { app, db } from '../firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { useCart } from '../CartContext';
+import { useMessage } from '../MessageContext';
 
 function Navbar() {
   const [user, setUser] = useState(null);
@@ -12,6 +13,7 @@ function Navbar() {
   const [onboardingStep, setOnboardingStep] = useState('');
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
+  const { unreadMessageCount } = useMessage();
 
   useEffect(() => {
     const auth = getAuth(app);
@@ -138,7 +140,47 @@ function Navbar() {
           </button>
           <button onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>My Reviews</button>
           {user && (
-            <button onClick={() => { setSidebarOpen(false); navigate('/messages'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Messages</button>
+            <button 
+              onClick={() => { setSidebarOpen(false); navigate('/messages'); }} 
+              style={{ 
+                color: '#007B7F', 
+                background: 'none', 
+                border: 'none', 
+                fontWeight: 'bold', 
+                fontSize: '1.1rem', 
+                textAlign: 'center', 
+                marginBottom: 24, 
+                cursor: 'pointer',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%'
+              }}
+            >
+              Messages
+              {unreadMessageCount > 0 && (
+                <span style={{ 
+                  position: 'absolute', 
+                  top: -8, 
+                  right: 20, 
+                  background: '#D92D20', 
+                  color: '#fff', 
+                  borderRadius: '50%', 
+                  padding: '2px 6px', 
+                  fontSize: 12, 
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                </span>
+              )}
+              {console.log('🔔 Navbar - Unread count:', unreadMessageCount)}
+            </button>
           )}
           {user && userType === 'seller' && (
             <button onClick={() => { setSidebarOpen(false); navigate('/reports'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Reports</button>

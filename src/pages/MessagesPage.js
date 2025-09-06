@@ -10,11 +10,13 @@ import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
 import StripeGooglePayButton from '../components/StripeGooglePayButton';
 import BankTransferForm from '../components/BankTransferForm';
+import { useMessage } from '../MessageContext';
 
 function MessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('messages');
+  const { markMessagesAsRead } = useMessage();
   
   // Stripe Promise with Link disabled to force native wallets
   const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY, {
@@ -48,6 +50,7 @@ function MessagesPage() {
   const [storeItems, setStoreItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [storeInfo, setStoreInfo] = useState(null);
+  const [sellerStoreData, setSellerStoreData] = useState(null); // Seller's own store data
 
   // Cart states
   const [cart, setCart] = useState([]);
@@ -137,6 +140,7 @@ function MessagesPage() {
 
   // Delivery states
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [showDeliveryConfirmModal, setShowDeliveryConfirmModal] = useState(false);
   const [pendingDeliveryOrder, setPendingDeliveryOrder] = useState(null);
   const [deliverySettings, setDeliverySettings] = useState({
@@ -1524,6 +1528,7 @@ function MessagesPage() {
       serviceFee,
       total,
       currency,
+      deliveryType: isCollection ? 'Collection' : 'Delivery',
       feeBreakdown: {
         deliveryEnabled: deliveryFee > 0,
         serviceFeeEnabled: serviceFee > 0
@@ -1584,11 +1589,32 @@ function MessagesPage() {
       return;
     }
 
+    // Check if this is a collection order by looking at the store's delivery type
+    let isCollection = false;
+    let isPayAtStore = false;
+    if (storeId) {
+      try {
+        const storeDoc = await getDoc(doc(db, 'stores', storeId));
+        if (storeDoc.exists()) {
+          const storeData = storeDoc.data();
+          isCollection = storeData.deliveryType === 'Collection';
+          isPayAtStore = storeData.deliveryType === 'Collection' && storeData.paymentType === 'Other';
+          console.log('Store delivery type:', storeData.deliveryType, 'paymentType:', storeData.paymentType, 'isCollection:', isCollection, 'isPayAtStore:', isPayAtStore);
+        }
+      } catch (error) {
+        console.error('Error checking store delivery type:', error);
+      }
+    }
+
     // Calculate payment details with store-specific fees
-    // Check if any items are collection/pay at store based on delivery type
-    const isCollection = itemsToCalculate.some(item => item.deliveryType === 'Collection' || item.deliveryType === 'Pay at Store');
     const paymentDetails = await calculatePaymentDetails(itemsToCalculate, currency, storeId, isCollection);
     console.log('Payment details calculated:', paymentDetails);
+    
+    // Handle Pay At Store - skip payment modal and send order request directly
+    if (isPayAtStore) {
+      await sendPayAtStoreOrderRequest(itemsToCalculate, paymentDetails, orderId, storeId);
+      return;
+    }
     
     setPaymentData({
       ...paymentDetails,
@@ -1597,6 +1623,88 @@ function MessagesPage() {
     });
     setSelectedPaymentMethod('');
     setShowPaymentModal(true);
+  };
+
+  // Send Pay At Store order request (no payment required)
+  const sendPayAtStoreOrderRequest = async (items, paymentDetails, orderId, storeId) => {
+    try {
+      if (!selectedConversation || !currentUser) {
+        alert('Cannot send order request - invalid data.');
+        return;
+      }
+
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Format order items for display
+      const orderItemsText = items.map(item => 
+        `• ${item.name} x${item.quantity} - ${getCurrencySymbol(paymentDetails.currency)}${formatPrice(item.price * item.quantity, paymentDetails.currency)}`
+      ).join('\n');
+
+      const orderMessage = `📋 PAY AT STORE ORDER\n\nOrder ID: ${orderId}\n\n📦 ITEMS REQUESTED:\n${orderItemsText}\n\nSubtotal: ${getCurrencySymbol(paymentDetails.currency)}${formatPrice(paymentDetails.subtotal, paymentDetails.currency)}\nService Fee: ${getCurrencySymbol(paymentDetails.currency)}${formatPrice(paymentDetails.serviceFee, paymentDetails.currency)}\nTotal to Pay at Store: ${getCurrencySymbol(paymentDetails.currency)}${formatPrice(paymentDetails.total, paymentDetails.currency)}\n\n💳 PAYMENT: Customer will pay at store upon collection\n\nPlease confirm if you can fulfill this order.`;
+
+      // Send order request message
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: orderMessage,
+        messageType: 'pay_at_store_request',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          orderId: orderId,
+          items: items,
+          totalAmount: paymentDetails.total,
+          currency: paymentDetails.currency,
+          deliveryType: 'Pay At Store',
+          subtotal: paymentDetails.subtotal,
+          serviceFee: paymentDetails.serviceFee
+        }
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Clear cart and close any modals
+      setCart([]);
+      setCurrentOrderId(null);
+      setShowPaymentModal(false);
+
+      // Show success message
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Order request sent! You'll pay at the store when collecting.`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 4000);
+
+    } catch (error) {
+      console.error('Error sending Pay At Store order request:', error);
+      alert('Failed to send order request. Please try again.');
+    }
   };
 
   // Generate pickup verification code
@@ -1800,21 +1908,23 @@ function MessagesPage() {
         receiverId: selectedConversation?.otherUserId,
         receiverName: selectedConversation?.otherUserName,
         message: selectedPaymentMethod === 'bank_transfer' 
-          ? `🏦 Bank Transfer Submitted!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: Bank Transfer\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.`
+          ? `🏦 Bank Transfer Submitted!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: Bank Transfer\n\n🎫 PICKUP CODE: ${pickupCode}\n\n${paymentData.deliveryType === 'Collection' ? 'Please provide this code when collecting your order from the store.' : 'Please provide this code to the seller when they deliver your order.'}\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.`
           : `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
               selectedPaymentMethod === 'card' && paymentDetails.cardInfo ? ` (****${paymentDetails.cardInfo.last4})` : 
               selectedPaymentMethod === 'google_pay' && paymentDetails.googlePayInfo ? ` (${paymentDetails.googlePayInfo.deviceAccount})` : ''
-            }\n\n🎫 PICKUP CODE: ${pickupCode}\n\nPlease provide this code to the seller when collecting your order.\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
+            }\n\n🎫 PICKUP CODE: ${pickupCode}\n\n${paymentData.deliveryType === 'Collection' ? 'Please provide this code when collecting your order from the store.' : 'Please provide this code to the seller when they deliver your order.'}\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
         messageType: 'payment_completed',
         timestamp: serverTimestamp(),
         paymentData: {
           ...paymentRecord,
+          deliveryType: paymentData.deliveryType,
           displayInfo: {
             orderId: paymentData.orderId,
             amount: paymentData.total,
             currency: paymentData.currency,
             pickupCode: pickupCode,
-            paymentMethod: selectedPaymentMethod
+            paymentMethod: selectedPaymentMethod,
+            deliveryType: paymentData.deliveryType
           }
         }
       };
@@ -1904,12 +2014,206 @@ function MessagesPage() {
       alert(selectedPaymentMethod === 'bank_transfer'
         ? `Bank Transfer Submitted! 🏦\n\nYour pickup code is: ${pickupCode}\n\nPlease save this code and provide it to the seller when collecting your order.\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.\n\nPayment ID: ${paymentIntentId || 'N/A'}`
         : `Payment successful! 🎉\n\nYour pickup code is: ${pickupCode}\n\nPlease save this code and provide it to the seller when collecting your order.\n\nThe seller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.\n\nPayment ID: ${paymentIntentId || 'N/A'}`);
+
+      // Handle scheduling payments (collection or delivery)
+      if (paymentData.serviceType === 'collection_scheduling') {
+        await handleCollectionSchedulingPayment(paymentData);
+      } else if (paymentData.serviceType === 'delivery_scheduling') {
+        await handleDeliverySchedulingPayment(paymentData);
+      }
       
     } catch (error) {
       console.error('Payment processing error:', error);
       alert(`Payment failed: ${error.message}\n\nPlease try again.`);
     } finally {
       setPaymentProcessing(false);
+    }
+  };
+
+  // Handle collection scheduling payment completion
+  const handleCollectionSchedulingPayment = async (paymentData) => {
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Use original order data for display
+      const originalOrder = paymentData.originalOrderData;
+
+      // Generate pickup code for collection
+      const pickupCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // Format order items for collection message
+      const collectionOrderDetails = originalOrder.items?.map(item => 
+        `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(originalOrder.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), originalOrder.currency)}`
+      ).join('\n') || 'Order items not available';
+
+      const collectionMessage = `📋 COLLECTION SCHEDULED\n\nOrder ID: ${originalOrder.orderId}\n\n📦 ORDER ITEMS:\n${collectionOrderDetails}\n\nOriginal Order Total: ${getCurrencySymbol(originalOrder.currency)}${formatPrice(originalOrder.total || originalOrder.amount, originalOrder.currency)}\n\nCollection Time: ${paymentData.collectionTime}\nCollection Fee Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.collectionFee, paymentData.currency)}\n\n🎫 CUSTOMER PICKUP CODE: ${pickupCode}\n\n⚠️ IMPORTANT: Verify the pickup code when customer arrives for collection.\n\nCustomer will collect at the scheduled time. Please have the order ready.`;
+
+      // Send collection scheduled message
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: collectionMessage,
+        messageType: 'collection_scheduled',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          ...originalOrder,
+          collectionTime: paymentData.collectionTime,
+          pickupCode: pickupCode,
+          collectionFee: paymentData.collectionFee,
+          timeSlot: paymentData.timeSlot
+        }
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Send pickup code to customer
+      const customerCodeMessage = `🎫 YOUR PICKUP CODE
+
+Order ID: ${originalOrder.orderId}
+
+Your collection pickup code is: ${pickupCode}
+
+⏰ Collection Time: ${paymentData.collectionTime}
+
+💡 IMPORTANT: Present this code when you arrive to collect your order.
+
+Please arrive at your scheduled time and bring this code for verification.`;
+
+      await addDoc(collection(db, 'messages'), {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: currentUser.uid,
+        receiverName: currentUser.displayName || currentUser.email,
+        message: customerCodeMessage,
+        timestamp: serverTimestamp(),
+        isRead: true,
+        messageType: 'collection_pickup_code',
+        orderData: {
+          ...originalOrder,
+          collectionTime: paymentData.collectionTime,
+          pickupCode: pickupCode,
+          collectionFee: paymentData.collectionFee
+        }
+      });
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Collection scheduled successfully!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error handling collection scheduling payment:', error);
+    }
+  };
+
+  // Handle delivery scheduling payment completion
+  const handleDeliverySchedulingPayment = async (paymentData) => {
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Use original order data for display
+      const originalOrder = paymentData.originalOrderData;
+
+      // Format order items for delivery message
+      const deliveryOrderDetails = originalOrder.items?.map(item => 
+        `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(originalOrder.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), originalOrder.currency)}`
+      ).join('\n') || 'Order items not available';
+
+      const messagePrefix = paymentData.isReschedule ? '🔄 DELIVERY RESCHEDULED' : '📋 DELIVERY SCHEDULED';
+      let deliveryMessage = `${messagePrefix}\n\nOrder ID: ${originalOrder.orderId}\n\n📦 ORDER ITEMS:\n${deliveryOrderDetails}\n\nOriginal Order Total: ${getCurrencySymbol(originalOrder.currency)}${formatPrice(originalOrder.total || originalOrder.amount, originalOrder.currency)}\n\nDelivery Time: ${paymentData.deliveryTime}\nDelivery Fee Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.deliveryFee, paymentData.currency)}\n\nThe seller will deliver at the scheduled time.`;
+
+      if (paymentData.deliverySettings?.deliveryAddress) {
+        deliveryMessage += `\n\nDelivery Address: ${paymentData.deliverySettings.deliveryAddress}`;
+      }
+
+      if (paymentData.deliverySettings?.specialInstructions) {
+        deliveryMessage += `\n\nSpecial Instructions: ${paymentData.deliverySettings.specialInstructions}`;
+      }
+
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: deliveryMessage,
+        messageType: paymentData.isReschedule ? 'delivery_rescheduled' : 'delivery_scheduled',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: {
+          ...originalOrder,
+          deliverySettings: paymentData.deliverySettings,
+          deliveryFee: paymentData.deliveryFee,
+          scheduledDateTime: paymentData.scheduledDateTime,
+          isReschedule: paymentData.isReschedule
+        }
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = paymentData.isReschedule ? `🔄 Delivery rescheduled successfully!` : `📋 Delivery scheduled successfully!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #22C55E;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error handling delivery scheduling payment:', error);
     }
   };
 
@@ -1980,11 +2284,19 @@ function MessagesPage() {
       if (!confirmPickup) return;
 
       // Update transaction status
-      await updateDoc(doc(db, 'transactions', transactionDoc.id), {
+      const updateData = {
         pickupStatus: 'collected',
         collectedAt: serverTimestamp(),
         collectedBy: currentUser.uid
-      });
+      };
+
+      // For Pay At Store transactions, also mark payment as completed
+      if (transactionData.type === 'pay_at_store') {
+        updateData.status = 'completed';
+        updateData.paymentReceivedAt = serverTimestamp();
+      }
+
+      await updateDoc(doc(db, 'transactions', transactionDoc.id), updateData);
 
       // Update payment record
       const paymentsQuery = query(
@@ -2004,154 +2316,64 @@ function MessagesPage() {
       // Update order status in orders collection
       const ordersQuery = query(
         collection(db, 'orders'),
-        where('buyerId', '==', transactionData.customerId),
-        where('storeId', '==', currentUser.uid)
+        where('orderId', '==', transactionData.orderId)
       );
 
       const ordersSnap = await getDocs(ordersQuery);
-      for (const orderDoc of ordersSnap.docs) {
+      if (!ordersSnap.empty) {
+        const orderDoc = ordersSnap.docs[0];
         const orderData = orderDoc.data();
-        // Find the order that matches this transaction
-        if (orderData.createdAt && transactionData.createdAt) {
-          const timeDiff = Math.abs(orderData.createdAt.toMillis() - transactionData.createdAt.toMillis());
-          // If orders were created within 1 minute of each other, consider them the same order
-          if (timeDiff < 60000) {
-            await updateDoc(doc(db, 'orders', orderDoc.id), {
-              status: 'delivered',
-              deliveredAt: serverTimestamp(),
-              pickupCode: inputCode.toUpperCase()
-            });
-            break;
-          }
-        }
+        const isCollectionOrder = orderData.deliveryType === 'Collection';
+        await updateDoc(doc(db, 'orders', orderDoc.id), {
+          status: isCollectionOrder ? 'collected' : 'delivered',
+          [isCollectionOrder ? 'collectedAt' : 'deliveredAt']: serverTimestamp(),
+          pickupCode: inputCode.toUpperCase()
+        });
       }
 
-      // Find the order data for completing delivery in chat
-      const messagesQuery = query(
+      // Find the existing conversation and update the message + send completion message
+      const conversationsQuery = query(
         collection(db, 'messages'),
-        where('messageType', 'in', ['payment_completed', 'payment_notification']),
+        where('senderId', '==', transactionData.customerId),
+        where('receiverId', '==', currentUser.uid),
         where('orderData.orderId', '==', transactionData.orderId)
       );
 
-      const messagesSnap = await getDocs(messagesQuery);
-      let orderDataForDelivery = null;
-
-      if (!messagesSnap.empty) {
-        // Get order data from the payment message
-        const paymentMessage = messagesSnap.docs[0].data();
-        orderDataForDelivery = paymentMessage.orderData;
-      }
-
-      // If we have order data, complete the delivery in chat
-      if (orderDataForDelivery) {
-        // Try both possible conversation ID formats
-        const conversationId1 = `${currentUser.uid}_${transactionData.customerId}`;
-        const conversationId2 = `${transactionData.customerId}_${currentUser.uid}`;
+      const convSnap = await getDocs(conversationsQuery);
+      
+      if (!convSnap.empty) {
+        // Update the existing message to show completion
+        const existingMessage = convSnap.docs[0];
+        const existingData = existingMessage.data();
         
-        // First try to find with seller_customer format
-        let conversationsQuery = query(
-          collection(db, 'messages'),
-          where('conversationId', '==', conversationId1)
-        );
-
-        let convSnap = await getDocs(conversationsQuery);
-        let correctConversationId = conversationId1;
-        
-        // If not found, try customer_seller format
-        if (convSnap.empty) {
-          conversationsQuery = query(
-            collection(db, 'messages'),
-            where('conversationId', '==', conversationId2)
-          );
-          convSnap = await getDocs(conversationsQuery);
-          correctConversationId = conversationId2;
-        }
-
-        if (!convSnap.empty) {
-          // Set up the conversation context for delivery completion
-          const tempSelectedConversation = {
-            id: correctConversationId,
-            otherUserId: transactionData.customerId,
-            otherUserName: transactionData.customerName,
-            otherUserEmail: transactionData.customerEmail || ''
-          };
-
-          // Create delivery completion message manually since completeDelivery needs selectedConversation
-          const completionOrderDetails = orderDataForDelivery.items?.map(item => 
-            `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(orderDataForDelivery.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), orderDataForDelivery.currency)}`
-          ).join('\n') || 'Order items not available';
-
-          const completionMessage = {
-            conversationId: correctConversationId,
-            senderId: currentUser.uid,
-            senderName: currentUser.displayName || currentUser.email,
-            senderEmail: currentUser.email,
-            receiverId: tempSelectedConversation.otherUserId,
-            receiverName: tempSelectedConversation.otherUserName,
-            receiverEmail: tempSelectedConversation.otherUserEmail,
-            message: `✅ DELIVERY COMPLETED!\n\nOrder ID: ${orderDataForDelivery.orderId}\n\n📦 DELIVERED ITEMS:\n${completionOrderDetails}\n\nTotal: ${getCurrencySymbol(orderDataForDelivery.currency)}${formatPrice(orderDataForDelivery.totalAmount, orderDataForDelivery.currency)}\n\nYour order has been delivered successfully!\n\nPickup Code: ${inputCode.toUpperCase()}\nCollected: ${new Date().toLocaleString()}\n\nThank you for your business. We hope you enjoy your order!`,
-            messageType: 'delivery_completed',
-            timestamp: serverTimestamp(),
-            isRead: false,
-            orderData: {
-              ...orderDataForDelivery,
-              deliveryCompleted: new Date().toISOString(),
-              pickupCodeValidated: inputCode.toUpperCase()
-            }
-          };
-
-          await addDoc(collection(db, 'messages'), completionMessage);
-
-          // Update delivery record
-          const deliveriesQuery = query(
-            collection(db, 'deliveries'),
-            where('orderId', '==', orderDataForDelivery.orderId),
-            where('sellerId', '==', currentUser.uid)
-          );
-
-          const deliverySnapshot = await getDocs(deliveriesQuery);
-          if (!deliverySnapshot.empty) {
-            const deliveryDoc = deliverySnapshot.docs[0];
-            await updateDoc(doc(db, 'deliveries', deliveryDoc.id), {
-              status: 'completed',
-              completedAt: serverTimestamp(),
-              pickupCodeValidated: inputCode.toUpperCase()
-            });
+        // Update the original message type and status
+        await updateDoc(doc(db, 'messages', existingMessage.id), {
+          messageType: 'pay_at_store_completed',
+          orderData: {
+            ...existingData.orderData,
+            status: 'collected',
+            collectedAt: serverTimestamp(),
+            pickupCodeValidated: inputCode.toUpperCase()
           }
-        } else {
-          console.log('No conversation found for delivery completion');
-        }
+        });
+
+        // Send completion confirmation message to customer
+        const completionMessage = {
+          conversationId: existingData.conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: transactionData.customerId,
+          receiverName: transactionData.customerName,
+          receiverEmail: transactionData.customerEmail || '',
+          message: `✅ Order Collected!\n\nYour order has been successfully collected.\n\nOrder ID: ${transactionData.orderId}\nPickup Code: ${inputCode.toUpperCase()}\nCollected: ${new Date().toLocaleString()}\n\nThank you for shopping with us!`,
+          messageType: 'collection_confirmation',
+          timestamp: serverTimestamp(),
+          isRead: false
+        };
+
+        await addDoc(collection(db, 'messages'), completionMessage);
       }
-
-      // Send confirmation message to customer using the same conversation ID detection logic
-      let confirmationConversationId = `${currentUser.uid}_${transactionData.customerId}`;
-      
-      // Check if conversation exists with this format
-      const confirmQuery1 = query(
-        collection(db, 'messages'),
-        where('conversationId', '==', confirmationConversationId)
-      );
-      const confirmSnap1 = await getDocs(confirmQuery1);
-      
-      // If not found, try the other format
-      if (confirmSnap1.empty) {
-        confirmationConversationId = `${transactionData.customerId}_${currentUser.uid}`;
-      }
-
-      const confirmationMessage = {
-        conversationId: confirmationConversationId,
-        senderId: currentUser.uid,
-        senderName: currentUser.displayName || currentUser.email,
-        senderEmail: currentUser.email,
-        receiverId: transactionData.customerId,
-        receiverName: transactionData.customerName,
-        message: `✅ Order Collected!\n\nYour order has been successfully collected.\n\nOrder ID: ${transactionData.orderId}\nPickup Code: ${inputCode.toUpperCase()}\nCollected: ${new Date().toLocaleString()}\n\nThank you for shopping with us!`,
-        messageType: 'pickup_confirmation',
-        timestamp: serverTimestamp(),
-        isRead: false
-      };
-
-      await addDoc(collection(db, 'messages'), confirmationMessage);
 
       alert(`✅ Order successfully collected and delivery completed!\n\nOrder ID: ${transactionData.orderId}\nCustomer: ${transactionData.customerName}\nAmount: ${getCurrencySymbol(transactionData.currency)}${formatPrice(transactionData.amount, transactionData.currency)}\nPickup Code: ${inputCode.toUpperCase()}\n\nThe order has been marked as delivered in all systems.`);
 
@@ -2169,6 +2391,7 @@ function MessagesPage() {
       const storeDoc = await getDoc(doc(db, 'stores', currentUser.uid));
       if (storeDoc.exists()) {
         const storeData = storeDoc.data();
+        setSellerStoreData(storeData); // Store the seller's own store data
         const savedSettings = storeData.feeSettings || {};
         setFeeSettings(prev => ({
           ...prev,
@@ -2407,7 +2630,8 @@ Please confirm this order and provide delivery details.`;
           })),
           totalAmount: totalPrice,
           totalItems: getCartItemCount(),
-          currency: cart[0]?.currency || 'GBP'
+          currency: cart[0]?.currency || 'GBP',
+          deliveryType: (storeData && storeData.deliveryType) || 'Delivery'
         }
       };
 
@@ -2545,13 +2769,21 @@ Please confirm this order and provide delivery details.`;
         const storeData = storeDoc.data();
         const feeSettings = storeData.feeSettings || {};
 
-        // Calculate delivery fee (assuming delivery if not specified)
-        if (feeSettings.deliveryEnabled) {
+        // Determine the effective deliveryType for this order
+        const effectiveDeliveryType =
+          (orderData && orderData.deliveryType) ||
+          (storeData && storeData.deliveryType) ||
+          'Delivery';
+
+        // Calculate delivery fee ONLY for Delivery (never for Collection)
+        if (feeSettings.deliveryEnabled && effectiveDeliveryType === 'Delivery') {
           if (feeSettings.freeDeliveryThreshold && subtotal >= feeSettings.freeDeliveryThreshold) {
-            deliveryFee = 0; // Free delivery threshold met
+            deliveryFee = 0;
           } else {
             deliveryFee = feeSettings.deliveryFee || 0;
           }
+        } else {
+          deliveryFee = 0; // Force zero for Collection or when delivery disabled
         }
 
         // Calculate service fee
@@ -2572,6 +2804,20 @@ Please confirm this order and provide delivery details.`;
 
     const totalAmount = subtotal + deliveryFee + serviceFee;
 
+    // Get the effective delivery type for the message
+    let effectiveDeliveryType = 'Delivery';
+    try {
+      const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
+      if (storeDoc.exists()) {
+        const storeData = storeDoc.data();
+        effectiveDeliveryType = (orderData && orderData.deliveryType) ||
+          (storeData && storeData.deliveryType) ||
+          'Delivery';
+      }
+    } catch (error) {
+      console.error('Error fetching delivery type for message:', error);
+    }
+
     // Create fee breakdown text
     let feeBreakdown = '';
     if (deliveryFee > 0 || serviceFee > 0) {
@@ -2589,6 +2835,8 @@ Subtotal: ${getCurrencySymbol(currency)}${formatPrice(subtotal, currency)}`;
       feeBreakdown += `\nTotal: ${getCurrencySymbol(currency)}${formatPrice(totalAmount, currency)}`;
     }
 
+    const typeLine = `🚚 Delivery Type: ${effectiveDeliveryType}`;
+    
     const doneMessage = `✅ DONE ADDING ITEMS
 
 Order ID: ${orderId}
@@ -2597,6 +2845,7 @@ ${allOrderItems.map(item =>
   `• ${item.itemName} x${item.quantity} - ${getCurrencySymbol(item.currency)}${formatPrice(item.subtotal, item.currency)}`
 ).join('\n')}
 
+${typeLine}
 ${feeBreakdown || `Total: ${getCurrencySymbol(currency)}${formatPrice(totalAmount, currency)}`}
 Items: ${totalItems}
 
@@ -2751,13 +3000,18 @@ Customer is done adding items. Please prepare and bag these items.`;
         const storeData = storeDoc.data();
         const feeSettings = storeData.feeSettings || {};
 
-        // Calculate delivery fee (assuming delivery if not specified)
-        if (feeSettings.deliveryEnabled) {
+        // Determine the effective deliveryType for this order
+        const effectiveDeliveryType = (storeData && storeData.deliveryType) || 'Delivery';
+
+        // Calculate delivery fee ONLY for Delivery (never for Collection)
+        if (feeSettings.deliveryEnabled && effectiveDeliveryType === 'Delivery') {
           if (feeSettings.freeDeliveryThreshold && subtotal >= feeSettings.freeDeliveryThreshold) {
-            deliveryFee = 0; // Free delivery threshold met
+            deliveryFee = 0;
           } else {
             deliveryFee = feeSettings.deliveryFee || 0;
           }
+        } else {
+          deliveryFee = 0; // Force zero for Collection or when delivery disabled
         }
 
         // Calculate service fee
@@ -2782,6 +3036,18 @@ Customer is done adding items. Please prepare and bag these items.`;
       `• ${item.itemName} x${item.quantity} - ${getCurrencySymbol(item.currency)}${formatPrice(item.subtotal, item.currency)}`
     ).join('\n');
 
+    // Get the effective delivery type for the message
+    let effectiveDeliveryType = 'Delivery';
+    try {
+      const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
+      if (storeDoc.exists()) {
+        const storeData = storeDoc.data();
+        effectiveDeliveryType = (storeData && storeData.deliveryType) || 'Delivery';
+      }
+    } catch (error) {
+      console.error('Error fetching delivery type for done message:', error);
+    }
+
     // Create fee breakdown text
     let feeBreakdown = '';
     if (deliveryFee > 0 || serviceFee > 0) {
@@ -2799,12 +3065,15 @@ Subtotal: ${getCurrencySymbol(currency)}${formatPrice(subtotal, currency)}`;
       feeBreakdown += `\nTotal: ${getCurrencySymbol(currency)}${formatPrice(totalAmount, currency)}`;
     }
 
+    const typeLine = `🚚 Delivery Type: ${effectiveDeliveryType}`;
+    
     const doneMessage = `✅ DONE ADDING ITEMS
 
 Order ID: ${orderId}
 
 ${orderDetails}
 
+${typeLine}
 ${feeBreakdown || `Total: ${getCurrencySymbol(currency)}${formatPrice(totalAmount, currency)}`}
 Items: ${totalItems}
 
@@ -2959,6 +3228,58 @@ Customer is done adding items. Please prepare and bag these items.`;
     if (!orderId) return false;
     return messages.some(msg => 
       msg.messageType === 'refund_requested' && 
+      msg.orderData?.orderId === orderId
+    );
+  };
+
+  // Helper function to check if an order is a Pay At Store order
+  const isPayAtStoreOrder = async (orderData) => {
+    if (!orderData) return false;
+    
+    // Check if delivery type is explicitly set in orderData
+    if (orderData.deliveryType === 'Pay At Store') return true;
+    
+    // Check store settings if delivery type not in orderData
+    try {
+      const storeDoc = await getDoc(doc(db, 'stores', selectedConversation?.otherUserId || ''));
+      if (storeDoc.exists()) {
+        const storeData = storeDoc.data();
+        return (storeData && storeData.deliveryType) === 'Pay At Store';
+      }
+    } catch (error) {
+      console.error('Error checking Pay At Store status:', error);
+    }
+    
+    return false;
+  };
+
+  // Helper function to synchronously check if an order is Pay At Store (for UI)
+  const isPayAtStoreOrderSync = (orderData) => {
+    if (!orderData) return false;
+    
+    // Check if explicitly marked as Pay At Store
+    if (orderData.deliveryType === 'Pay At Store') return true;
+    
+    // Check if Collection + Other payment type (which means Pay At Store)
+    if (orderData.deliveryType === 'Collection' && orderData.paymentType === 'Other') return true;
+    
+    return false;
+  };
+
+  // Helper function to check if a Pay At Store order has been completed
+  const isPayAtStoreCompleted = (orderId) => {
+    if (!orderId) return false;
+    return messages.some(msg => 
+      msg.messageType === 'pay_at_store_completed' && 
+      msg.orderData?.orderId === orderId
+    );
+  };
+
+  // Helper function to check if customer has notified they're coming to pay
+  const hasCustomerNotifiedComing = (orderId) => {
+    if (!orderId) return false;
+    return messages.some(msg => 
+      msg.messageType === 'customer_coming_to_pay' && 
       msg.orderData?.orderId === orderId
     );
   };
@@ -3728,6 +4049,8 @@ Customer is done adding items. Please prepare and bag these items.`;
 
   // Start immediate delivery
   const startDelivery = async (orderData) => {
+    console.log('🚚 Starting delivery with orderData:', orderData);
+    
     if (!selectedConversation || !currentUser || !isSeller) {
       alert('Cannot start delivery - invalid session.');
       return;
@@ -3735,6 +4058,12 @@ Customer is done adding items. Please prepare and bag these items.`;
 
     if (!orderData || !orderData.orderId) {
       alert('Invalid order data for delivery.');
+      return;
+    }
+
+    // Check if this is a Collection order - should not use delivery
+    if (orderData.deliveryType === 'Collection') {
+      alert('This is a Collection order. Please use "Mark Ready for Collection" instead.');
       return;
     }
 
@@ -3757,18 +4086,33 @@ Customer is done adding items. Please prepare and bag these items.`;
         pickupCode = paymentMessage.paymentData.pickupCode;
       }
 
-      // Format order items for delivery message
-      const orderDetails = orderData.items?.map(item => 
-        `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(orderData.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), orderData.currency)}`
-      ).join('\n') || 'Order items not available';
+      // Format order items for delivery message - Enhanced with better data handling
+      let orderDetails = 'Order items not available';
+      let totalAmount = 0;
+      
+      if (orderData.items && Array.isArray(orderData.items) && orderData.items.length > 0) {
+        orderDetails = orderData.items.map(item => {
+          const itemName = item.name || item.itemName || 'Unknown Item';
+          const quantity = item.quantity || 1;
+          const price = item.price || (item.subtotal / quantity) || 0;
+          const itemTotal = price * quantity;
+          totalAmount += itemTotal;
+          
+          return `• ${itemName} x${quantity} - ${getCurrencySymbol(orderData.currency || 'GBP')}${formatPrice(itemTotal, orderData.currency || 'GBP')}`;
+        }).join('\n');
+      }
+      
+      // Use calculated total or fallback to orderData total
+      const displayTotal = orderData.totalAmount || totalAmount || 0;
+      const currency = orderData.currency || 'GBP';
 
       const conversationId = selectedConversation.id || 
         [selectedConversation.otherUserId, currentUser.uid].sort().join('_');
 
       // Enhanced message to customer with pickup code reminder and order details
       const customerMessage = pickupCode 
-        ? `🚚 DELIVERY STARTED!\n\nOrder ID: ${orderData.orderId}\n\n📦 YOUR ORDER:\n${orderDetails}\n\nTotal: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\n\nYour order is now on the way!\n\nEstimated delivery time: 15-30 minutes\n\n🎫 IMPORTANT REMINDER:\nYour pickup code is: ${pickupCode}\n\n⚠️ PLEASE HAVE THIS CODE READY when the delivery arrives. You MUST provide this code to the seller before receiving your order.\n\n📱 Save this code or take a screenshot for easy access when the delivery arrives.`
-        : `🚚 DELIVERY STARTED!\n\nOrder ID: ${orderData.orderId}\n\n📦 YOUR ORDER:\n${orderDetails}\n\nTotal: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\n\nYour order is now on the way!\n\nEstimated delivery time: 15-30 minutes\n\nYou'll receive a notification when the delivery arrives.`;
+        ? `🚚 DELIVERY STARTED!\n\nOrder ID: ${orderData.orderId}\n\n📦 YOUR ORDER:\n${orderDetails}\n\nTotal: ${getCurrencySymbol(currency)}${formatPrice(displayTotal, currency)}\n\nYour order is now on the way!\n\nEstimated delivery time: 15-30 minutes\n\n🎫 IMPORTANT REMINDER:\nYour pickup code is: ${pickupCode}\n\n⚠️ PLEASE HAVE THIS CODE READY when the delivery arrives. You MUST provide this code to the seller before receiving your order.\n\n📱 Save this code or take a screenshot for easy access when the delivery arrives.`
+        : `🚚 DELIVERY STARTED!\n\nOrder ID: ${orderData.orderId}\n\n📦 YOUR ORDER:\n${orderDetails}\n\nTotal: ${getCurrencySymbol(currency)}${formatPrice(displayTotal, currency)}\n\nYour order is now on the way!\n\nEstimated delivery time: 15-30 minutes\n\nYou'll receive a notification when the delivery arrives.`;
 
       const deliveryMessage = {
         conversationId: conversationId,
@@ -3783,6 +4127,8 @@ Customer is done adding items. Please prepare and bag these items.`;
         isRead: false,
         orderData: {
           ...orderData,
+          totalAmount: displayTotal, // Use the calculated/validated total
+          currency: currency,
           deliveryType: 'immediate',
           deliveryStarted: new Date().toISOString(),
           estimatedArrival: new Date(Date.now() + 25 * 60 * 1000).toISOString(), // 25 min estimate
@@ -3882,6 +4228,20 @@ Customer is done adding items. Please prepare and bag these items.`;
     setShowDeliveryModal(true);
   };
 
+  // Open collection scheduling modal
+  const openCollectionModal = (orderData) => {
+    setSelectedOrderForDelivery(orderData); // Reuse the same state variable
+    setDeliverySettings({
+      deliveryType: 'collection',
+      scheduledDate: new Date().toISOString().split('T')[0],
+      scheduledTime: '',
+      timeSlot: 'morning',
+      deliveryAddress: '',
+      specialInstructions: ''
+    });
+    setShowCollectionModal(true); // Need to add this state
+  };
+
   // Schedule delivery
   const scheduleDelivery = async () => {
     if (!selectedOrderForDelivery || !selectedConversation || !currentUser) {
@@ -3890,98 +4250,269 @@ Customer is done adding items. Please prepare and bag these items.`;
     }
 
     try {
-      const conversationId = selectedConversation.id || 
-        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
-
       // Check if this is a reschedule (after cancellation)
       const isReschedule = isDeliveryCancelled(selectedOrderForDelivery.orderId);
 
-      // Format order items for scheduling message
-      const schedulingOrderDetails = selectedOrderForDelivery.items?.map(item => 
-        `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), selectedOrderForDelivery.currency)}`
-      ).join('\n') || 'Order items not available';
-
       let deliveryFee = 0;
-      let deliveryMessage = '';
+      let timeDescription = '';
       let scheduledDateTime = null;
 
-      const messagePrefix = isReschedule ? '🔄 DELIVERY RESCHEDULED' : '📋 DELIVERY SCHEDULED';
-
       if (deliverySettings.deliveryType === 'immediate') {
-        deliveryMessage = `${messagePrefix}\n\nOrder ID: ${selectedOrderForDelivery.orderId}\n\n📦 ORDER ITEMS:\n${schedulingOrderDetails}\n\nTotal: ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice(selectedOrderForDelivery.totalAmount, selectedOrderForDelivery.currency)}\n\n${isReschedule ? 'Customer has rescheduled delivery.\n\n' : ''}Delivery Type: Immediate delivery requested\n\nThe seller will start delivery as soon as possible.\n\nEstimated time: 15-30 minutes`;
+        // No fee for immediate delivery
+        deliveryFee = 0;
+        timeDescription = 'Immediate delivery (15-30 minutes)';
       } else if (deliverySettings.deliveryType === 'scheduled') {
+        // No fee for same-day scheduled delivery
+        deliveryFee = 0;
         const scheduledDate = new Date(deliverySettings.scheduledDate);
         const [hour, minute] = deliverySettings.scheduledTime.split(':');
         scheduledDate.setHours(parseInt(hour), parseInt(minute));
         scheduledDateTime = scheduledDate.toISOString();
-
-        deliveryMessage = `${messagePrefix}\n\nOrder ID: ${selectedOrderForDelivery.orderId}\n\n📦 ORDER ITEMS:\n${schedulingOrderDetails}\n\nTotal: ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice(selectedOrderForDelivery.totalAmount, selectedOrderForDelivery.currency)}\n\n${isReschedule ? 'Customer has rescheduled delivery.\n\n' : ''}Scheduled for: ${scheduledDate.toLocaleDateString()} at ${deliverySettings.scheduledTime}\n\nDelivery Fee: FREE (same day)\n\nThe seller will deliver at the scheduled time.`;
+        timeDescription = `${scheduledDate.toLocaleDateString()} at ${deliverySettings.scheduledTime}`;
       } else if (deliverySettings.deliveryType === 'next_day') {
+        // Fee for next day delivery
         deliveryFee = deliveryPricing[deliverySettings.timeSlot];
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         
-        let timeRange = '';
         switch (deliverySettings.timeSlot) {
           case 'morning':
-            timeRange = '9:00 AM - 12:00 PM';
+            timeDescription = `${tomorrow.toLocaleDateString()} - 9:00 AM - 12:00 PM`;
             break;
           case 'afternoon':
-            timeRange = '12:00 PM - 5:00 PM';
+            timeDescription = `${tomorrow.toLocaleDateString()} - 12:00 PM - 5:00 PM`;
             break;
           case 'evening':
-            timeRange = '5:00 PM - 8:00 PM';
+            timeDescription = `${tomorrow.toLocaleDateString()} - 5:00 PM - 8:00 PM`;
             break;
         }
-
-        deliveryMessage = `${messagePrefix}\n\nOrder ID: ${selectedOrderForDelivery.orderId}\n\n📦 ORDER ITEMS:\n${schedulingOrderDetails}\n\nTotal: ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice(selectedOrderForDelivery.totalAmount, selectedOrderForDelivery.currency)}\n\n${isReschedule ? 'Customer has rescheduled delivery.\n\n' : ''}Next Day Delivery\nDate: ${tomorrow.toLocaleDateString()}\nTime: ${timeRange}\n\nDelivery Fee: ${getCurrencySymbol('GBP')}${deliveryFee.toFixed(2)}\n\nThe seller will deliver during the selected time window.`;
       }
 
-      if (deliverySettings.deliveryAddress) {
-        deliveryMessage += `\n\nDelivery Address: ${deliverySettings.deliveryAddress}`;
+      // If there's a delivery fee, open payment modal
+      if (deliveryFee > 0) {
+        // Create payment data for ONLY the delivery scheduling fee
+        const deliveryPaymentData = {
+          orderId: selectedOrderForDelivery.orderId || `DELV-${Date.now()}`,
+          items: [{
+            name: `Delivery Scheduling - ${timeDescription}`,
+            quantity: 1,
+            price: deliveryFee,
+            subtotal: deliveryFee
+          }],
+          currency: selectedOrderForDelivery.currency || 'GBP',
+          total: deliveryFee,
+          amount: deliveryFee,
+          serviceType: 'delivery_scheduling',
+          description: `Delivery Scheduling Fee - ${timeDescription}`,
+          originalOrderData: selectedOrderForDelivery, // Keep reference to original order
+          deliveryTime: timeDescription,
+          deliverySettings: deliverySettings,
+          scheduledDateTime: scheduledDateTime,
+          deliveryFee: deliveryFee,
+          isReschedule: isReschedule
+        };
+
+        // Close delivery modal and open payment modal
+        setShowDeliveryModal(false);
+        setSelectedOrderForDelivery(null);
+        
+        // Set payment data and open payment modal
+        setPaymentData(deliveryPaymentData);
+        setShowPaymentModal(true);
+      } else {
+        // No fee, directly schedule delivery
+        const conversationId = selectedConversation.id || 
+          [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+        // Format order items for scheduling message
+        const schedulingOrderDetails = selectedOrderForDelivery.items?.map(item => 
+          `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), selectedOrderForDelivery.currency)}`
+        ).join('\n') || 'Order items not available';
+
+        const messagePrefix = isReschedule ? '🔄 DELIVERY RESCHEDULED' : '📋 DELIVERY SCHEDULED';
+        let deliveryMessage = `${messagePrefix}\n\nOrder ID: ${selectedOrderForDelivery.orderId}\n\n📦 ORDER ITEMS:\n${schedulingOrderDetails}\n\nTotal: ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice(selectedOrderForDelivery.totalAmount, selectedOrderForDelivery.currency)}\n\n${isReschedule ? 'Customer has rescheduled delivery.\n\n' : ''}Delivery Time: ${timeDescription}\nDelivery Fee: FREE\n\nThe seller will deliver at the scheduled time.`;
+
+        if (deliverySettings.deliveryAddress) {
+          deliveryMessage += `\n\nDelivery Address: ${deliverySettings.deliveryAddress}`;
+        }
+
+        if (deliverySettings.specialInstructions) {
+          deliveryMessage += `\n\nSpecial Instructions: ${deliverySettings.specialInstructions}`;
+        }
+
+        const message = {
+          conversationId: conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: selectedConversation.otherUserId,
+          receiverName: selectedConversation.otherUserName,
+          message: deliveryMessage,
+          messageType: isReschedule ? 'delivery_rescheduled' : 'delivery_scheduled',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          orderData: {
+            ...selectedOrderForDelivery,
+            deliverySettings: deliverySettings,
+            deliveryFee: 0,
+            scheduledDateTime: scheduledDateTime,
+            isReschedule: isReschedule
+          }
+        };
+
+        // Only add receiverEmail if it exists and is not empty
+        if (selectedConversation.otherUserEmail) {
+          message.receiverEmail = selectedConversation.otherUserEmail;
+        }
+
+        await addDoc(collection(db, 'messages'), message);
+
+        setShowDeliveryModal(false);
+        setSelectedOrderForDelivery(null);
+
+        const notification = document.createElement('div');
+        notification.innerHTML = isReschedule ? `🔄 Delivery rescheduled successfully!` : `📋 Delivery scheduled successfully!`;
+        notification.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: #22C55E;
+          color: white;
+          padding: 1rem;
+          border-radius: 8px;
+          z-index: 1000;
+          font-weight: 600;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          if (document.body.contains(notification)) {
+            document.body.removeChild(notification);
+          }
+        }, 3000);
       }
 
-      if (deliverySettings.specialInstructions) {
-        deliveryMessage += `\n\nSpecial Instructions: ${deliverySettings.specialInstructions}`;
+    } catch (error) {
+      console.error('Error scheduling delivery:', error);
+      alert('Failed to schedule delivery. Please try again.');
+    }
+  };
+
+  // Schedule Pay At Store collection (no payment required)
+  const schedulePayAtStoreCollection = async () => {
+    if (!selectedOrderForDelivery || !selectedConversation || !currentUser) {
+      alert('Cannot schedule collection - invalid data.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Get time description based on time slot
+      let timeDescription = '';
+      switch (deliverySettings.timeSlot) {
+        case 'morning':
+          timeDescription = '9:00 AM - 12:00 PM';
+          break;
+        case 'afternoon':
+          timeDescription = '12:00 PM - 5:00 PM';
+          break;
+        case 'evening':
+          timeDescription = '5:00 PM - 8:00 PM';
+          break;
+        case 'next_day':
+          timeDescription = 'Any time next day';
+          break;
+        default:
+          timeDescription = '9:00 AM - 12:00 PM';
       }
 
-      const message = {
+      // Format order items for collection message
+      const collectionOrderDetails = selectedOrderForDelivery.items?.map(item => 
+        `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), selectedOrderForDelivery.currency)}`
+      ).join('\n') || 'Order items not available';
+
+      // Generate pickup code for Pay At Store collection
+      const pickupCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      const collectionMessage = `📋 PAY AT STORE COLLECTION SCHEDULED\n\nOrder ID: ${selectedOrderForDelivery.orderId}\n\n📦 ORDER ITEMS:\n${collectionOrderDetails}\n\nCollection Time: ${timeDescription}\nTotal to Pay at Collection: ${getCurrencySymbol(selectedOrderForDelivery.currency)}${formatPrice(selectedOrderForDelivery.total || selectedOrderForDelivery.amount, selectedOrderForDelivery.currency)}\n\n🎫 CUSTOMER PICKUP CODE: ${pickupCode}\n\n💳 NO COLLECTION FEE - Customer will pay for items at store\n\n⚠️ IMPORTANT: Verify the pickup code before accepting payment and handing over items.\n\nCustomer will collect and pay at the scheduled time. Please have the order ready.`;
+
+      // Send collection scheduled message
+      const messageData = {
         conversationId: conversationId,
         senderId: currentUser.uid,
         senderName: currentUser.displayName || currentUser.email,
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        message: deliveryMessage,
-        messageType: isReschedule ? 'delivery_rescheduled' : 'delivery_scheduled',
+        message: collectionMessage,
+        messageType: 'pay_at_store_collection_scheduled',
         timestamp: serverTimestamp(),
         isRead: false,
         orderData: {
           ...selectedOrderForDelivery,
-          deliverySettings: deliverySettings,
-          deliveryFee: deliveryFee,
-          scheduledDateTime: scheduledDateTime,
-          isReschedule: isReschedule
+          collectionTime: timeDescription,
+          timeSlot: deliverySettings.timeSlot,
+          deliveryType: 'Pay At Store',
+          pickupCode: pickupCode
         }
       };
 
-      // Only add receiverEmail if it exists and is not empty
+      // Only add receiverEmail if it exists
       if (selectedConversation.otherUserEmail) {
-        message.receiverEmail = selectedConversation.otherUserEmail;
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
       }
 
-      await addDoc(collection(db, 'messages'), message);
+      await addDoc(collection(db, 'messages'), messageData);
 
-      setShowDeliveryModal(false);
+      // Send pickup code to customer
+      const customerCodeMessage = `🎫 YOUR PICKUP CODE
+
+Order ID: ${selectedOrderForDelivery.orderId}
+
+Your collection pickup code is: ${pickupCode}
+
+⏰ Collection Time: ${timeDescription}
+💳 Payment: Pay at store when collecting
+
+💡 IMPORTANT: Present this code and payment when you arrive to collect your order.
+
+Please arrive at your scheduled time with this code and payment method.`;
+
+      await addDoc(collection(db, 'messages'), {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: currentUser.uid,
+        receiverName: currentUser.displayName || currentUser.email,
+        message: customerCodeMessage,
+        timestamp: serverTimestamp(),
+        isRead: true,
+        messageType: 'pay_at_store_pickup_code',
+        orderData: {
+          ...selectedOrderForDelivery,
+          collectionTime: timeDescription,
+          timeSlot: deliverySettings.timeSlot,
+          deliveryType: 'Pay At Store',
+          pickupCode: pickupCode
+        }
+      });
+
+      // Close modal and reset
+      setShowCollectionModal(false);
       setSelectedOrderForDelivery(null);
 
+      // Show success notification
       const notification = document.createElement('div');
-      notification.innerHTML = isReschedule ? `🔄 Delivery rescheduled successfully!` : `📋 Delivery scheduled successfully!`;
+      notification.innerHTML = `✅ Pay At Store collection scheduled!`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #22C55E;
+        background: #10B981;
         color: white;
         padding: 1rem;
         border-radius: 8px;
@@ -3998,13 +4529,448 @@ Customer is done adding items. Please prepare and bag these items.`;
       }, 3000);
 
     } catch (error) {
-      console.error('Error scheduling delivery:', error);
-      alert('Failed to schedule delivery. Please try again.');
+      console.error('Error scheduling Pay At Store collection:', error);
+      alert('Failed to schedule collection. Please try again.');
+    }
+  };
+
+  const markReadyForCollection = async (orderData) => {
+    if (!selectedConversation || !currentUser) {
+      alert('Cannot mark ready for collection - invalid data.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Send ready for collection message
+      const readyMessage = `📦 ORDER READY FOR COLLECTION\n\nOrder ID: ${orderData.orderId}\n\nYour order is now ready for collection! Please collect at your scheduled time: ${orderData.collectionTime || 'as arranged'}.`;
+
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: readyMessage,
+        messageType: 'ready_for_collection',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: orderData
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Order marked as ready for collection!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error marking ready for collection:', error);
+      alert('Failed to mark ready for collection. Please try again.');
+    }
+  };
+
+  const completeCollection = async (orderData) => {
+    if (!selectedConversation || !currentUser) {
+      alert('Cannot complete collection - invalid data.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Update store item quantities
+      if (orderData.items && orderData.items.length > 0) {
+        for (const orderItem of orderData.items) {
+          try {
+            // Get all store items and find by name since ID might not match
+            const storeItemsQuery = collection(db, 'stores', currentUser.uid, 'items');
+            const storeItemsSnapshot = await getDocs(storeItemsQuery);
+            
+            for (const itemDoc of storeItemsSnapshot.docs) {
+              const itemData = itemDoc.data();
+              if (itemData.name === orderItem.name || itemData.name === orderItem.itemName) {
+                const currentQuantity = parseInt(itemData.quantity) || 0;
+                const orderedQuantity = parseInt(orderItem.quantity) || 0;
+                const newQuantity = Math.max(0, currentQuantity - orderedQuantity);
+                
+                await updateDoc(itemDoc.ref, {
+                  quantity: newQuantity
+                });
+                break;
+              }
+            }
+          } catch (error) {
+            console.error(`Error updating quantity for item ${orderItem.name}:`, error);
+          }
+        }
+      }
+
+      // Send collection completion message
+      const completionMessage = `✅ COLLECTION COMPLETED\n\nOrder ID: ${orderData.orderId}\n\nThe order has been successfully collected by the customer. Transaction completed!`;
+
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: completionMessage,
+        messageType: 'collection_completed',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: orderData
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Collection completed and quantities updated!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error completing collection:', error);
+      alert('Failed to complete collection. Please try again.');
+    }
+  };
+
+  // Confirm Pay At Store order (seller side)
+  const confirmPayAtStoreOrder = async (orderData) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot confirm order - invalid session.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      // Format order items for confirmation message
+      const orderItemsText = orderData.items?.map(item => 
+        `• ${item.name} x${item.quantity} - ${getCurrencySymbol(orderData.currency)}${formatPrice(item.price * item.quantity, orderData.currency)}`
+      ).join('\n') || 'Order items not available';
+
+      const confirmationMessage = `✅ PAY AT STORE ORDER CONFIRMED\n\nOrder ID: ${orderData.orderId}\n\n📦 CONFIRMED ITEMS:\n${orderItemsText}\n\nTotal to Pay at Store: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\n\n💳 Customer will pay when collecting\n\nYour order is confirmed! Please come to collect and pay at the store.`;
+
+      // Send confirmation message
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: confirmationMessage,
+        messageType: 'pay_at_store_confirmed',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: orderData
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Pay At Store order confirmed!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error confirming Pay At Store order:', error);
+      alert('Failed to confirm order. Please try again.');
+    }
+  };
+
+  // Mark Pay At Store order ready for collection
+  const markPayAtStoreReady = async (orderData) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot mark ready - invalid session.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      const readyMessage = `📦 PAY AT STORE ORDER READY\n\nOrder ID: ${orderData.orderId}\n\nYour order is ready for collection!\n\n💳 Please bring payment method to pay ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)} at collection.\n\nCome to the store when ready to collect and pay.`;
+
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: readyMessage,
+        messageType: 'pay_at_store_ready',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: orderData
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Customer notified order is ready for collection and payment!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error marking Pay At Store order ready:', error);
+      alert('Failed to notify customer. Please try again.');
+    }
+  };
+
+  // Complete Pay At Store transaction (seller side)
+  const completePayAtStoreTransaction = async (orderData) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot complete transaction - invalid session.');
+      return;
+    }
+
+    // Confirm payment received
+    const paymentReceived = window.confirm(
+      `Confirm payment received?\n\nOrder ID: ${orderData.orderId}\nAmount: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\n\nHas the customer paid and collected their order?`
+    );
+
+    if (!paymentReceived) return;
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      const completionMessage = `✅ PAY AT STORE TRANSACTION COMPLETED\n\nOrder ID: ${orderData.orderId}\nAmount Paid: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}\nCompleted at: ${new Date().toLocaleString()}\n\nThank you for your business!\n\nTransaction successfully completed.`;
+
+      const messageData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: completionMessage,
+        messageType: 'pay_at_store_completed',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: { ...orderData, status: 'completed', completedAt: new Date().toISOString() }
+      };
+
+      // Only add receiverEmail if it exists
+      if (selectedConversation.otherUserEmail) {
+        messageData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), messageData);
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.innerHTML = `✅ Pay At Store transaction completed!`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10B981;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error completing Pay At Store transaction:', error);
+      alert('Failed to complete transaction. Please try again.');
+    }
+  };
+
+  // Schedule collection
+  const scheduleCollection = async () => {
+    if (!selectedOrderForDelivery || !selectedConversation || !currentUser) {
+      alert('Cannot schedule collection - invalid data.');
+      return;
+    }
+
+    try {
+      // Check if this is a Pay At Store order
+      if (selectedOrderForDelivery.deliveryType === 'Pay At Store') {
+        await schedulePayAtStoreCollection();
+        return;
+      }
+
+      // Calculate collection fee based on time slot
+      let collectionFee = 0;
+      let timeDescription = '';
+      
+      switch (deliverySettings.timeSlot) {
+        case 'morning':
+          collectionFee = 1.50;
+          timeDescription = '9:00 AM - 12:00 PM';
+          break;
+        case 'afternoon':
+          collectionFee = 2.00;
+          timeDescription = '12:00 PM - 5:00 PM';
+          break;
+        case 'evening':
+          collectionFee = 2.50;
+          timeDescription = '5:00 PM - 8:00 PM';
+          break;
+        case 'next_day':
+          collectionFee = 4.00;
+          timeDescription = 'Any time next day';
+          break;
+        default:
+          collectionFee = 1.50;
+          timeDescription = '9:00 AM - 12:00 PM';
+      }
+
+      // Create payment data for ONLY the collection scheduling fee
+      const collectionPaymentData = {
+        orderId: selectedOrderForDelivery.orderId || `COLL-${Date.now()}`,
+        items: [{
+          name: `Collection Scheduling - ${timeDescription}`,
+          quantity: 1,
+          price: collectionFee,
+          subtotal: collectionFee
+        }],
+        currency: selectedOrderForDelivery.currency || 'GBP',
+        total: collectionFee,
+        amount: collectionFee,
+        serviceType: 'collection_scheduling',
+        description: `Collection Scheduling Fee - ${timeDescription}`,
+        originalOrderData: selectedOrderForDelivery, // Keep reference to original order
+        collectionTime: timeDescription,
+        timeSlot: deliverySettings.timeSlot,
+        collectionFee: collectionFee
+      };
+
+      // Close collection modal and open payment modal
+      setShowCollectionModal(false);
+      setSelectedOrderForDelivery(null);
+      
+      // Set payment data and open payment modal
+      setPaymentData(collectionPaymentData);
+      setShowPaymentModal(true);
+
+    } catch (error) {
+      console.error('Error preparing collection payment:', error);
+      alert('Failed to prepare collection payment. Please try again.');
     }
   };
 
   // Show delivery confirmation popup
   const showDeliveryConfirmation = (orderData) => {
+    // Check if this is a Collection order - should not use delivery confirmation
+    if (orderData?.deliveryType === 'Collection') {
+      alert('This is a Collection order. Delivery confirmation is not applicable.');
+      return;
+    }
+    
     setPendingDeliveryOrder(orderData);
     setShowDeliveryConfirmModal(true);
   };
@@ -4037,6 +5003,33 @@ Customer is done adding items. Please prepare and bag these items.`;
     }
 
     try {
+      // Update store item quantities
+      if (orderData.items && orderData.items.length > 0) {
+        for (const orderItem of orderData.items) {
+          try {
+            // Get all store items and find by name since ID might not match
+            const storeItemsQuery = collection(db, 'stores', currentUser.uid, 'items');
+            const storeItemsSnapshot = await getDocs(storeItemsQuery);
+            
+            for (const itemDoc of storeItemsSnapshot.docs) {
+              const itemData = itemDoc.data();
+              if (itemData.name === orderItem.name || itemData.name === orderItem.itemName) {
+                const currentQuantity = parseInt(itemData.quantity) || 0;
+                const orderedQuantity = parseInt(orderItem.quantity) || 0;
+                const newQuantity = Math.max(0, currentQuantity - orderedQuantity);
+                
+                await updateDoc(itemDoc.ref, {
+                  quantity: newQuantity
+                });
+                break;
+              }
+            }
+          } catch (error) {
+            console.error(`Error updating quantity for item ${orderItem.name || orderItem.itemName}:`, error);
+          }
+        }
+      }
+
       // Format order items for completion message
       const completionOrderDetails = orderData.items?.map(item => 
         `• ${item.name || item.itemName} x${item.quantity} - ${getCurrencySymbol(orderData.currency)}${formatPrice((item.price || item.subtotal) * (item.quantity || 1), orderData.currency)}`
@@ -4086,7 +5079,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       }
 
       const notification = document.createElement('div');
-      notification.innerHTML = `✅ Delivery marked as completed!`;
+      notification.innerHTML = `✅ Delivery completed and quantities updated!`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -4198,6 +5191,59 @@ Customer is done adding items. Please prepare and bag these items.`;
     } catch (error) {
       console.error('Error cancelling delivery:', error);
       alert('Failed to cancel delivery. Please try again.');
+    }
+  };
+
+  // === COLLECTION (PICKUP) FUNCTIONS ===
+  
+  // Confirm order for collection (seller side)
+  const confirmOrderForCollection = async (orderData) => {
+    if (!selectedConversation || !currentUser || !isSeller) {
+      alert('Cannot confirm order - invalid session.');
+      return;
+    }
+
+    try {
+      const conversationId = selectedConversation.id || 
+        [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+      const confirmMessage = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `✅ ORDER CONFIRMED (Collection)
+
+Order ID: ${orderData.orderId}
+
+Your order has been confirmed for collection at our store.
+Please wait for notification when your items are ready.
+
+Items:
+${orderData.items.map(item => `• ${item.itemName || item.name} x${item.quantity}`).join('\n')}
+
+Total: ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)}
+
+Bring your pickup code when you collect.`,
+        timestamp: serverTimestamp(),
+        isRead: false,
+        messageType: 'order_confirmed_collection',
+        orderData: { ...orderData, deliveryType: 'Collection' }
+      };
+
+      // Add receiverEmail if available
+      if (selectedConversation.otherUserEmail) {
+        confirmMessage.receiverEmail = selectedConversation.otherUserEmail;
+      }
+
+      await addDoc(collection(db, 'messages'), confirmMessage);
+
+      alert('✅ Order confirmed for collection!');
+    } catch (error) {
+      console.error('Error confirming collection order:', error);
+      alert('Failed to confirm order. Please try again.');
     }
   };
 
@@ -4780,13 +5826,19 @@ Customer is done adding items. Please prepare and bag these items.`;
         const storeData = storeDoc.data();
         const feeSettings = storeData.feeSettings || {};
 
-        // Calculate delivery fee (assuming delivery if not specified)
-        if (feeSettings.deliveryEnabled) {
+        // Determine the effective deliveryType for this order
+        const effectiveDeliveryType = (orderData && orderData.deliveryType) || 
+          (storeData && storeData.deliveryType) || 'Delivery';
+
+        // Calculate delivery fee ONLY for Delivery (never for Collection)
+        if (feeSettings.deliveryEnabled && effectiveDeliveryType === 'Delivery') {
           if (feeSettings.freeDeliveryThreshold && subtotal >= feeSettings.freeDeliveryThreshold) {
-            deliveryFee = 0; // Free delivery threshold met
+            deliveryFee = 0;
           } else {
             deliveryFee = feeSettings.deliveryFee || 0;
           }
+        } else {
+          deliveryFee = 0; // Force zero for Collection or when delivery disabled
         }
 
         // Calculate service fee
@@ -4807,6 +5859,35 @@ Customer is done adding items. Please prepare and bag these items.`;
 
     const finalTotalAmount = subtotal + deliveryFee + serviceFee;
 
+    // Get the effective delivery type for the message
+    let effectiveDeliveryType = 'Delivery';
+    let isPayAtStoreOrder = false;
+    
+    try {
+      const storeDoc = await getDoc(doc(db, 'stores', currentUser.uid));
+      if (storeDoc.exists()) {
+        const storeData = storeDoc.data();
+        effectiveDeliveryType = (orderData && orderData.deliveryType) || 
+          (storeData && storeData.deliveryType) || 'Delivery';
+          
+        // Check if this is a Pay At Store order (Collection + Other payment)
+        const storePaymentType = storeData.paymentType || 'Online';
+        const orderPaymentType = orderData && orderData.paymentType;
+        
+        if (effectiveDeliveryType === 'Collection') {
+          isPayAtStoreOrder = (orderPaymentType === 'Other') || 
+                             (storePaymentType === 'Other' && !orderPaymentType);
+        }
+        
+        // If it's Pay At Store, update the display type
+        if (isPayAtStoreOrder) {
+          effectiveDeliveryType = 'Pay At Store';
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching delivery type for bagged message:', error);
+    }
+
     // Create fee breakdown text
     let feeBreakdown = '';
     if (deliveryFee > 0 || serviceFee > 0) {
@@ -4824,6 +5905,8 @@ Subtotal: ${getCurrencySymbol(currency)}${formatPrice(subtotal, currency)}`;
       feeBreakdown += `\nTotal: ${getCurrencySymbol(currency)}${formatPrice(finalTotalAmount, currency)}`;
     }
 
+    const typeLine = `🚚 Delivery Type: ${effectiveDeliveryType}`;
+    
     const baggedMessage = `📦 ITEMS BAGGED
 
 Order ID: ${orderId}
@@ -4834,9 +5917,10 @@ ${validItems.map(item =>
   `• ${item.itemName} x${item.quantity} - ${getCurrencySymbol(item.currency)}${formatPrice(item.subtotal, item.currency)}`
 ).join('\n')}
 
+${typeLine}
 ${feeBreakdown || `Total Amount: ${getCurrencySymbol(currency)}${formatPrice(finalTotalAmount, currency)}`}
 
-Please proceed with payment to complete your order.`;
+${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the store to complete payment and collect your order.' : 'Please proceed with payment to complete your order.'}`;
 
     try {
       await addDoc(collection(db, 'messages'), {
@@ -5100,7 +6184,22 @@ Please proceed with payment to complete your order.`;
                   {filteredConversations.map((conversation) => (
                     <div
                       key={conversation.id}
-                      onClick={() => setSelectedConversation(conversation)}
+                      onClick={() => {
+                        setSelectedConversation(conversation);
+                        // Mark unread messages in this conversation as read
+                        const unreadMessages = messages.filter(msg => 
+                          (msg.senderId === conversation.otherUserId || msg.receiverId === conversation.otherUserId) && 
+                          msg.receiverId === currentUser?.uid && 
+                          !msg.isRead
+                        );
+                        console.log('🔔 MessagesPage - Selected conversation:', conversation.otherUserName);
+                        console.log('🔔 MessagesPage - Unread messages in conversation:', unreadMessages);
+                        if (unreadMessages.length > 0) {
+                          const messageIds = unreadMessages.map(msg => msg.id);
+                          console.log('🔔 MessagesPage - Marking as read:', messageIds);
+                          markMessagesAsRead(messageIds);
+                        }
+                      }}
                       className={`conversation-item ${selectedConversation?.id === conversation.id ? 'selected' : ''}`}
                     >
                       <div className="conversation-content">
@@ -5113,6 +6212,14 @@ Please proceed with payment to complete your order.`;
                           </div>
                           <div className="conversation-preview">
                             {conversation.messageType === 'order_request' && '🛒 '}
+                            {conversation.messageType === 'pay_at_store_request' && '💳 '}
+                            {conversation.messageType === 'pay_at_store_confirmed' && '✅ '}
+                            {conversation.messageType === 'pay_at_store_ready' && '📦 '}
+                            {conversation.messageType === 'pay_at_store_collection_scheduled' && '📋 '}
+                            {conversation.messageType === 'pay_at_store_completed' && '🎉 '}
+                            {conversation.messageType === 'order_confirmed_collection' && '📦 '}
+                            {conversation.messageType === 'collection_ready' && '✅ '}
+                            {conversation.messageType === 'collection_completed' && '🎉 '}
                             {conversation.messageType === 'item_request' && '➕ '}
                             {conversation.lastMessage.substring(0, 60)}
                             {conversation.lastMessage.length > 60 ? '...' : ''}
@@ -5271,6 +6378,159 @@ Please proceed with payment to complete your order.`;
                                   </button>
                                 </div>
                               )}
+
+                              {/* Seller handles order requests for Collection */}
+                              {message.messageType === 'order_request' && message.receiverId === currentUser.uid && isSeller && message.orderData?.deliveryType === 'Collection' && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => confirmOrderForCollection(message.orderData)}
+                                    className="action-btn confirm-collection-btn"
+                                    style={{
+                                      backgroundColor: '#10B981',
+                                      color: 'white',
+                                      marginRight: '8px'
+                                    }}
+                                  >
+                                    ✅ Confirm Order (Collection)
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Seller handles Pay At Store order requests */}
+                              {message.messageType === 'pay_at_store_request' && message.receiverId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => confirmPayAtStoreOrder(message.orderData)}
+                                    className="action-btn confirm-pay-at-store-btn"
+                                    style={{
+                                      backgroundColor: '#059669',
+                                      color: 'white',
+                                      marginRight: '8px'
+                                    }}
+                                  >
+                                    ✅ Confirm Pay At Store Order
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Seller handles customer coming to pay notification */}
+                              {message.messageType === 'customer_coming_to_pay' && message.receiverId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      // Use existing wallet validation system
+                                      const enteredCode = prompt(
+                                        `🎫 PICKUP CODE VERIFICATION\n\nTo confirm payment and collection, please enter the pickup code provided by the customer:\n\nOrder ID: ${message.orderData.orderId}\nAmount: ${getCurrencySymbol(message.orderData.currency)}${formatPrice(message.orderData.totalAmount, message.orderData.currency)}\n\nThis will validate through your wallet system.`
+                                      );
+
+                                      if (enteredCode) {
+                                        // Use the existing validatePickupCode function which integrates with wallet
+                                        validatePickupCode(enteredCode);
+                                      }
+                                    }}
+                                    className="action-btn confirm-payment-btn"
+                                    style={{
+                                      backgroundColor: '#059669',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    🎫 Verify Code & Confirm Payment
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Seller options after confirming Pay At Store order */}
+                              {message.messageType === 'pay_at_store_confirmed' && message.senderId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => markPayAtStoreReady(message.orderData)}
+                                    className="action-btn ready-pay-at-store-btn"
+                                    style={{
+                                      backgroundColor: '#0891b2',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    📦 Mark Ready for Collection
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Customer options for confirmed Pay At Store order */}
+                              {message.messageType === 'pay_at_store_confirmed' && message.receiverId === currentUser.uid && !isSeller && (
+                                <div className="message-actions">
+                                  <div className="pay-at-store-info">
+                                    💳 <strong>Pay At Store Order</strong> - Pay when you collect
+                                  </div>
+                                  <div className="pay-at-store-actions">
+                                    <button 
+                                      className="action-btn schedule-collection-btn"
+                                      onClick={() => {
+                                        setSelectedOrderForDelivery(message.orderData);
+                                        setShowCollectionModal(true);
+                                      }}
+                                    >
+                                      📋 Schedule Collection Time
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Seller can complete Pay At Store transaction when ready */}
+                              {message.messageType === 'pay_at_store_ready' && message.senderId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => completePayAtStoreTransaction(message.orderData)}
+                                    className="action-btn complete-pay-at-store-btn"
+                                    style={{
+                                      backgroundColor: '#dc2626',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    ✅ Complete Transaction (Payment Received)
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Pay At Store collection scheduled message */}
+                              {message.messageType === 'pay_at_store_collection_scheduled' && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    📋 <strong>Pay At Store Collection Scheduled</strong>
+                                    <div style={{ marginTop: '8px', fontSize: '14px' }}>
+                                      ⏰ Time: <strong>{message.orderData?.collectionTime}</strong>
+                                      <br />
+                                      💳 Payment: <strong>Pay at store when collecting</strong>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Only show reschedule button for the customer */}
+                                  {message.receiverId === currentUser.uid && !isSeller && (
+                                    <div style={{ marginTop: '10px' }}>
+                                      <button 
+                                        className="action-btn schedule-collection-btn"
+                                        onClick={() => {
+                                          setSelectedOrderForDelivery(message.orderData);
+                                          setShowCollectionModal(true);
+                                        }}
+                                      >
+                                        📋 Reschedule Collection
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Pay At Store transaction completed status */}
+                              {message.messageType === 'pay_at_store_completed' && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    ✅ <strong>Pay At Store Transaction Completed</strong> - Payment received and order collected
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Collection orders are handled elsewhere with different buttons */}
+                              {/* Delivery orders use immediate delivery workflow - no scheduling modal needed */}
                               
                               {message.messageType === 'done_adding' && message.receiverId === currentUser.uid && isSeller && (
                                 <div className="message-actions">
@@ -5286,29 +6546,183 @@ Please proceed with payment to complete your order.`;
                               
                               {message.messageType === 'items_bagged' && message.receiverId === currentUser.uid && !isSeller && (
                                 <div className="message-actions">
-                                  <button 
-                                    className={`action-btn payment-btn ${isOrderPaid(message.orderData?.orderId) ? 'disabled' : ''}`}
-                                    onClick={() => !isOrderPaid(message.orderData?.orderId) && openPaymentModal(message.orderData)}
-                                    disabled={isOrderPaid(message.orderData?.orderId)}
-                                    style={{
-                                      backgroundColor: isOrderPaid(message.orderData?.orderId) ? '#d1d5db' : '#10B981',
-                                      color: isOrderPaid(message.orderData?.orderId) ? '#6B7280' : 'white',
-                                      cursor: isOrderPaid(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
-                                      opacity: isOrderPaid(message.orderData?.orderId) ? 0.7 : 1
-                                    }}
-                                  >
-                                    {isOrderPaid(message.orderData?.orderId) ? '✅ Payment Completed' : '💳 Proceed to Payment'}
-                                  </button>
+                                  {(isPayAtStoreOrderSync(message.orderData) || 
+                                    (message.message && message.message.includes('Pay At Store'))) ? (
+                                    // Pay At Store button - sends notification to seller
+                                    <button 
+                                      className={`action-btn payment-btn ${hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId) ? 'disabled' : ''}`}
+                                      disabled={hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId)}
+                                      onClick={async () => {
+                                        if (hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId)) {
+                                          return;
+                                        }
+
+                                        try {
+                                          const conversationId = selectedConversation.id || 
+                                            [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
+
+                                          // Generate pickup code for Pay At Store orders
+                                          const pickupCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+                                          // Send message to seller that customer is coming to pay
+                                          const customerComingMessage = `💳 CUSTOMER COMING TO PAY AT STORE
+
+Order ID: ${message.orderData.orderId}
+
+🚶‍♂️ Customer has confirmed they are coming to the store to pay and collect their order.
+
+📦 ORDER DETAILS:
+${message.orderData.items.map(item => 
+  `• ${item.itemName || item.name} x${item.quantity} - ${getCurrencySymbol(item.currency)}${formatPrice(item.subtotal, item.currency)}`
+).join('\n')}
+
+💰 TOTAL TO COLLECT: ${getCurrencySymbol(message.orderData.currency)}${formatPrice(message.orderData.totalAmount, message.orderData.currency)}
+
+🎫 CUSTOMER PICKUP CODE: ${pickupCode}
+
+⚠️ IMPORTANT: Verify the pickup code before handing over items and accepting payment.
+
+Please have the order ready for collection and payment.`;
+
+                                          await addDoc(collection(db, 'messages'), {
+                                            conversationId: conversationId,
+                                            senderId: currentUser.uid,
+                                            senderName: currentUser.displayName || currentUser.email,
+                                            senderEmail: currentUser.email,
+                                            receiverId: selectedConversation.otherUserId,
+                                            receiverName: selectedConversation.otherUserName,
+                                            message: customerComingMessage,
+                                            timestamp: serverTimestamp(),
+                                            isRead: false,
+                                            messageType: 'customer_coming_to_pay',
+                                            orderData: {
+                                              ...message.orderData,
+                                              pickupCode: pickupCode
+                                            }
+                                          });
+
+                                          // Send pickup code to customer
+                                          const customerCodeMessage = `🎫 YOUR PICKUP CODE
+
+Order ID: ${message.orderData.orderId}
+
+Your pickup code is: ${pickupCode}
+
+💡 IMPORTANT: Present this code to the seller when you arrive at the store to pay and collect your order.
+
+📍 Please bring this code and your payment method to complete the transaction.`;
+
+                                          await addDoc(collection(db, 'messages'), {
+                                            conversationId: conversationId,
+                                            senderId: currentUser.uid,
+                                            senderName: currentUser.displayName || currentUser.email,
+                                            senderEmail: currentUser.email,
+                                            receiverId: currentUser.uid,
+                                            receiverName: currentUser.displayName || currentUser.email,
+                                            message: customerCodeMessage,
+                                            timestamp: serverTimestamp(),
+                                            isRead: true,
+                                            messageType: 'pickup_code_generated',
+                                            orderData: {
+                                              ...message.orderData,
+                                              pickupCode: pickupCode
+                                            }
+                                          });
+
+                                          // Create transaction record for wallet validation
+                                          await addDoc(collection(db, 'transactions'), {
+                                            sellerId: selectedConversation.otherUserId,
+                                            orderId: message.orderData.orderId,
+                                            customerId: currentUser.uid,
+                                            customerName: currentUser.displayName || currentUser.email,
+                                            type: 'pay_at_store',
+                                            amount: message.orderData.totalAmount,
+                                            currency: message.orderData.currency,
+                                            paymentMethod: 'pay_at_store',
+                                            description: `Pay At Store: ${message.orderData.items?.map(item => item.itemName || item.name).join(', ') || 'Order items'}`,
+                                            status: 'pending_payment',
+                                            pickupCode: pickupCode,
+                                            pickupStatus: 'pending',
+                                            createdAt: serverTimestamp(),
+                                            timestamp: serverTimestamp()
+                                          });
+
+                                          // Show confirmation to customer
+                                          const notification = document.createElement('div');
+                                          notification.innerHTML = `✅ Seller notified! Your pickup code: ${pickupCode}<br>Please bring this code to the store to pay and collect your order.`;
+                                          notification.style.cssText = `
+                                            position: fixed;
+                                            top: 20px;
+                                            right: 20px;
+                                            background: #10B981;
+                                            color: white;
+                                            padding: 1rem;
+                                            border-radius: 8px;
+                                            z-index: 1000;
+                                            font-weight: 600;
+                                            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                                            max-width: 300px;
+                                          `;
+                                          document.body.appendChild(notification);
+                                          
+                                          setTimeout(() => {
+                                            if (document.body.contains(notification)) {
+                                              document.body.removeChild(notification);
+                                            }
+                                          }, 8000);
+
+                                        } catch (error) {
+                                          console.error('Error notifying seller:', error);
+                                          alert('Failed to notify seller. Please try again.');
+                                        }
+                                      }}
+                                      style={{
+                                        backgroundColor: hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId) ? '#d1d5db' : '#10B981',
+                                        color: hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId) ? '#6B7280' : 'white',
+                                        cursor: hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
+                                        opacity: hasCustomerNotifiedComing(message.orderData?.orderId) || isPayAtStoreCompleted(message.orderData?.orderId) ? 0.7 : 1
+                                      }}
+                                    >
+                                      {isPayAtStoreCompleted(message.orderData?.orderId) ? '✅ Payment Completed' : 
+                                       hasCustomerNotifiedComing(message.orderData?.orderId) ? '📞 Seller Notified' : '🏪 Pay At Store'}
+                                    </button>
+                                  ) : (
+                                    // Regular payment button for Delivery and Collection orders
+                                    <button 
+                                      className={`action-btn payment-btn ${isOrderPaid(message.orderData?.orderId) ? 'disabled' : ''}`}
+                                      onClick={() => !isOrderPaid(message.orderData?.orderId) && openPaymentModal(message.orderData)}
+                                      disabled={isOrderPaid(message.orderData?.orderId)}
+                                      style={{
+                                        backgroundColor: isOrderPaid(message.orderData?.orderId) ? '#d1d5db' : '#10B981',
+                                        color: isOrderPaid(message.orderData?.orderId) ? '#6B7280' : 'white',
+                                        cursor: isOrderPaid(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
+                                        opacity: isOrderPaid(message.orderData?.orderId) ? 0.7 : 1
+                                      }}
+                                    >
+                                      {isOrderPaid(message.orderData?.orderId) ? '✅ Payment Completed' : '💳 Proceed to Payment'}
+                                    </button>
+                                  )}
                                 </div>
                               )}
 
-                              {/* Delivery buttons for sellers after payment notification */}
-                              {message.messageType === 'payment_notification' && message.receiverId === currentUser?.uid && isSeller && (
+                              {/* Delivery buttons for sellers after payment notification - DELIVERY ONLY */}
+                              {message.messageType === 'payment_notification' && message.receiverId === currentUser?.uid && isSeller && 
+                               message.paymentData?.deliveryType === 'Delivery' && (
                                 <div className="message-actions">
                                   <button 
                                     className={`action-btn deliver-btn ${isDeliveryInProgress(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) || isDeliveryCompleted(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) ? 'disabled' : ''}`}
                                     disabled={isDeliveryInProgress(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) || isDeliveryCompleted(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId)}
-                                    onClick={() => startDelivery(message.orderData || { orderId: message.paymentData?.displayInfo?.orderId, ...message.paymentData?.displayInfo })}
+                                    onClick={() => {
+                                      // Get complete order data for delivery
+                                      const orderDataForDelivery = message.orderData || {
+                                        orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
+                                        items: message.paymentData?.items || [],
+                                        totalAmount: message.paymentData?.total || message.paymentData?.amount,
+                                        currency: message.paymentData?.currency || 'GBP',
+                                        deliveryType: 'Delivery'
+                                      };
+                                      startDelivery(orderDataForDelivery);
+                                    }}
                                   >
                                     {isDeliveryInProgress(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) ? '🚚 Delivery in Progress' : 
                                      isDeliveryCompleted(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) ? '✅ Delivered' : '🚚 Deliver Now'}
@@ -5316,8 +6730,119 @@ Please proceed with payment to complete your order.`;
                                 </div>
                               )}
 
+                              {/* Collection buttons for sellers after payment notification - COLLECTION ONLY */}
+                              {message.messageType === 'payment_notification' && message.receiverId === currentUser?.uid && isSeller && 
+                               message.paymentData?.deliveryType === 'Collection' && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      const orderDataForCollection = {
+                                        orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
+                                        items: message.paymentData?.items || [],
+                                        totalAmount: message.paymentData?.total || message.paymentData?.amount,
+                                        currency: message.paymentData?.currency || 'GBP',
+                                        deliveryType: 'Collection',
+                                        pickupCode: message.paymentData?.pickupCode
+                                      };
+                                      markReadyForCollection(orderDataForCollection);
+                                    }}
+                                    className="action-btn ready-collection-btn"
+                                    style={{
+                                      backgroundColor: '#10B981',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    📦 Mark Ready for Collection
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Seller options after payment for Collection orders */}
+                              {message.messageType === 'payment_completed' && message.receiverId === currentUser.uid && isSeller && 
+                               message.paymentData?.deliveryType === 'Collection' && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      const orderDataForCollection = {
+                                        orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
+                                        items: message.paymentData?.items || [],
+                                        totalAmount: message.paymentData?.total || message.paymentData?.amount,
+                                        currency: message.paymentData?.currency || 'GBP',
+                                        deliveryType: 'Collection',
+                                        pickupCode: message.paymentData?.pickupCode
+                                      };
+                                      markReadyForCollection(orderDataForCollection);
+                                    }}
+                                    className="action-btn ready-collection-btn"
+                                    style={{
+                                      backgroundColor: '#10B981',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    📦 Mark Ready for Collection
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Seller options after payment for Delivery orders */}
+                              {message.messageType === 'payment_completed' && message.receiverId === currentUser.uid && isSeller && 
+                               message.paymentData?.deliveryType === 'Delivery' && 
+                               !isDeliveryInProgress(message.paymentData?.orderId) && !isDeliveryCompleted(message.paymentData?.orderId) && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      // Get complete order data for delivery
+                                      const orderDataForDelivery = message.orderData || {
+                                        orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
+                                        items: message.paymentData?.items || [],
+                                        totalAmount: message.paymentData?.total || message.paymentData?.amount,
+                                        currency: message.paymentData?.currency || 'GBP',
+                                        deliveryType: 'Delivery'
+                                      };
+                                      startDelivery(orderDataForDelivery);
+                                    }}
+                                  >
+                                    {isDeliveryInProgress(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) ? '🚚 Delivery in Progress' : 
+                                     isDeliveryCompleted(message.orderData?.orderId || message.paymentData?.displayInfo?.orderId) ? '✅ Delivered' : '🚚 Deliver Now'}
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Customer collection status for Collection orders */}
+                              {message.messageType === 'payment_completed' && message.senderId === currentUser.uid && !isSeller && 
+                               message.paymentData?.deliveryType === 'Collection' && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    🏪 <strong>Collection Order</strong> - Bring your pickup code to the store
+                                  </div>
+                                  <div className="collection-actions">
+                                    <button 
+                                      className="action-btn schedule-collection-btn"
+                                      onClick={() => openCollectionModal(message.paymentData)}
+                                    >
+                                      📋 Reschedule Collection
+                                    </button>
+                                    {storeRefundsEnabled && (
+                                      <button 
+                                        className="action-btn refund-btn"
+                                        onClick={() => requestRefund(message.paymentData)}
+                                        disabled={isRefundRequested(message.paymentData?.orderId)}
+                                      >
+                                        {isRefundRequested(message.paymentData?.orderId) ? '❌ Refund Requested' : '❌ Cancel & Request Refund'}
+                                      </button>
+                                    )}
+                                    {!storeRefundsEnabled && (
+                                      <div className="refund-disabled-notice">
+                                        ℹ️ This store does not offer refunds
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Delivery scheduling for customers after payment completion - only show if delivery not started */}
                               {message.messageType === 'payment_completed' && message.senderId === currentUser.uid && !isSeller && 
+                               message.paymentData?.deliveryType === 'Delivery' &&
                                !isDeliveryInProgress(message.paymentData?.orderId) && !isDeliveryCompleted(message.paymentData?.orderId) && 
                                !isDeliveryCancelled(message.paymentData?.orderId) && (
                                 <div className="message-actions">
@@ -5437,8 +6962,9 @@ Please proceed with payment to complete your order.`;
                                 </div>
                               )}
 
-                              {/* Complete delivery button for sellers when delivery is in progress and not cancelled */}
+                              {/* Complete delivery button for sellers when delivery is in progress and not cancelled - DELIVERY ONLY */}
                               {message.messageType === 'delivery_started' && message.senderId === currentUser.uid && isSeller && 
+                               message.orderData?.deliveryType === 'Delivery' &&
                                !isDeliveryCompleted(message.orderData?.orderId) && 
                                (() => {
                                  // Only show button if this is the CURRENT active delivery (no newer delivery_started for this order)
@@ -5460,9 +6986,9 @@ Please proceed with payment to complete your order.`;
                                 </div>
                               )}
 
-                              {/* Deliver Now button for scheduled deliveries */}
+                              {/* Deliver Now button for scheduled deliveries - DELIVERY ORDERS ONLY */}
                               {(message.messageType === 'delivery_scheduled' || message.messageType === 'delivery_rescheduled') && 
-                               isSeller && (
+                               isSeller && message.orderData?.deliveryType === 'Delivery' && (
                                 <div className="message-actions">
                                   {(() => {
                                     const now = new Date();
@@ -5509,6 +7035,115 @@ Please proceed with payment to complete your order.`;
                                       </button>
                                     );
                                   })()}
+                                </div>
+                              )}
+
+                              {/* Collection ready message - seller can validate pickup code */}
+                              {message.messageType === 'collection_ready' && message.receiverId === currentUser.uid && !isSeller && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    📦 <strong>Ready for Collection</strong> - Your order is ready at the store
+                                    <div style={{ marginTop: '8px', fontSize: '14px' }}>
+                                      🎫 Pickup Code: <strong>{message.orderData?.pickupCode}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Validate pickup code button for sellers */}
+                              {message.messageType === 'collection_ready' && message.senderId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      setActiveTab('wallet');
+                                    }}
+                                    className="action-btn validate-pickup-btn"
+                                    style={{
+                                      backgroundColor: '#059669',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    ✅ Validate Pickup Code
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Collection completed status */}
+                              {message.messageType === 'collection_completed' && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    ✅ <strong>Collection Completed</strong> - Order successfully collected
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Collection scheduled message - show collection details */}
+                              {message.messageType === 'collection_scheduled' && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    📋 <strong>Collection Scheduled</strong>
+                                    <div style={{ marginTop: '8px', fontSize: '14px' }}>
+                                      ⏰ Time: <strong>{message.orderData?.collectionTime}</strong>
+                                      <br />
+                                      💰 Collection Fee: <strong>{getCurrencySymbol(message.orderData?.currency || 'GBP')}{formatPrice(message.orderData?.collectionFee || 0, message.orderData?.currency || 'GBP')}</strong>
+                                      <br />
+                                      💳 New Total: <strong>{getCurrencySymbol(message.orderData?.currency || 'GBP')}{formatPrice(message.orderData?.newTotal || 0, message.orderData?.currency || 'GBP')}</strong>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Only show buttons for the recipient customer */}
+                                  {message.receiverId === currentUser.uid && !isSeller && (
+                                    <div style={{ marginTop: '10px' }}>
+                                      <button 
+                                        className="action-btn schedule-collection-btn"
+                                        onClick={() => openCollectionModal(message.orderData)}
+                                        style={{ marginRight: '8px' }}
+                                      >
+                                        📋 Reschedule Collection
+                                      </button>
+                                      {storeRefundsEnabled && (
+                                        <button 
+                                          className="action-btn refund-btn"
+                                          onClick={() => requestRefund(message.orderData)}
+                                          disabled={isRefundRequested(message.orderData?.orderId)}
+                                        >
+                                          {isRefundRequested(message.orderData?.orderId) ? '❌ Refund Requested' : '❌ Cancel Collection'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Ready for collection message - customer sees pickup notification */}
+                              {message.messageType === 'ready_for_collection' && message.receiverId === currentUser.uid && !isSeller && (
+                                <div className="message-actions">
+                                  <div className="collection-status-info">
+                                    📦 <strong>Ready for Collection</strong> - Your order is ready!
+                                    <div style={{ marginTop: '8px', fontSize: '14px' }}>
+                                      🏪 Please collect at your scheduled time: <strong>{message.orderData?.collectionTime || 'as arranged'}</strong>
+                                      <br />
+                                      🎫 Bring your pickup code: <strong>{message.orderData?.pickupCode}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Validate collection pickup for sellers */}
+                              {message.messageType === 'ready_for_collection' && message.senderId === currentUser.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={() => {
+                                      setActiveTab('wallet');
+                                    }}
+                                    className="action-btn validate-pickup-btn"
+                                    style={{
+                                      backgroundColor: '#059669',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    ✅ Complete Collection
+                                  </button>
                                 </div>
                               )}
 
@@ -6385,6 +8020,11 @@ Please proceed with payment to complete your order.`;
                   )}
                   
                   <div className="summary-breakdown">
+                    {/* Show delivery type for clarity */}
+                    <div className="breakdown-row" style={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                      <span>🚚 Delivery Type:</span>
+                      <span>{paymentData.deliveryType || 'Delivery'}</span>
+                    </div>
                     <div className="breakdown-row">
                       <span>Subtotal:</span>
                       <span>
@@ -6392,12 +8032,12 @@ Please proceed with payment to complete your order.`;
                         {formatPrice(paymentData.subtotal || 0, paymentData.currency)}
                       </span>
                     </div>
-                    {paymentData.feeBreakdown?.deliveryEnabled && (
+                    {paymentData.feeBreakdown?.deliveryEnabled && (paymentData.deliveryFee || 0) > 0 && (
                       <div className="breakdown-row">
                         <span>Delivery Fee:</span>
                         <span>
-                          {(paymentData.deliveryFee || 0) === 0 ? 'FREE' : 
-                           `${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.deliveryFee || 0, paymentData.currency)}`}
+                          {getCurrencySymbol(paymentData.currency)}
+                          {formatPrice(paymentData.deliveryFee || 0, paymentData.currency)}
                         </span>
                       </div>
                     )}
@@ -7014,6 +8654,133 @@ Please proceed with payment to complete your order.`;
         </div>
       )}
 
+      {/* Collection Scheduling Modal */}
+      {showCollectionModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowCollectionModal(false)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-header">
+              <h2>Schedule Collection</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowCollectionModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-content">
+              <div className="payment-section">
+                <h3>Collection Time Slots</h3>
+                <div className="delivery-options">
+                  <div className={`delivery-option ${deliverySettings.timeSlot === 'morning' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      id="morning"
+                      name="timeSlot"
+                      value="morning"
+                      checked={deliverySettings.timeSlot === 'morning'}
+                      onChange={(e) => setDeliverySettings({
+                        ...deliverySettings,
+                        timeSlot: e.target.value,
+                        deliveryType: 'collection'
+                      })}
+                    />
+                    <label htmlFor="morning">
+                      <div className="option-header">
+                        🌅 <strong>Morning Collection</strong>
+                        <span className="option-price">+£1.50</span>
+                      </div>
+                      <div className="option-description">9:00 AM - 12:00 PM</div>
+                    </label>
+                  </div>
+
+                  <div className={`delivery-option ${deliverySettings.timeSlot === 'afternoon' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      id="afternoon"
+                      name="timeSlot"
+                      value="afternoon"
+                      checked={deliverySettings.timeSlot === 'afternoon'}
+                      onChange={(e) => setDeliverySettings({
+                        ...deliverySettings,
+                        timeSlot: e.target.value,
+                        deliveryType: 'collection'
+                      })}
+                    />
+                    <label htmlFor="afternoon">
+                      <div className="option-header">
+                        ☀️ <strong>Afternoon Collection</strong>
+                        <span className="option-price">+£2.00</span>
+                      </div>
+                      <div className="option-description">12:00 PM - 5:00 PM</div>
+                    </label>
+                  </div>
+
+                  <div className={`delivery-option ${deliverySettings.timeSlot === 'evening' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      id="evening"
+                      name="timeSlot"
+                      value="evening"
+                      checked={deliverySettings.timeSlot === 'evening'}
+                      onChange={(e) => setDeliverySettings({
+                        ...deliverySettings,
+                        timeSlot: e.target.value,
+                        deliveryType: 'collection'
+                      })}
+                    />
+                    <label htmlFor="evening">
+                      <div className="option-header">
+                        🌆 <strong>Evening Collection</strong>
+                        <span className="option-price">+£2.50</span>
+                      </div>
+                      <div className="option-description">5:00 PM - 8:00 PM</div>
+                    </label>
+                  </div>
+
+                  <div className={`delivery-option ${deliverySettings.timeSlot === 'next_day' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      id="next_day"
+                      name="timeSlot"
+                      value="next_day"
+                      checked={deliverySettings.timeSlot === 'next_day'}
+                      onChange={(e) => setDeliverySettings({
+                        ...deliverySettings,
+                        timeSlot: e.target.value,
+                        deliveryType: 'collection'
+                      })}
+                    />
+                    <label htmlFor="next_day">
+                      <div className="option-header">
+                        📅 <strong>Next Day Collection</strong>
+                        <span className="option-price">+£4.00</span>
+                      </div>
+                      <div className="option-description">Any time next day</div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="delivery-actions">
+                  <button
+                    className="action-btn confirm-btn"
+                    onClick={scheduleCollection}
+                    style={{
+                      backgroundColor: '#10B981',
+                      color: 'white',
+                      width: '100%',
+                      marginTop: '1rem'
+                    }}
+                  >
+                    Schedule Collection
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fee Settings Modal (for sellers) */}
       {showFeeSettings && isSeller && (
         <div className="payment-modal-overlay" onClick={() => setShowFeeSettings(false)}>
@@ -7029,21 +8796,22 @@ Please proceed with payment to complete your order.`;
             </div>
 
             <div className="payment-content">
-              {/* Delivery Fee Settings */}
-              <div className="payment-section">
-                <h3>Delivery Fee</h3>
-                <div className="fee-setting-group">
-                  <label className="fee-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={feeSettings.deliveryEnabled}
-                      onChange={(e) => setFeeSettings(prev => ({
-                        ...prev,
-                        deliveryEnabled: e.target.checked
-                      }))}
-                    />
-                    Enable delivery fee
-                  </label>
+              {/* Delivery Fee Settings - Only show for Delivery stores, not Collection */}
+              {sellerStoreData?.deliveryType !== 'Collection' && (
+                <div className="payment-section">
+                  <h3>Delivery Fee</h3>
+                  <div className="fee-setting-group">
+                    <label className="fee-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={feeSettings.deliveryEnabled}
+                        onChange={(e) => setFeeSettings(prev => ({
+                          ...prev,
+                          deliveryEnabled: e.target.checked
+                        }))}
+                      />
+                      Enable delivery fee
+                    </label>
 
                   {feeSettings.deliveryEnabled && (
                     <div className="fee-inputs">
@@ -7077,6 +8845,7 @@ Please proceed with payment to complete your order.`;
                   )}
                 </div>
               </div>
+              )}
 
               {/* Service Fee Settings */}
               <div className="payment-section">
@@ -7190,7 +8959,7 @@ Please proceed with payment to complete your order.`;
                   <p><strong>Example order: £35.00</strong></p>
                   <div className="preview-breakdown">
                     <div>Subtotal: £35.00</div>
-                    {feeSettings.deliveryEnabled && (
+                    {feeSettings.deliveryEnabled && sellerStoreData?.deliveryType !== 'Collection' && (
                       <div>
                         Delivery: {
                           feeSettings.freeDeliveryThreshold > 0 && 35 >= feeSettings.freeDeliveryThreshold 
@@ -7211,10 +8980,15 @@ Please proceed with payment to complete your order.`;
                         }
                       </div>
                     )}
+                    {sellerStoreData?.deliveryType === 'Collection' && (
+                      <div style={{ color: '#666', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                        * No delivery fee for collection orders
+                      </div>
+                    )}
                     <div style={{ borderTop: '1px solid #ccc', paddingTop: '0.5rem', fontWeight: 'bold' }}>
                       Total: £{(
                         35 + 
-                        (feeSettings.deliveryEnabled && !(feeSettings.freeDeliveryThreshold > 0 && 35 >= feeSettings.freeDeliveryThreshold) ? feeSettings.deliveryFee : 0) +
+                        (feeSettings.deliveryEnabled && sellerStoreData?.deliveryType !== 'Collection' && !(feeSettings.freeDeliveryThreshold > 0 && 35 >= feeSettings.freeDeliveryThreshold) ? feeSettings.deliveryFee : 0) +
                         (feeSettings.serviceFeeEnabled ? 
                           (feeSettings.serviceFeeType === 'percentage' 
                             ? Math.min(35 * (feeSettings.serviceFeeRate / 100), feeSettings.serviceFeeMax || 999999)
@@ -10613,6 +12387,292 @@ Please proceed with payment to complete your order.`;
 
           .withdraw-btn,
           .fee-settings-btn {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+
+        /* Collection Modal Styles */
+        .collection-modal {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          padding: 1rem;
+        }
+
+        .collection-modal-content {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          max-width: 500px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .collection-modal h3 {
+          color: #1f2937;
+          margin: 0 0 1.5rem 0;
+          font-size: 1.5rem;
+          font-weight: 700;
+          text-align: center;
+        }
+
+        .collection-time-slots {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          margin: 1.5rem 0;
+        }
+
+        .time-slot-option {
+          display: flex;
+          align-items: center;
+          padding: 1rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: white;
+        }
+
+        .time-slot-option:hover {
+          border-color: #059669;
+          background: #f0fdf4;
+        }
+
+        .time-slot-option.selected {
+          border-color: #059669;
+          background: #f0fdf4;
+          box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+        }
+
+        .time-slot-option input[type="radio"] {
+          margin-right: 0.75rem;
+          width: 18px;
+          height: 18px;
+          accent-color: #059669;
+        }
+
+        .time-slot-details {
+          flex: 1;
+        }
+
+        .time-slot-label {
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 0.25rem;
+        }
+
+        .time-slot-price {
+          color: #059669;
+          font-weight: 600;
+          font-size: 1.1rem;
+        }
+
+        .time-slot-description {
+          color: #6b7280;
+          font-size: 0.9rem;
+        }
+
+        .collection-order-summary {
+          background: #f9fafb;
+          border-radius: 8px;
+          padding: 1rem;
+          margin: 1.5rem 0;
+        }
+
+        .collection-order-summary h4 {
+          margin: 0 0 0.75rem 0;
+          color: #1f2937;
+          font-size: 1rem;
+          font-weight: 600;
+        }
+
+        .collection-total-summary {
+          border-top: 1px solid #e5e7eb;
+          padding-top: 0.75rem;
+          margin-top: 0.75rem;
+        }
+
+        .collection-total-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 0.5rem;
+          font-size: 0.9rem;
+        }
+
+        .collection-total-row.final {
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: #1f2937;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 0.5rem;
+          margin-top: 0.5rem;
+        }
+
+        .collection-modal-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          margin-top: 2rem;
+          padding-top: 1rem;
+          border-top: 1px solid #e5e7eb;
+        }
+
+        .collection-confirm-btn {
+          background: #059669;
+          color: white;
+          font-size: 1rem;
+          font-weight: 600;
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          min-width: 150px;
+        }
+
+        .collection-confirm-btn:hover:not(:disabled) {
+          background: #047857;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+        }
+
+        .collection-confirm-btn:disabled {
+          background: #d1d5db;
+          color: #9ca3af;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .collection-status-info {
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          border-radius: 8px;
+          padding: 1rem;
+          color: #065f46;
+        }
+
+        .collection-actions {
+          display: flex;
+          gap: 0.75rem;
+          margin-top: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .schedule-collection-btn {
+          background: #059669;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 0.5rem 1rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .schedule-collection-btn:hover {
+          background: #047857;
+          transform: translateY(-1px);
+        }
+
+        /* Pay At Store Styles */
+        .pay-at-store-info {
+          background: #fef3c7;
+          border: 1px solid #f59e0b;
+          border-radius: 8px;
+          padding: 1rem;
+          color: #92400e;
+          margin-bottom: 0.75rem;
+        }
+
+        .pay-at-store-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .confirm-pay-at-store-btn {
+          background: #059669;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 0.5rem 1rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .confirm-pay-at-store-btn:hover {
+          background: #047857;
+          transform: translateY(-1px);
+        }
+
+        .ready-pay-at-store-btn {
+          background: #0891b2;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 0.5rem 1rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .ready-pay-at-store-btn:hover {
+          background: #0e7490;
+          transform: translateY(-1px);
+        }
+
+        .complete-pay-at-store-btn {
+          background: #dc2626;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 0.5rem 1rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .complete-pay-at-store-btn:hover {
+          background: #b91c1c;
+          transform: translateY(-1px);
+        }
+
+        @media (max-width: 640px) {
+          .collection-modal-content {
+            padding: 1.5rem;
+            margin: 1rem;
+          }
+
+          .collection-modal-actions {
+            flex-direction: column;
+          }
+
+          .collection-confirm-btn {
+            width: 100%;
+          }
+
+          .collection-actions {
+            flex-direction: column;
+          }
+
+          .schedule-collection-btn {
             width: 100%;
             justify-content: center;
           }

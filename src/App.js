@@ -20,6 +20,7 @@ import ProfilePage from './pages/ProfilePage';
 import StoreReviewPreviewPage from './pages/StoreReviewPreviewPage';
 import MessagesPage from './pages/MessagesPage';
 import { CartProvider } from './CartContext';
+import { MessageProvider } from './MessageContext';
 import ShopCartPage from './pages/ShopCartPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -54,9 +55,10 @@ function OnboardingGuard({ children }) {
 
 function App() {
   return (
-    <CartProvider>
-      <Router>
-        <OnboardingGuard>
+    <MessageProvider>
+      <CartProvider>
+        <Router>
+          <OnboardingGuard>
           <div className="App" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#F9F5EE' }}>
             <div
               style={{
@@ -110,6 +112,7 @@ function App() {
         </OnboardingGuard>
       </Router>
     </CartProvider>
+    </MessageProvider>
   );
 }
 

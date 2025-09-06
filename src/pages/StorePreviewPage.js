@@ -554,26 +554,38 @@ function StorePreviewPage() {
             
             {/* Display fee information */}
             {console.log('Current storeFeeSettings:', storeFeeSettings, 'deliveryEnabled:', storeFeeSettings.deliveryEnabled, 'serviceFeeEnabled:', storeFeeSettings.serviceFeeEnabled)}
-            {(storeFeeSettings.deliveryEnabled || storeFeeSettings.serviceFeeEnabled) && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: '#f0f9ff', borderRadius: 6, fontSize: '0.9rem' }}>
-                <div style={{ fontWeight: 600, color: '#007B7F', marginBottom: 4 }}>📋 Store Fees:</div>
-                {storeFeeSettings.deliveryEnabled && (
-                  <div style={{ color: '#444' }}>
-                    • Delivery: {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.deliveryFee, store.currency || 'GBP')}
-                    {storeFeeSettings.freeDeliveryThreshold > 0 && (
-                      <span style={{ color: '#007B7F' }}> (Free over {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.freeDeliveryThreshold, store.currency || 'GBP')})</span>
-                    )}
-                  </div>
-                )}
-                {storeFeeSettings.serviceFeeEnabled && (
-                  <div style={{ color: '#444' }}>
-                    • Service fee: {storeFeeSettings.serviceFeeType === 'percentage' 
-                      ? `${storeFeeSettings.serviceFeeRate}%${storeFeeSettings.serviceFeeMax > 0 ? ` (max ${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeMax, store.currency || 'GBP')})` : ''}`
-                      : `${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeAmount, store.currency || 'GBP')}`}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Hide delivery fee for ALL Collection orders (both Pay at Store and Card Payment) */}
+            {(() => {
+              const isCollectionStore = store.deliveryType === 'Collection';
+              const shouldShowDeliveryFee = storeFeeSettings.deliveryEnabled && !isCollectionStore;
+              const shouldShowFeeSection = shouldShowDeliveryFee || storeFeeSettings.serviceFeeEnabled;
+              
+              return shouldShowFeeSection && (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: '#f0f9ff', borderRadius: 6, fontSize: '0.9rem' }}>
+                  <div style={{ fontWeight: 600, color: '#007B7F', marginBottom: 4 }}>📋 Store Fees:</div>
+                  {shouldShowDeliveryFee && (
+                    <div style={{ color: '#444' }}>
+                      • Delivery: {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.deliveryFee, store.currency || 'GBP')}
+                      {storeFeeSettings.freeDeliveryThreshold > 0 && (
+                        <span style={{ color: '#007B7F' }}> (Free over {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.freeDeliveryThreshold, store.currency || 'GBP')})</span>
+                      )}
+                    </div>
+                  )}
+                  {storeFeeSettings.serviceFeeEnabled && (
+                    <div style={{ color: '#444' }}>
+                      • Service fee: {storeFeeSettings.serviceFeeType === 'percentage' 
+                        ? `${storeFeeSettings.serviceFeeRate}%${storeFeeSettings.serviceFeeMax > 0 ? ` (max ${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeMax, store.currency || 'GBP')})` : ''}`
+                        : `${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeAmount, store.currency || 'GBP')}`}
+                    </div>
+                  )}
+                  {isCollectionStore && storeFeeSettings.deliveryEnabled && (
+                    <div style={{ color: '#666', fontSize: '0.85rem', marginTop: 4, fontStyle: 'italic' }}>
+                      * Delivery fee not applicable for collection orders
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             
             {/* Display refunds policy notification */}
             {!storeFeeSettings.refundsEnabled && (

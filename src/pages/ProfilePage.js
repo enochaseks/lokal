@@ -312,10 +312,10 @@ function ProfilePage() {
     const fetchOrders = async () => {
       setOrdersLoading(true);
       try {
-        // Fetch all messages where the user was involved in payments
+        // Fetch all messages where the user was involved in payments or placed orders
         const paymentsQuery = query(
           collection(db, 'messages'),
-          where('messageType', 'in', ['payment_completed', 'payment_notification'])
+          where('messageType', 'in', ['payment_completed', 'payment_notification', 'order_request', 'pay_at_store_completed', 'collection_confirmation'])
         );
         
         const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -324,22 +324,76 @@ function ProfilePage() {
         paymentsSnapshot.docs.forEach(doc => {
           const message = doc.data();
           
+          // Skip collection_confirmation messages as they are just notifications, not orders
+          if (message.messageType === 'collection_confirmation') {
+            return;
+          }
+          
           // If this user was the customer who made the payment (senderId of payment_completed)
           if (message.messageType === 'payment_completed' && message.senderId === authUser.uid) {
+            const orderId = message.paymentData?.orderId || message.orderData?.orderId;
+            
+            // Check if we already have this order
+            const existingOrderIndex = customerOrders.findIndex(o => o.orderId === orderId);
+            
             const orderData = {
               id: doc.id,
-              orderId: message.paymentData?.orderId || message.orderData?.orderId,
+              orderId: orderId,
               items: message.paymentData?.items || message.orderData?.items || [],
               totalAmount: message.paymentData?.amount || message.paymentData?.totalAmount || 0,
               currency: message.paymentData?.currency || 'GBP',
               pickupCode: message.paymentData?.pickupCode,
               paymentMethod: message.paymentData?.paymentMethod,
+              deliveryType: message.paymentData?.deliveryType || message.orderData?.deliveryType,
+              paymentType: message.paymentData?.paymentType || message.orderData?.paymentType,
               timestamp: message.timestamp,
               storeName: message.receiverName,
               storeId: message.receiverId,
-              status: 'paid' // Default status
+              status: 'paid'
             };
-            customerOrders.push(orderData);
+            
+            if (existingOrderIndex >= 0) {
+              // Update existing order only if current status is not already completed
+              if (customerOrders[existingOrderIndex].status !== 'collected') {
+                customerOrders[existingOrderIndex] = orderData;
+              }
+            } else {
+              customerOrders.push(orderData);
+            }
+          }
+          
+          // If this user placed an order request OR it's a completed pay at store order
+          if ((message.messageType === 'order_request' || message.messageType === 'pay_at_store_completed') && message.senderId === authUser.uid) {
+            const orderId = message.orderData?.orderId;
+            
+            // Check if we already have this order
+            const existingOrderIndex = customerOrders.findIndex(o => o.orderId === orderId);
+            
+            const orderData = {
+              id: doc.id,
+              orderId: orderId,
+              items: message.orderData?.items || [],
+              totalAmount: message.orderData?.totalAmount || 0,
+              currency: message.orderData?.currency || 'GBP',
+              pickupCode: message.orderData?.pickupCode,
+              paymentMethod: 'Pay at Store',
+              deliveryType: message.orderData?.deliveryType,
+              paymentType: 'Other',
+              timestamp: message.timestamp,
+              storeName: message.receiverName,
+              storeId: message.receiverId,
+              status: message.messageType === 'pay_at_store_completed' ? 'collected' : 'ordered',
+              collectedAt: message.messageType === 'pay_at_store_completed' ? (message.orderData?.collectedAt || message.timestamp) : null
+            };
+            
+            if (existingOrderIndex >= 0) {
+              // Always prioritize completed status over pending/ordered
+              if (message.messageType === 'pay_at_store_completed' || customerOrders[existingOrderIndex].status !== 'collected') {
+                customerOrders[existingOrderIndex] = orderData;
+              }
+            } else {
+              customerOrders.push(orderData);
+            }
           }
         });
         
@@ -363,11 +417,11 @@ function ProfilePage() {
           }
         }
 
-        // Also check for delivery status updates in messages (fallback)
-        const deliveryQuery = query(collection(db, 'messages'));
-        const deliverySnapshot = await getDocs(deliveryQuery);
+        // Also check for delivery and collection status updates in messages (fallback)
+        const statusQuery = query(collection(db, 'messages'));
+        const statusSnapshot = await getDocs(statusQuery);
         
-        deliverySnapshot.docs.forEach(doc => {
+        statusSnapshot.docs.forEach(doc => {
           const message = doc.data();
           if (message.messageType === 'delivery_completed' && message.receiverId === authUser.uid) {
             // Find the corresponding order and update its status
@@ -378,9 +432,50 @@ function ProfilePage() {
             }
           } else if (message.messageType === 'delivery_started' && message.receiverId === authUser.uid) {
             const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
-            if (order && order.status === 'paid') {
+            if (order && (order.status === 'paid' || order.status === 'ordered')) {
               order.status = 'in_delivery';
               order.deliveryStartedAt = message.timestamp;
+            }
+          } else if (message.messageType === 'collection_completed' && message.receiverId === authUser.uid) {
+            // Find the corresponding order and update its status for collection orders (NOT Pay at Store)
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && order.status !== 'collected' && order.paymentType !== 'Other') {
+              // Only mark as collected if it's NOT a Pay at Store order
+              order.status = 'collected';
+              order.collectedAt = message.timestamp;
+            }
+          } else if (message.messageType === 'pay_at_store_completed' && message.receiverId === authUser.uid) {
+            // Find the corresponding Pay at Store order and mark as collected only after seller validation
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && order.status !== 'collected') {
+              order.status = 'collected';
+              order.collectedAt = message.timestamp;
+              order.paymentValidated = true; // Mark that payment was validated at store
+            }
+          } else if (message.messageType === 'collection_ready' && message.receiverId === authUser.uid) {
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && (order.status === 'paid' || order.status === 'ordered' || order.status === 'pending')) {
+              order.status = 'ready_for_collection';
+              order.readyForCollectionAt = message.timestamp;
+            }
+          } else if (message.messageType === 'order_confirmed_collection' && message.receiverId === authUser.uid) {
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order && order.status === 'ordered') {
+              order.status = 'pending';
+              order.confirmedAt = message.timestamp;
+            }
+          } else if (message.messageType === 'order_cancelled' && message.receiverId === authUser.uid) {
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order) {
+              order.status = 'cancelled';
+              order.cancelledAt = message.timestamp;
+            }
+          } else if ((message.messageType === 'refund_request' || message.messageType === 'order_cancelled_refund') && message.senderId === authUser.uid) {
+            // Customer cancelled their own order
+            const order = customerOrders.find(o => o.orderId === message.orderData?.orderId);
+            if (order) {
+              order.status = 'cancelled';
+              order.cancelledAt = message.timestamp;
             }
           }
         });
@@ -610,8 +705,13 @@ function ProfilePage() {
                     const getStatusColor = (status) => {
                       switch (status) {
                         case 'delivered': return '#22C55E';
+                        case 'collected': return '#22C55E';
                         case 'in_delivery': return '#3B82F6';
+                        case 'ready_for_collection': return '#3B82F6';
                         case 'paid': return '#F59E0B';
+                        case 'ordered': return '#F59E0B';
+                        case 'pending': return '#F59E0B';
+                        case 'cancelled': return '#EF4444';
                         default: return '#6B7280';
                       }
                     };
@@ -619,8 +719,13 @@ function ProfilePage() {
                     const getStatusText = (status) => {
                       switch (status) {
                         case 'delivered': return '✅ Delivered';
+                        case 'collected': return '✅ Collected';
                         case 'in_delivery': return '🚚 In Delivery';
+                        case 'ready_for_collection': return '📦 Ready for Collection';
                         case 'paid': return '💳 Paid';
+                        case 'ordered': return '📝 Ordered';
+                        case 'pending': return '⏳ Pending';
+                        case 'cancelled': return '❌ Cancelled';
                         default: return '📦 Processing';
                       }
                     };
@@ -674,12 +779,38 @@ function ProfilePage() {
                           <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
                             Total: {formatPrice(order.totalAmount, order.currency)}
                           </div>
+                          {order.deliveryType && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Type: {order.deliveryType === 'Collection' ? '🏪 Collection' : '🚚 Delivery'}
+                              {order.paymentType === 'Other' && order.deliveryType === 'Collection' && ' (Pay at Store)'}
+                            </div>
+                          )}
                           <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
                             Ordered: {formatDate(order.timestamp)}
                           </div>
                           {order.deliveredAt && (
                             <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
                               Delivered: {formatDate(order.deliveredAt)}
+                            </div>
+                          )}
+                          {order.collectedAt && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Collected: {formatDate(order.collectedAt)}
+                            </div>
+                          )}
+                          {order.readyForCollectionAt && !order.collectedAt && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Ready Since: {formatDate(order.readyForCollectionAt)}
+                            </div>
+                          )}
+                          {order.confirmedAt && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Confirmed: {formatDate(order.confirmedAt)}
+                            </div>
+                          )}
+                          {order.cancelledAt && (
+                            <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                              Cancelled: {formatDate(order.cancelledAt)}
                             </div>
                           )}
                           {order.pickupCode && (
