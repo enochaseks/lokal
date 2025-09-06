@@ -949,14 +949,29 @@ function MessagesPage() {
     }
   }, [isSeller, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle navigation state (for wallet tab redirect)
+  // Handle navigation state (for wallet tab redirect and new conversations)
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
       // Clear the state after using it
       window.history.replaceState(null, '');
     }
-  }, [location.state]);
+    
+    // Handle new conversation from store preview
+    if (location.state?.newConversation && currentUser) {
+      const newConv = location.state.newConversation;
+      setSelectedConversation({
+        id: newConv.conversationId,
+        otherUserId: newConv.otherUserId,
+        otherUserName: newConv.otherUserName,
+        otherUserEmail: newConv.otherUserEmail,
+        storeAddress: newConv.storeAddress,
+        customerAddress: newConv.customerAddress
+      });
+      // Clear the state after using it
+      window.history.replaceState(null, '');
+    }
+  }, [location.state, currentUser]);
 
   // Fetch conversations
   useEffect(() => {
@@ -1081,11 +1096,14 @@ function MessagesPage() {
 
   // Fetch store info when conversation is selected (for displaying correct email and refunds policy)
   useEffect(() => {
-    if (!selectedConversation || isSeller) return;
+    if (!selectedConversation) return;
 
     const fetchStoreInfo = async () => {
       try {
-        const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
+        // For buyers, fetch store info from the other user (seller)
+        // For sellers, we still need store info for refunds policy
+        const storeUserId = isSeller ? currentUser.uid : selectedConversation.otherUserId;
+        const storeDoc = await getDoc(doc(db, 'stores', storeUserId));
         if (storeDoc.exists()) {
           const storeData = storeDoc.data();
           setStoreInfo(storeData);
@@ -1093,9 +1111,32 @@ function MessagesPage() {
           // Check refunds policy
           const feeSettings = storeData.feeSettings || {};
           setStoreRefundsEnabled(feeSettings.refundsEnabled !== false); // default to true
+          
+          // If this is a buyer and we don't have store address in selectedConversation, update it
+          if (!isSeller && !selectedConversation.storeAddress && storeData.storeLocation) {
+            setSelectedConversation(prev => ({
+              ...prev,
+              storeAddress: storeData.storeLocation
+            }));
+          }
         } else {
           // If store doesn't exist, default to allowing refunds
           setStoreRefundsEnabled(true);
+        }
+
+        // For sellers, fetch customer address if not already available
+        if (isSeller && !selectedConversation.customerAddress) {
+          const customerDoc = await getDoc(doc(db, 'users', selectedConversation.otherUserId));
+          if (customerDoc.exists()) {
+            const customerData = customerDoc.data();
+            const customerAddress = customerData.address || customerData.location || '';
+            if (customerAddress) {
+              setSelectedConversation(prev => ({
+                ...prev,
+                customerAddress: customerAddress
+              }));
+            }
+          }
         }
       } catch (error) {
         console.error('Error fetching store info:', error);
@@ -1104,7 +1145,7 @@ function MessagesPage() {
     };
 
     fetchStoreInfo();
-  }, [selectedConversation, isSeller]);
+  }, [selectedConversation, isSeller, currentUser]);
 
   // Fetch store items and info when showing items
   useEffect(() => {
@@ -6156,16 +6197,18 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
               />
               
               {selectedConversation && (
-                <button
-                  onClick={() => {
-                    setSelectedConversation(null);
-                    setShowStoreItems(false);
-                    setShowCart(false);
-                  }}
-                  className="back-button mobile-only"
-                >
-                  ← Back to conversations
-                </button>
+                <div className="mobile-back-row mobile-only">
+                  <button
+                    onClick={() => {
+                      setSelectedConversation(null);
+                      setShowStoreItems(false);
+                      setShowCart(false);
+                    }}
+                    className="mobile-back-button"
+                  >
+                    ← Back to conversations
+                  </button>
+                </div>
               )}
 
               {filteredConversations.length === 0 ? (
@@ -6205,7 +6248,10 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                       <div className="conversation-content">
                         <div className="conversation-main">
                           <div className="conversation-name">
-                            {conversation.otherUserName}
+                            {isSeller 
+                              ? `Customer: ${conversation.otherUserName}` 
+                              : conversation.otherUserName
+                            }
                           </div>
                           <div className="conversation-email">
                             {conversation.otherUserEmail && conversation.otherUserEmail !== 'store@example.com' ? conversation.otherUserEmail : ''}
@@ -6241,20 +6287,27 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
             {/* Chat Area */}
             {selectedConversation && (
               <div className={`chat-area ${selectedConversation ? 'mobile-visible' : 'mobile-hidden'}`}>
-                <div className="chat-header">
+                {/* Mobile Back Button - Separate Row */}
+                <div className="mobile-back-row mobile-only">
                   <button
                     onClick={() => {
                       setSelectedConversation(null);
                       setShowStoreItems(false);
                       setShowCart(false);
                     }}
-                    className="back-button mobile-only"
+                    className="mobile-back-button"
                   >
                     ← Back
                   </button>
+                </div>
+                
+                <div className="chat-header">
                   <div className="chat-user-info">
                     <div className="chat-user-name">
-                      {selectedConversation.otherUserName}
+                      {isSeller 
+                        ? `Customer: ${selectedConversation.otherUserName}` 
+                        : selectedConversation.otherUserName
+                      }
                     </div>
                     <div className="chat-user-email">
                       {(() => {
@@ -6262,6 +6315,82 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         return (email && email !== 'store@example.com') ? email : '';
                       })()}
                     </div>
+                    {!isSeller && selectedConversation.storeAddress && (
+                      <div 
+                        className="chat-store-address"
+                        onClick={() => {
+                          const encodedAddress = encodeURIComponent(selectedConversation.storeAddress);
+                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+                          window.open(mapsUrl, '_blank');
+                        }}
+                        style={{
+                          color: '#007B7F',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '4px'
+                        }}
+                      >
+                        📍 {selectedConversation.storeAddress}
+                      </div>
+                    )}
+                    {!isSeller && storeInfo?.storeLocation && !selectedConversation.storeAddress && (
+                      <div 
+                        className="chat-store-address"
+                        onClick={() => {
+                          const encodedAddress = encodeURIComponent(storeInfo.storeLocation);
+                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+                          window.open(mapsUrl, '_blank');
+                        }}
+                        style={{
+                          color: '#007B7F',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '4px'
+                        }}
+                      >
+                        📍 {storeInfo.storeLocation}
+                      </div>
+                    )}
+                    {!isSeller && !selectedConversation.storeAddress && !storeInfo?.storeLocation && storeInfo?.address && (
+                      <div 
+                        className="chat-store-address"
+                        onClick={() => {
+                          const encodedAddress = encodeURIComponent(storeInfo.address);
+                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+                          window.open(mapsUrl, '_blank');
+                        }}
+                        style={{
+                          color: '#007B7F',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '4px'
+                        }}
+                      >
+                        📍 {storeInfo.address}
+                      </div>
+                    )}
+                    {isSeller && selectedConversation.customerAddress && storeInfo?.deliveryType === 'Delivery' && (
+                      <div 
+                        className="chat-store-address"
+                        onClick={() => {
+                          const encodedAddress = encodeURIComponent(selectedConversation.customerAddress);
+                          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+                          window.open(mapsUrl, '_blank');
+                        }}
+                        style={{
+                          color: '#007B7F',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '4px'
+                        }}
+                      >
+                        🚚 {selectedConversation.customerAddress}
+                      </div>
+                    )}
                   </div>
                   
                   {!isSeller && (
@@ -7832,20 +7961,6 @@ Your pickup code is: ${pickupCode}
                       </div>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => {
-                      if (walletData.balance > 0) {
-                        alert('Withdrawal functionality will be implemented soon!');
-                      } else {
-                        alert('No available balance to withdraw');
-                      }
-                    }}
-                    disabled={walletData.balance <= 0}
-                    className="withdraw-button"
-                  >
-                    Withdraw Available Balance
-                  </button>
 
                   {/* Pickup Code Validation Section */}
                   <div className="pickup-validation-section">
@@ -9468,19 +9583,40 @@ Your pickup code is: ${pickupCode}
           box-sizing: border-box;
         }
 
-        .back-button {
-          width: calc(100% - 2rem);
-          margin: 0.5rem 1rem;
-          padding: 0.5rem;
-          background: #eee;
-          border: none;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.9rem;
-        }
-
         .mobile-only {
           display: none;
+        }
+
+        /* Mobile Back Button Styles */
+        .mobile-back-row {
+          padding: 0.75rem 1rem;
+          background: #f8f9fa;
+          border-bottom: 1px solid #e9ecef;
+        }
+
+        .mobile-back-button {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          background: linear-gradient(135deg, #007B7F 0%, #005a5e 100%);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 1rem;
+          font-weight: 600;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 4px rgba(0, 123, 127, 0.2);
+        }
+
+        .mobile-back-button:hover {
+          background: linear-gradient(135deg, #005a5e 0%, #004449 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 123, 127, 0.3);
+        }
+
+        .mobile-back-button:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 4px rgba(0, 123, 127, 0.2);
         }
 
         .conversations-list {
@@ -9585,6 +9721,19 @@ Your pickup code is: ${pickupCode}
         .chat-user-email {
           font-size: 0.9rem;
           color: #666;
+        }
+
+        .chat-store-address {
+          font-size: 0.9rem;
+          color: #007B7F !important;
+          cursor: pointer;
+          text-decoration: underline;
+          margin-top: 4px;
+          transition: color 0.2s ease;
+        }
+
+        .chat-store-address:hover {
+          color: #005a5e !important;
         }
 
         .browse-items-btn {
@@ -10318,6 +10467,18 @@ Your pickup code is: ${pickupCode}
             display: block !important;
           }
 
+          .mobile-back-row {
+            display: block !important;
+          }
+
+          .chat-header {
+            padding: 0.75rem 1rem;
+          }
+
+          .chat-user-info {
+            margin-bottom: 0;
+          }
+
           .chat-body {
             flex-direction: column;
           }
@@ -10366,11 +10527,6 @@ Your pickup code is: ${pickupCode}
           }
 
           .search-input {
-            margin: 0.5rem;
-            width: calc(100% - 1rem);
-          }
-
-          .back-button {
             margin: 0.5rem;
             width: calc(100% - 1rem);
           }

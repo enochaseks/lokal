@@ -314,11 +314,49 @@ function StorePreviewPage() {
 
   const total = selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0);
 
-  const handleSendMessage = () => {
-    setMessageSent(true);
-    setTimeout(() => setMessageSent(false), 2000);
-    setMessage('');
-    // Here you would send the message to the seller (not implemented)
+  const handleSendMessage = async () => {
+    if (!authUser) {
+      alert('Please log in to send a message.');
+      return;
+    }
+
+    if (isStoreOwner) {
+      // If user is the store owner, just navigate to messages
+      navigate('/messages');
+      return;
+    }
+
+    // For buyers, navigate to messages with store information to start a conversation
+    if (!store || !store.ownerId) {
+      alert('Store information not found.');
+      return;
+    }
+
+    // Fetch customer address for delivery purposes
+    let customerAddress = '';
+    try {
+      const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        customerAddress = userData.address || userData.location || '';
+      }
+    } catch (error) {
+      console.log('Could not fetch user address:', error);
+    }
+
+    // Navigate to messages page with store info for creating a conversation
+    navigate('/messages', {
+      state: {
+        newConversation: {
+          otherUserId: store.ownerId,
+          otherUserName: store.storeName || store.businessName || store.name || 'Store',
+          otherUserEmail: store.email || '',
+          storeAddress: store.storeLocation || store.address || '',
+          customerAddress: customerAddress,
+          conversationId: [authUser.uid, store.ownerId].sort().join('_')
+        }
+      }
+    });
   };
 
   // Use daysOfWeek everywhere in the file for day calculations
@@ -624,6 +662,13 @@ function StorePreviewPage() {
               )}
               <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
                 Message
+              </button>
+            </div>
+          )}
+          {isStoreOwner && (
+            <div className="store-action-buttons">
+              <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
+                Messages
               </button>
             </div>
           )}
