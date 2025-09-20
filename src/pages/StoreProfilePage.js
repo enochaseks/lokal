@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import QRCodeModal from '../components/QRCodeModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
 import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -23,6 +24,7 @@ function StoreProfilePage() {
   const [followersDetails, setFollowersDetails] = useState([]);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
   
   // New state for editing functionality
   const [editingName, setEditingName] = useState(false);
@@ -647,6 +649,45 @@ function StoreProfilePage() {
           {profile.backgroundImg ? (
             <img src={profile.backgroundImg} alt="Banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : null}
+          
+          {/* QR Code Icon */}
+          <button
+            onClick={() => setShowQRModal(true)}
+            style={{ 
+              position: 'absolute', 
+              left: 24, 
+              top: 24, 
+              background: 'rgba(255, 255, 255, 0.9)', 
+              color: '#007B7F', 
+              border: '2px solid #007B7F', 
+              borderRadius: 12, 
+              padding: '0.5rem', 
+              fontWeight: 600, 
+              fontSize: '1.2rem', 
+              cursor: 'pointer', 
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backdropFilter: 'blur(4px)',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.backgroundColor = '#007B7F';
+              e.target.style.color = '#fff';
+              e.target.style.transform = 'scale(1.05)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+              e.target.style.color = '#007B7F';
+              e.target.style.transform = 'scale(1)';
+            }}
+            title="Show Store QR Code"
+          >
+            📱 QR
+          </button>
+
           {/* Go live or live/offline button on the right */}
           {profile.live ? (
             <button
@@ -1480,6 +1521,16 @@ function StoreProfilePage() {
           }
         `}
       </style>
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <QRCodeModal
+          isOpen={showQRModal}
+          onClose={() => setShowQRModal(false)}
+          storeId={profile?.ownerId}
+          storeName={profile?.storeName}
+        />
+      )}
     </div>
   );
 }

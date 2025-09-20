@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import QRCodeModal from '../components/QRCodeModal';
 import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
@@ -66,6 +67,10 @@ function CreateShopPage() {
   const [caribBank, setCaribBank] = useState('');
   const [caribBranch, setCaribBranch] = useState('');
   const [cardType, setCardType] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [createdStoreId, setCreatedStoreId] = useState('');
+  const [createdStoreName, setCreatedStoreName] = useState('');
 
   const handleBackgroundImgChange = (e) => {
     setBackgroundImg(e.target.files[0]);
@@ -214,8 +219,12 @@ function CreateShopPage() {
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
       await updateDoc(doc(db, 'users', user.uid), { ...storeProfile, onboardingStep: 'complete' });
+      
+      // Show success modal with QR code
+      setCreatedStoreId(user.uid);
+      setCreatedStoreName(storeProfile.storeName);
+      setShowSuccessModal(true);
       setLoading(false);
-      navigate('/store-profile', { state: { ...storeProfile } });
     } catch (err) {
       setLoading(false);
       alert('Error creating shop: ' + err.message);
@@ -595,6 +604,169 @@ function CreateShopPage() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Success Modal with QR Code */}
+      {showSuccessModal && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          width: '100vw', 
+          height: '100vh', 
+          background: 'rgba(0,0,0,0.5)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 16, 
+            boxShadow: '0 4px 24px rgba(0,0,0,0.2)', 
+            padding: '2rem', 
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            textAlign: 'center'
+          }}>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ 
+                fontSize: '3rem', 
+                marginBottom: '0.5rem' 
+              }}>🎉</div>
+              <h2 style={{ 
+                color: '#007B7F', 
+                marginBottom: '0.5rem',
+                fontSize: '1.5rem'
+              }}>
+                Shop Created Successfully!
+              </h2>
+              <p style={{ 
+                color: '#666', 
+                fontSize: '1rem',
+                marginBottom: '1.5rem',
+                lineHeight: '1.4'
+              }}>
+                Congratulations! Your store "{createdStoreName}" is now live on the platform.
+              </p>
+            </div>
+            
+            <div style={{ 
+              background: '#f8f9ff', 
+              borderRadius: 12, 
+              padding: '1.5rem', 
+              marginBottom: '1.5rem',
+              border: '2px dashed #007B7F'
+            }}>
+              <h3 style={{ 
+                color: '#007B7F', 
+                marginBottom: '1rem',
+                fontSize: '1.2rem'
+              }}>
+                🏪 Your Store is Ready!
+              </h3>
+              <p style={{ 
+                color: '#666', 
+                fontSize: '0.9rem', 
+                marginBottom: '1rem',
+                lineHeight: '1.4'
+              }}>
+                Share your store with customers using a QR code
+              </p>
+              
+              <button
+                onClick={() => setShowQRModal(true)}
+                style={{
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  margin: '0 auto'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
+              >
+                📱 View QR Code
+              </button>
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              gap: '1rem', 
+              justifyContent: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate('/store-profile');
+                }}
+                style={{
+                  background: '#007B7F',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#005a5d'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#007B7F'}
+              >
+                View My Store
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate('/');
+                }}
+                style={{
+                  background: '#fff',
+                  color: '#007B7F',
+                  border: '2px solid #007B7F',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.backgroundColor = '#007B7F';
+                  e.target.style.color = '#fff';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.backgroundColor = '#fff';
+                  e.target.style.color = '#007B7F';
+                }}
+              >
+                Go to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <QRCodeModal
+          isOpen={showQRModal}
+          onClose={() => setShowQRModal(false)}
+          storeId={createdStoreId}
+          storeName={createdStoreName}
+        />
       )}
     </div>
   );
