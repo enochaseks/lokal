@@ -14,7 +14,39 @@ function RegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [verificationSent, setVerificationSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordValidation, setPasswordValidation] = useState({
+    minLength: false,
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    hasSpecialChar: false
+  });
   const navigate = useNavigate();
+
+  // Password validation function
+  const validatePassword = (password) => {
+    const validation = {
+      minLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    };
+    setPasswordValidation(validation);
+    return Object.values(validation).every(Boolean);
+  };
+
+  // Check if password meets all requirements
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+
+  // Handle password change with validation
+  const handlePasswordChange = (e) => {
+    const newPassword = e.target.value;
+    setPassword(newPassword);
+    validatePassword(newPassword);
+  };
 
   useEffect(() => {
     const auth = getAuth(app);
@@ -41,10 +73,18 @@ function RegisterPage() {
     setError('');
     setSuccess('');
     setVerificationSent(false);
+    
+    // Check password requirements
+    if (!isPasswordValid) {
+      setError('Password does not meet all requirements. Please check the requirements below.');
+      return;
+    }
+    
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
+    
     // Age validation
     const today = new Date();
     const dobDate = new Date(dob);
@@ -98,11 +138,218 @@ function RegisterPage() {
           </div>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input 
+                type={showPassword ? 'text' : 'password'} 
+                value={password} 
+                onChange={handlePasswordChange} 
+                style={{ 
+                  width: '100%', 
+                  padding: '0.5rem', 
+                  paddingRight: '2.5rem',
+                  border: `1px solid ${password && !isPasswordValid ? '#D92D20' : '#B8B8B8'}`, 
+                  borderRadius: 4,
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }} 
+                required 
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  color: '#666',
+                  padding: '0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '20px',
+                  height: '20px',
+                  lineHeight: '1',
+                  zIndex: 1
+                }}
+                onMouseOver={(e) => e.target.style.color = '#333'}
+                onMouseOut={(e) => e.target.style.color = '#666'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
+            
+            {/* Password Requirements */}
+            {password && (
+              <div style={{ 
+                marginTop: '0.5rem',
+                padding: '0.75rem',
+                background: '#f8f9fa',
+                border: '1px solid #e9ecef',
+                borderRadius: 4,
+                fontSize: '0.85rem'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#495057' }}>
+                  Password Requirements:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    color: passwordValidation.minLength ? '#28a745' : '#dc3545' 
+                  }}>
+                    <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      {passwordValidation.minLength ? '✅' : '❌'}
+                    </span>
+                    At least 8 characters long
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    color: passwordValidation.hasUppercase ? '#28a745' : '#dc3545' 
+                  }}>
+                    <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      {passwordValidation.hasUppercase ? '✅' : '❌'}
+                    </span>
+                    At least one uppercase letter (A-Z)
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    color: passwordValidation.hasLowercase ? '#28a745' : '#dc3545' 
+                  }}>
+                    <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      {passwordValidation.hasLowercase ? '✅' : '❌'}
+                    </span>
+                    At least one lowercase letter (a-z)
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    color: passwordValidation.hasNumber ? '#28a745' : '#dc3545' 
+                  }}>
+                    <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      {passwordValidation.hasNumber ? '✅' : '❌'}
+                    </span>
+                    At least one number (0-9)
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    color: passwordValidation.hasSpecialChar ? '#28a745' : '#dc3545' 
+                  }}>
+                    <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      {passwordValidation.hasSpecialChar ? '✅' : '❌'}
+                    </span>
+                    At least one special character (!@#$%^&*)
+                  </div>
+                </div>
+                
+                {/* Password Strength Indicator */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: '#495057' }}>
+                    Password Strength:
+                  </div>
+                  <div style={{ 
+                    width: '100%', 
+                    height: '8px', 
+                    backgroundColor: '#e9ecef', 
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${(Object.values(passwordValidation).filter(Boolean).length / 5) * 100}%`,
+                      height: '100%',
+                      backgroundColor: 
+                        Object.values(passwordValidation).filter(Boolean).length < 3 ? '#dc3545' :
+                        Object.values(passwordValidation).filter(Boolean).length < 5 ? '#ffc107' : '#28a745',
+                      transition: 'all 0.3s ease'
+                    }} />
+                  </div>
+                  <div style={{ 
+                    fontSize: '0.8rem', 
+                    marginTop: '0.25rem',
+                    color: 
+                      Object.values(passwordValidation).filter(Boolean).length < 3 ? '#dc3545' :
+                      Object.values(passwordValidation).filter(Boolean).length < 5 ? '#856404' : '#155724',
+                    fontWeight: '500'
+                  }}>
+                    {Object.values(passwordValidation).filter(Boolean).length < 3 ? 'Weak' :
+                     Object.values(passwordValidation).filter(Boolean).length < 5 ? 'Medium' : 'Strong'}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Confirm Password</label>
-            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input 
+                type={showConfirmPassword ? 'text' : 'password'} 
+                value={confirmPassword} 
+                onChange={e => setConfirmPassword(e.target.value)} 
+                style={{ 
+                  width: '100%', 
+                  padding: '0.5rem', 
+                  paddingRight: '2.5rem',
+                  border: `1px solid ${
+                    confirmPassword && password !== confirmPassword ? '#D92D20' : 
+                    confirmPassword && password === confirmPassword ? '#28a745' : '#B8B8B8'
+                  }`, 
+                  borderRadius: 4,
+                  fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }} 
+                required 
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  color: '#666',
+                  padding: '0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '20px',
+                  height: '20px',
+                  lineHeight: '1',
+                  zIndex: 1
+                }}
+                onMouseOver={(e) => e.target.style.color = '#333'}
+                onMouseOut={(e) => e.target.style.color = '#666'}
+                title={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
+            
+            {/* Password Match Indicator */}
+            {confirmPassword && (
+              <div style={{ 
+                marginTop: '0.5rem',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                color: password === confirmPassword ? '#28a745' : '#dc3545'
+              }}>
+                <span style={{ marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                  {password === confirmPassword ? '✅' : '❌'}
+                </span>
+                {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+              </div>
+            )}
           </div>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Date of Birth</label>
@@ -110,7 +357,23 @@ function RegisterPage() {
           </div>
           {error && <div style={{ color: '#D92D20', marginBottom: '1rem' }}>{error}</div>}
           {success && <div style={{ color: '#3A8E3A', marginBottom: '1rem' }}>{success}</div>}
-          <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 4, fontWeight: 'bold', fontSize: '1rem' }} disabled={verificationSent}>Register</button>
+          <button 
+            type="submit" 
+            style={{ 
+              width: '100%', 
+              background: (!isPasswordValid || password !== confirmPassword || verificationSent) ? '#ccc' : '#D92D20', 
+              color: '#fff', 
+              padding: '0.75rem', 
+              border: 'none', 
+              borderRadius: 4, 
+              fontWeight: 'bold', 
+              fontSize: '1rem',
+              cursor: (!isPasswordValid || password !== confirmPassword || verificationSent) ? 'not-allowed' : 'pointer'
+            }} 
+            disabled={!isPasswordValid || password !== confirmPassword || verificationSent}
+          >
+            Register
+          </button>
         </form>
         {verificationSent && (
           <div style={{ color: '#007B7F', marginTop: '1rem', textAlign: 'center' }}>
