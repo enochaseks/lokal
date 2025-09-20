@@ -612,7 +612,7 @@ function ExplorePage() {
   };
 
   return (
-    <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
+    <div style={{ background: '#F9F5EE', minHeight: '100vh', minHeight: '100dvh' }}>
       <style>{responsiveStyles}</style>
       <Navbar />
       <div className="explore-controls" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem', background: '#F9F5EE', position: 'relative' }}>

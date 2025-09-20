@@ -56,23 +56,45 @@ function Navbar() {
   const showCart = user && userType === 'buyer' && onboardingStep === 'complete';
 
   return (
-    <nav style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      padding: '0.5rem 1rem', 
-      background: 'rgba(255, 255, 255, 0.95)', 
-      backdropFilter: 'blur(20px)',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
-      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 1000,
-      transition: 'all 0.3s ease',
-      minHeight: '60px'
-    }}>
+    <>
+      <style>
+        {`
+          .responsive-navbar {
+            background: rgba(249, 245, 238, 0.95) !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 0.5rem 1rem !important;
+            padding-top: calc(0.5rem + env(safe-area-inset-top)) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border-bottom: 1px solid rgba(0, 123, 127, 0.1) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 1000 !important;
+            min-height: calc(60px + env(safe-area-inset-top)) !important;
+            /* Prevent iOS Safari from hiding navbar when scrolling */
+            -webkit-transform: translate3d(0, 0, 0) !important;
+            transform: translate3d(0, 0, 0) !important;
+            will-change: auto !important;
+            -webkit-backface-visibility: hidden !important;
+            backface-visibility: hidden !important;
+          }
+          @media (min-width: 1025px) {
+            .responsive-navbar {
+              background: transparent !important;
+              backdrop-filter: none !important;
+              -webkit-backdrop-filter: none !important;
+              border-bottom: none !important;
+              box-shadow: none !important;
+            }
+          }
+        `}
+      </style>
+      <nav className="responsive-navbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
           <img 
@@ -699,6 +721,7 @@ function Navbar() {
         </>
       )}
     </nav>
+    </>
   );
 }
 
