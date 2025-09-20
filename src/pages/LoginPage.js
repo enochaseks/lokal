@@ -21,21 +21,35 @@ function LoginPage() {
       const auth = getAuth(app);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      // Check if user is deactivated in Firestore
+      
+      // Check if user is deactivated or deleted in Firestore
       let userDocSnap = await getDoc(doc(db, 'users', user.uid));
       if (!userDocSnap.exists()) {
         // Try as seller
         userDocSnap = await getDoc(doc(db, 'stores', user.uid));
       }
-      if (userDocSnap.exists() && userDocSnap.data().deactivated) {
-        await auth.signOut();
-        setError('Your account has been deactivated. Please contact support.');
-        setLoading(false);
-        return;
-      }
-      // Onboarding progress check
+      
       if (userDocSnap.exists()) {
-        const onboardingStep = userDocSnap.data().onboardingStep;
+        const userData = userDocSnap.data();
+        
+        // Check if account was deleted by admin
+        if (userData.deleted || userData.accountStatus === 'deleted') {
+          await auth.signOut();
+          setError('Your account has been permanently deleted by an administrator. Please contact support if you believe this is an error.');
+          setLoading(false);
+          return;
+        }
+        
+        // Check if account is deactivated
+        if (userData.deactivated) {
+          await auth.signOut();
+          setError('Your account has been deactivated. Please contact support.');
+          setLoading(false);
+          return;
+        }
+        
+        // Onboarding progress check
+        const onboardingStep = userData.onboardingStep;
         if (onboardingStep && onboardingStep !== 'complete') {
           navigate('/' + onboardingStep);
           setLoading(false);

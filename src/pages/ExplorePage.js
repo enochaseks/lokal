@@ -233,7 +233,12 @@ function ExplorePage() {
       );
     }
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      setShops(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // Filter out disabled and deleted stores on the client side
+      const filteredShops = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(shop => !shop.disabled && !shop.deleted);
+      
+      setShops(filteredShops);
     });
     return () => unsubscribe();
   }, [selectedCategory]);

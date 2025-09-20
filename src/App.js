@@ -27,10 +27,74 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminSetupPage from './pages/AdminSetupPage';
 import { useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signOut } from 'firebase/auth';
 import { db } from './firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+function DeletedAccountGuard({ children }) {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    const auth = getAuth();
+    let unsubscribe = null;
+    
+    const checkAccountStatus = () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      // Monitor user document for deletion
+      const userDocRef = doc(db, 'users', user.uid);
+      unsubscribe = onSnapshot(userDocRef, async (userDoc) => {
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          
+          if (userData.deleted || userData.accountStatus === 'deleted') {
+            console.log('Account was deleted by admin, logging out...');
+            await signOut(auth);
+            alert('Your account has been deleted by an administrator. You have been logged out.');
+            navigate('/login', { replace: true });
+            return;
+          }
+        } else {
+          // Also check stores collection for sellers
+          const storeDocRef = doc(db, 'stores', user.uid);
+          const storeUnsubscribe = onSnapshot(storeDocRef, async (storeDoc) => {
+            if (storeDoc.exists()) {
+              const storeData = storeDoc.data();
+              
+              if (storeData.deleted || storeData.accountStatus === 'deleted') {
+                console.log('Seller account was deleted by admin, logging out...');
+                await signOut(auth);
+                alert('Your seller account has been deleted by an administrator. You have been logged out.');
+                navigate('/login', { replace: true });
+                return;
+              }
+            }
+          });
+          
+          return () => storeUnsubscribe && storeUnsubscribe();
+        }
+      });
+    };
+    
+    // Check immediately and on auth state change
+    const authUnsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        checkAccountStatus();
+      } else if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (authUnsubscribe) authUnsubscribe();
+    };
+  }, [navigate]);
+  
+  return children;
+}
 
 function OnboardingGuard({ children }) {
   const location = useLocation();
@@ -58,7 +122,8 @@ function App() {
     <MessageProvider>
       <CartProvider>
         <Router>
-          <OnboardingGuard>
+          <DeletedAccountGuard>
+            <OnboardingGuard>
           <div className="App" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#F9F5EE' }}>
             <div
               style={{
@@ -109,7 +174,8 @@ function App() {
               }
             `}</style>
           </div>
-        </OnboardingGuard>
+            </OnboardingGuard>
+          </DeletedAccountGuard>
       </Router>
     </CartProvider>
     </MessageProvider>

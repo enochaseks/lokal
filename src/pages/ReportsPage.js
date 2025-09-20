@@ -72,26 +72,64 @@ function ReportsPage() {
           if (storeDoc.exists()) {
             setIsSeller(true);
             
-            // Fetch complaints for this seller
-            const complaintsQuery = query(
+            // Fetch complaints for this seller - both old format (sellerId) and new store reports (reportedStoreOwner)
+            const complaintsQuery1 = query(
               collection(db, 'admin_complaints'),
               where('sellerId', '==', user.uid),
               orderBy('timestamp', 'desc')
             );
             
-            const unsubscribeComplaints = onSnapshot(complaintsQuery, (snapshot) => {
-              const complaintsData = [];
+            const complaintsQuery2 = query(
+              collection(db, 'admin_complaints'),
+              where('reportedStoreOwner', '==', user.uid),
+              orderBy('timestamp', 'desc')
+            );
+            
+            // Listen to both queries
+            const unsubscribeComplaints1 = onSnapshot(complaintsQuery1, (snapshot) => {
+              const complaintsData1 = [];
               snapshot.forEach((doc) => {
-                complaintsData.push({
+                complaintsData1.push({
                   id: doc.id,
                   ...doc.data()
                 });
               });
-              setComplaints(complaintsData);
-              setLoading(false);
+              
+              // Now get store reports too
+              const unsubscribeComplaints2 = onSnapshot(complaintsQuery2, (snapshot2) => {
+                const complaintsData2 = [];
+                snapshot2.forEach((doc) => {
+                  complaintsData2.push({
+                    id: doc.id,
+                    ...doc.data()
+                  });
+                });
+                
+                // Combine both arrays and remove duplicates (if any)
+                const allComplaints = [...complaintsData1, ...complaintsData2];
+                const uniqueComplaints = allComplaints.filter((complaint, index, self) => 
+                  index === self.findIndex((c) => c.id === complaint.id)
+                );
+                
+                // Sort by timestamp descending
+                uniqueComplaints.sort((a, b) => {
+                  const timestampA = a.timestamp || a.submittedAt;
+                  const timestampB = b.timestamp || b.submittedAt;
+                  if (!timestampA || !timestampB) return 0;
+                  return timestampB.toMillis() - timestampA.toMillis();
+                });
+                
+                setComplaints(uniqueComplaints);
+                setLoading(false);
+              });
+              
+              return () => {
+                unsubscribeComplaints1();
+                unsubscribeComplaints2();
+              };
             });
             
-            return () => unsubscribeComplaints();
+            return () => unsubscribeComplaints1();
           } else {
             // Not a seller, redirect
             navigate('/explore');
@@ -164,7 +202,7 @@ function ReportsPage() {
             📊 Reports & Complaints
           </h1>
           <p style={{ color: '#6B7280', fontSize: '1rem' }}>
-            View and track complaints filed against your store
+            View and track complaints and reports filed against your store
           </p>
         </div>
 
@@ -178,10 +216,10 @@ function ReportsPage() {
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', marginBottom: '0.5rem' }}>
-              No Complaints
+              No Reports or Complaints
             </h3>
             <p style={{ color: '#6B7280' }}>
-              Great! You have no complaints filed against your store.
+              Great! You have no reports or complaints filed against your store.
             </p>
           </div>
         ) : (
@@ -202,11 +240,25 @@ function ReportsPage() {
                       color: '#1F2937',
                       marginBottom: '0.25rem'
                     }}>
-                      Complaint #{complaint.complaintId?.split('_')[1] || 'Unknown'}
+                      {complaint.type === 'store_report' ? '📍 Store Report' : 'Complaint'} #{complaint.complaintId?.split('_')[1] || complaint.id?.slice(-8) || 'Unknown'}
                     </h3>
                     <p style={{ color: '#6B7280', fontSize: '0.875rem' }}>
-                      Filed on {formatDate(complaint.timestamp)}
+                      Filed on {formatDate(complaint.timestamp || complaint.submittedAt)}
                     </p>
+                    {complaint.type === 'store_report' && (
+                      <div style={{
+                        display: 'inline-block',
+                        backgroundColor: '#7C3AED20',
+                        color: '#7C3AED',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        marginTop: '0.25rem'
+                      }}>
+                        Store Report
+                      </div>
+                    )}
                   </div>
                   <div style={{
                     backgroundColor: getStatusColor(complaint.status),
@@ -224,34 +276,70 @@ function ReportsPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                     <div>
                       <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
-                        Customer
-                      </p>
-                      <p style={{ color: '#6B7280' }}>{complaint.customerName}</p>
-                      <p style={{ color: '#6B7280', fontSize: '0.875rem' }}>{complaint.customerEmail}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
-                        Order ID
-                      </p>
-                      <p style={{ color: '#6B7280', fontFamily: 'monospace' }}>
-                        {complaint.refundData?.orderId || 'Unknown'}
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
-                        Refund Amount
+                        {complaint.type === 'store_report' ? 'Reporter' : 'Customer'}
                       </p>
                       <p style={{ color: '#6B7280' }}>
-                        {getCurrencySymbol(complaint.refundData?.currency || 'GBP')}
-                        {formatPrice(complaint.refundData?.amount || 0, complaint.refundData?.currency || 'GBP')}
+                        {complaint.reporterName || complaint.customerName || 'Unknown'}
+                      </p>
+                      <p style={{ color: '#6B7280', fontSize: '0.875rem' }}>
+                        {complaint.reporterEmail || complaint.customerEmail || 'N/A'}
                       </p>
                     </div>
+                    {complaint.type === 'store_report' ? (
+                      <div>
+                        <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
+                          Report Reason
+                        </p>
+                        <p style={{ color: '#DC2626', fontWeight: '600' }}>
+                          {complaint.reason ? complaint.reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
+                          Order ID
+                        </p>
+                        <p style={{ color: '#6B7280', fontFamily: 'monospace' }}>
+                          {complaint.refundData?.orderId || 'Unknown'}
+                        </p>
+                      </div>
+                    )}
+                    {complaint.refundData ? (
+                      <div>
+                        <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
+                          Refund Amount
+                        </p>
+                        <p style={{ color: '#6B7280' }}>
+                          {getCurrencySymbol(complaint.refundData?.currency || 'GBP')}
+                          {formatPrice(complaint.refundData?.amount || 0, complaint.refundData?.currency || 'GBP')}
+                        </p>
+                      </div>
+                    ) : complaint.type === 'store_report' ? (
+                      <div>
+                        <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
+                          Report Type  
+                        </p>
+                        <div style={{
+                          backgroundColor: '#FEE2E2',
+                          color: '#DC2626',
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '600'
+                        }}>
+                          Store Violation
+                        </div>
+                      </div>
+                    ) : null}
                     <div>
                       <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.25rem' }}>
                         Issue Type
                       </p>
                       <p style={{ color: '#6B7280' }}>
-                        {complaint.complaintType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {complaint.reason 
+                          ? complaint.reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                          : complaint.complaintType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown'
+                        }
                       </p>
                     </div>
                   </div>
@@ -259,7 +347,7 @@ function ReportsPage() {
 
                 <div style={{ marginBottom: '1rem' }}>
                   <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
-                    Customer Explanation
+                    {complaint.type === 'store_report' ? 'Report Details' : 'Customer Explanation'}
                   </p>
                   <div style={{
                     backgroundColor: '#F9FAFB',
@@ -269,7 +357,7 @@ function ReportsPage() {
                     fontSize: '0.875rem',
                     color: '#374151'
                   }}>
-                    {complaint.explanation || 'No explanation provided'}
+                    {complaint.details || complaint.explanation || 'No details provided'}
                   </div>
                 </div>
 

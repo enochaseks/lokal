@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, getDocs, deleteDoc, setDoc, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -44,6 +44,7 @@ function MessagesPage() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [userBlockStatus, setUserBlockStatus] = useState(null); // Track if current user is blocked
   
   // Store items states
   const [showStoreItems, setShowStoreItems] = useState(false);
@@ -56,6 +57,16 @@ function MessagesPage() {
   const [cart, setCart] = useState([]);
   const [showCart, setShowCart] = useState(false);
   
+  // Admin conversation states
+  const [isAdminConversation, setIsAdminConversation] = useState(false);
+  const [userStoreHistory, setUserStoreHistory] = useState([]);
+  const [selectedReportStore, setSelectedReportStore] = useState(null);
+  const [reportCategory, setReportCategory] = useState('');
+  const [showFormalReportingInfo, setShowFormalReportingInfo] = useState(false);
+  const [loadingStoreHistory, setLoadingStoreHistory] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [editableReportText, setEditableReportText] = useState('');
+
   // Collapsible sections state
   const [cartSectionsCollapsed, setCartSectionsCollapsed] = useState({
     items: false,
@@ -960,14 +971,48 @@ function MessagesPage() {
     // Handle new conversation from store preview
     if (location.state?.newConversation && currentUser) {
       const newConv = location.state.newConversation;
-      setSelectedConversation({
-        id: newConv.conversationId,
-        otherUserId: newConv.otherUserId,
-        otherUserName: newConv.otherUserName,
-        otherUserEmail: newConv.otherUserEmail,
-        storeAddress: newConv.storeAddress,
-        customerAddress: newConv.customerAddress
-      });
+      
+      // Check if this is an admin conversation
+      if (newConv.isAdminChat) {
+        setIsAdminConversation(true);
+        const adminConversation = {
+          id: newConv.conversationId,
+          otherUserId: newConv.otherUserId,
+          otherUserName: newConv.otherUserName,
+          otherUserEmail: newConv.otherUserEmail,
+          isAdminChat: true,
+          storeContext: newConv.storeContext,
+          lastMessage: 'Admin conversation started',
+          lastMessageTime: new Date(),
+          isRead: true
+        };
+        
+        setSelectedConversation(adminConversation);
+        
+        // Add admin conversation to conversations list if not already there
+        setConversations(prevConversations => {
+          const existingIndex = prevConversations.findIndex(conv => conv.id === newConv.conversationId);
+          if (existingIndex === -1) {
+            return [adminConversation, ...prevConversations];
+          } else {
+            return prevConversations;
+          }
+        });
+        
+        // Fetch user's store history for admin reporting
+        fetchUserStoreHistory();
+        setShowFormalReportingInfo(true);
+      } else {
+        setIsAdminConversation(false);
+        setSelectedConversation({
+          id: newConv.conversationId,
+          otherUserId: newConv.otherUserId,
+          otherUserName: newConv.otherUserName,
+          otherUserEmail: newConv.otherUserEmail,
+          storeAddress: newConv.storeAddress,
+          customerAddress: newConv.customerAddress
+        });
+      }
       // Clear the state after using it
       window.history.replaceState(null, '');
     }
@@ -1380,10 +1425,181 @@ function MessagesPage() {
     checkOrderStateForConversation();
   }, [selectedConversation?.id, isSeller, currentUser]);
 
+  // Fetch user's store interaction history for admin conversations
+  const fetchUserStoreHistory = async () => {
+    if (!currentUser) return;
+    
+    setLoadingStoreHistory(true);
+    try {
+      const storeHistory = [];
+
+      // 1. Get recently viewed stores from localStorage (same as ProfilePage)
+      const viewedData = localStorage.getItem(`viewedStores_${currentUser.uid}`);
+      if (viewedData) {
+        const storeIds = JSON.parse(viewedData);
+        
+        // Fetch store details for each viewed store ID
+        for (const storeId of storeIds) {
+          try {
+            const storeDoc = await getDoc(doc(db, 'stores', storeId));
+            if (storeDoc.exists()) {
+              const storeData = storeDoc.data();
+              
+              // Also fetch user email from users collection
+              let storeEmail = storeData.storeEmail || storeData.email || 'No email';
+              try {
+                const userDoc = await getDoc(doc(db, 'users', storeId));
+                if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  storeEmail = userData.email || storeEmail;
+                }
+              } catch (error) {
+                console.log('Error fetching user email for store:', storeId);
+              }
+              
+              storeHistory.push({
+                storeId: storeId,
+                storeName: storeData.storeName || 'Unknown Store',
+                storeEmail: storeEmail,
+                lastInteraction: 'Recently viewed',
+                interactionType: 'viewed'
+              });
+            }
+          } catch (error) {
+            console.log('Error fetching recently viewed store:', error);
+          }
+        }
+      }
+
+      // 2. Get stores from user's orders (same as ProfilePage)
+      const paymentsQuery = query(
+        collection(db, 'messages'),
+        where('messageType', 'in', ['payment_completed', 'payment_notification', 'order_request', 'pay_at_store_completed'])
+      );
+      
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      const customerOrders = [];
+      
+      for (const doc of paymentsSnapshot.docs) {
+        const message = doc.data();
+        
+        // If this user was the customer who made the payment
+        if ((message.messageType === 'payment_completed' || message.messageType === 'pay_at_store_completed' || message.messageType === 'order_request') && message.senderId === currentUser.uid) {
+          const orderId = message.paymentData?.orderId || message.orderData?.orderId;
+          const storeId = message.receiverId;
+          const storeName = message.receiverName;
+          
+          if (storeId && storeName && orderId) {
+            // Check if we already have this store
+            const existingStoreIndex = storeHistory.findIndex(store => store.storeId === storeId);
+            
+            if (existingStoreIndex === -1) {
+              // Fetch store email from users collection
+              let storeEmail = 'From order history';
+              try {
+                const userDoc = await getDoc(doc(db, 'users', storeId));
+                if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  storeEmail = userData.email || storeEmail;
+                }
+              } catch (error) {
+                console.log('Error fetching user email for store:', storeId);
+              }
+              
+              storeHistory.push({
+                storeId: storeId,
+                storeName: storeName,
+                storeEmail: storeEmail,
+                lastInteraction: message.timestamp?.toDate?.()?.toLocaleDateString() || 'Recent order',
+                interactionType: 'ordered'
+              });
+            } else {
+              // Update interaction type if it was a more significant interaction
+              storeHistory[existingStoreIndex].interactionType = 'ordered';
+              storeHistory[existingStoreIndex].lastInteraction = message.timestamp?.toDate?.()?.toLocaleDateString() || 'Recent order';
+            }
+          }
+        }
+      }
+
+      // Remove duplicates and sort by interaction type priority
+      const uniqueStores = storeHistory.filter((store, index, self) => 
+        index === self.findIndex(s => s.storeId === store.storeId)
+      );
+      
+      // Sort: ordered stores first, then viewed stores
+      uniqueStores.sort((a, b) => {
+        if (a.interactionType === 'ordered' && b.interactionType === 'viewed') return -1;
+        if (a.interactionType === 'viewed' && b.interactionType === 'ordered') return 1;
+        return 0;
+      });
+
+      setUserStoreHistory(uniqueStores.slice(0, 10)); // Limit to 10 most relevant stores
+    } catch (error) {
+      console.error('Error fetching user store history:', error);
+    } finally {
+      setLoadingStoreHistory(false);
+    }
+  };
+
+  // Check if user is blocked from messaging
+  const checkIfUserBlocked = async (senderId, receiverId) => {
+    try {
+      const blockedUsersQuery = query(
+        collection(db, 'blocked_users'),
+        where('buyerId', '==', senderId),
+        where('sellerId', '==', receiverId),
+        where('isActive', '==', true)
+      );
+      
+      const blockedSnapshot = await getDocs(blockedUsersQuery);
+      
+      for (const blockedDoc of blockedSnapshot.docs) {
+        const blockData = blockedDoc.data();
+        const blockUntil = new Date(blockData.blockedUntil);
+        const now = new Date();
+        
+        if (now < blockUntil) {
+          // Block is still active
+          const remainingTime = Math.ceil((blockUntil - now) / (1000 * 60 * 60)); // hours
+          return {
+            isBlocked: true,
+            reason: blockData.reason,
+            remainingHours: remainingTime,
+            blockUntil: blockUntil
+          };
+        } else {
+          // Block has expired, deactivate it
+          await updateDoc(doc(db, 'blocked_users', blockedDoc.id), {
+            isActive: false,
+            expiredAt: serverTimestamp()
+          });
+        }
+      }
+      
+      return { isBlocked: false };
+    } catch (error) {
+      console.error('Error checking blocked users:', error);
+      return { isBlocked: false }; // Default to allow on error
+    }
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !currentUser) return;
 
     try {
+      // Check if current user is blocked from messaging the receiver
+      const blockCheck = await checkIfUserBlocked(currentUser.uid, selectedConversation.otherUserId);
+      
+      if (blockCheck.isBlocked) {
+        const remainingTime = blockCheck.remainingHours > 24 ? 
+          `${Math.ceil(blockCheck.remainingHours / 24)} day(s)` : 
+          `${blockCheck.remainingHours} hour(s)`;
+          
+        alert(`❌ You are temporarily blocked from messaging this seller.\n\nReason: ${blockCheck.reason}\n\nTime remaining: ${remainingTime}\n\nThis restriction was put in place to protect our sellers. If you believe this was done in error, please contact support.`);
+        return;
+      }
+
       await addDoc(collection(db, 'messages'), {
         conversationId: selectedConversation.id,
         senderId: currentUser.uid,
@@ -6227,8 +6443,24 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                   {filteredConversations.map((conversation) => (
                     <div
                       key={conversation.id}
-                      onClick={() => {
+                      onClick={async () => {
                         setSelectedConversation(conversation);
+                        
+                        // Check if current user is blocked from messaging this conversation partner
+                        if (currentUser && conversation.otherUserId) {
+                          const blockStatus = await checkIfUserBlocked(currentUser.uid, conversation.otherUserId);
+                          setUserBlockStatus(blockStatus.isBlocked ? blockStatus : null);
+                        }
+                        
+                        // Handle admin conversation state
+                        if (conversation.isAdminChat) {
+                          setIsAdminConversation(true);
+                          setShowFormalReportingInfo(false); // Don't auto-show form for existing admin conversations
+                        } else {
+                          setIsAdminConversation(false);
+                          setShowFormalReportingInfo(false);
+                        }
+                        
                         // Mark unread messages in this conversation as read
                         const unreadMessages = messages.filter(msg => 
                           (msg.senderId === conversation.otherUserId || msg.receiverId === conversation.otherUserId) && 
@@ -7558,21 +7790,527 @@ Your pickup code is: ${pickupCode}
                       )}
                     </div>
 
+                    {/* Admin Conversation Enhanced Interface */}
+                    {isAdminConversation && showFormalReportingInfo && (
+                      <div className="admin-reporting-interface" style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '2px solid #DC2626',
+                        borderRadius: '8px',
+                        padding: '15px',
+                        margin: '10px',
+                        boxShadow: '0 4px 12px rgba(220, 38, 38, 0.1)',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        maxHeight: '70vh',
+                        overflowY: 'auto'
+                      }}>
+                        <div style={{ marginBottom: '15px' }}>
+                          <h3 style={{ 
+                            color: '#B91C1C', 
+                            fontSize: '16px', 
+                            fontWeight: '700',
+                            margin: '0 0 8px 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            textAlign: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            ⚠️ Contact Admin - Formal Reporting Required
+                          </h3>
+                          <p style={{ 
+                            color: '#991B1B', 
+                            fontSize: '13px', 
+                            lineHeight: '1.4',
+                            margin: '0',
+                            textAlign: 'center',
+                            backgroundColor: '#FEF2F2',
+                            padding: '8px',
+                            borderRadius: '6px',
+                            border: '1px solid #FECACA'
+                          }}>
+                            <strong>📋 Provide a formal report</strong> - Include store name, your email, and issue details.
+                          </p>
+                        </div>
+
+                        {/* Report Category Selection */}
+                        <div style={{ marginBottom: '15px' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            fontSize: '13px', 
+                            fontWeight: '600',
+                            color: '#B91C1C',
+                            marginBottom: '5px'
+                          }}>
+                            📝 Report Category *
+                          </label>
+                          <select
+                            value={reportCategory}
+                            onChange={(e) => setReportCategory(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              borderRadius: '6px',
+                              border: '1px solid #DC2626',
+                              fontSize: '13px',
+                              backgroundColor: 'white',
+                              fontWeight: '500',
+                              color: '#374151'
+                            }}
+                          >
+                            <option value="">Select a category...</option>
+                            <option value="payment_issue">💳 Payment Issue</option>
+                            <option value="delivery_problem">🚚 Delivery Problem</option>
+                            <option value="product_quality">📦 Product Quality</option>
+                            <option value="seller_behavior">😠 Seller Behavior</option>
+                            <option value="order_cancellation">❌ Order Cancellation</option>
+                            <option value="refund_request">💰 Refund Request</option>
+                            <option value="technical_problem">🔧 Technical Problem</option>
+                            <option value="other">❓ Other Issues</option>
+                          </select>
+                        </div>
+
+                        {/* Store Selection */}
+                        <div style={{ marginBottom: '15px' }}>
+                          <label style={{ 
+                            display: 'block', 
+                            fontSize: '13px', 
+                            fontWeight: '600',
+                            color: '#B91C1C',
+                            marginBottom: '5px'
+                          }}>
+                            🏪 Select Store *
+                          </label>
+                          
+                          {loadingStoreHistory ? (
+                            <div style={{ 
+                              padding: '15px', 
+                              textAlign: 'center', 
+                              color: '#6B7280',
+                              fontSize: '13px',
+                              backgroundColor: '#F9FAFB',
+                              borderRadius: '6px',
+                              border: '1px solid #E5E7EB'
+                            }}>
+                              ⏳ Loading stores...
+                            </div>
+                          ) : userStoreHistory.length > 0 ? (
+                            <div style={{ 
+                              maxHeight: '120px', 
+                              overflowY: 'auto',
+                              border: '1px solid #DC2626',
+                              borderRadius: '6px',
+                              backgroundColor: 'white'
+                            }}>
+                              {userStoreHistory.map((store, index) => (
+                                <div
+                                  key={store.storeId}
+                                  onClick={() => setSelectedReportStore(store)}
+                                  style={{
+                                    padding: '8px 12px',
+                                    borderBottom: index < userStoreHistory.length - 1 ? '1px solid #FEE2E2' : 'none',
+                                    cursor: 'pointer',
+                                    backgroundColor: selectedReportStore?.storeId === store.storeId ? '#FEE2E2' : 'white',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (selectedReportStore?.storeId !== store.storeId) {
+                                      e.currentTarget.style.backgroundColor = '#FEF7F7';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (selectedReportStore?.storeId !== store.storeId) {
+                                      e.currentTarget.style.backgroundColor = 'white';
+                                    }
+                                  }}
+                                >
+                                  <div style={{ 
+                                    fontWeight: '600', 
+                                    color: '#B91C1C', 
+                                    fontSize: '13px',
+                                    marginBottom: '2px'
+                                  }}>
+                                    🏬 {store.storeName}
+                                  </div>
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#7F1D1D',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    flexWrap: 'wrap'
+                                  }}>
+                                    <span>📧 {store.storeEmail.length > 25 ? store.storeEmail.substring(0, 25) + '...' : store.storeEmail}</span>
+                                    <span style={{
+                                      backgroundColor: store.interactionType === 'ordered' ? '#EF4444' : '#6B7280',
+                                      color: 'white',
+                                      padding: '1px 5px',
+                                      borderRadius: '8px',
+                                      fontSize: '10px',
+                                      fontWeight: '600'
+                                    }}>
+                                      {store.interactionType === 'ordered' ? '📦' : '👁️'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ 
+                              padding: '15px', 
+                              textAlign: 'center', 
+                              color: '#7F1D1D',
+                              backgroundColor: '#FEF2F2',
+                              border: '1px solid #DC2626',
+                              borderRadius: '6px',
+                              fontSize: '13px'
+                            }}>
+                              📭 No recent stores found. You can still proceed.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Selected Store Summary */}
+                        {selectedReportStore && (
+                          <div style={{
+                            backgroundColor: '#FEE2E2',
+                            border: '1px solid #DC2626',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            marginBottom: '15px'
+                          }}>
+                            <div style={{ 
+                              fontSize: '12px', 
+                              fontWeight: '600', 
+                              color: '#B91C1C',
+                              marginBottom: '3px'
+                            }}>
+                              ✅ Selected: <strong>{selectedReportStore.storeName}</strong>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#7F1D1D' }}>
+                              📧 {selectedReportStore.storeEmail}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: '8px', 
+                          flexDirection: 'column'
+                        }}>
+                          <button
+                            onClick={() => {
+                              if (reportCategory && (selectedReportStore || userStoreHistory.length === 0)) {
+                                const reportText = `FORMAL REPORT
+
+Report Category: ${reportCategory}
+
+User Information:
+- Name: ${currentUser?.displayName || 'Not provided'}  
+- Email: ${currentUser?.email || 'Not provided'}
+
+${selectedReportStore ? `Store Information:
+- Store Name: ${selectedReportStore.storeName}
+- Store Email: ${selectedReportStore.storeEmail}
+- Last Interaction: ${selectedReportStore.lastInteraction}` : 'Store: Not selected from recent interactions'}
+
+Issue Description:
+[Please describe your issue in detail here]
+
+I hereby confirm this is a formal report and all information provided is accurate.`;
+                                
+                                setEditableReportText(reportText);
+                                setShowReportModal(true);
+                              } else {
+                                alert('Please select both a report category and a store (or confirm no recent interactions) before proceeding.');
+                              }
+                            }}
+                            style={{
+                              backgroundColor: '#DC2626',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '10px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            � Generate Formal Report
+                          </button>
+                          
+                          <button
+                            onClick={() => setShowFormalReportingInfo(false)}
+                            style={{
+                              backgroundColor: '#6B7280',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '8px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ✕ Continue Without Template
+                          </button>
+                        </div>
+
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#7F1D1D',
+                          textAlign: 'center',
+                          marginTop: '8px',
+                          fontStyle: 'italic'
+                        }}>
+                          💡 Formal reports get faster admin response
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Report Edit Modal */}
+                    {showReportModal && (
+                      <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 10000,
+                        padding: '20px'
+                      }}>
+                        <div style={{
+                          backgroundColor: 'white',
+                          borderRadius: '12px',
+                          padding: '25px',
+                          maxWidth: '600px',
+                          width: '100%',
+                          maxHeight: '80vh',
+                          overflowY: 'auto',
+                          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+                          border: '2px solid #DC2626'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '20px',
+                            paddingBottom: '15px',
+                            borderBottom: '2px solid #FEE2E2'
+                          }}>
+                            <h2 style={{
+                              color: '#B91C1C',
+                              fontSize: '20px',
+                              fontWeight: '700',
+                              margin: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              📝 Edit Your Formal Report
+                            </h2>
+                            <button
+                              onClick={() => setShowReportModal(false)}
+                              style={{
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                fontSize: '24px',
+                                cursor: 'pointer',
+                                color: '#6B7280',
+                                padding: '5px',
+                                borderRadius: '50%',
+                                width: '35px',
+                                height: '35px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#F3F4F6';
+                                e.target.style.color = '#B91C1C';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = 'transparent';
+                                e.target.style.color = '#6B7280';
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div style={{
+                            backgroundColor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            marginBottom: '20px'
+                          }}>
+                            <p style={{
+                              color: '#7F1D1D',
+                              fontSize: '14px',
+                              margin: 0,
+                              textAlign: 'center'
+                            }}>
+                              💡 <strong>Review and edit your report below before sending</strong>
+                            </p>
+                          </div>
+
+                          <textarea
+                            value={editableReportText}
+                            onChange={(e) => setEditableReportText(e.target.value)}
+                            style={{
+                              width: '100%',
+                              minHeight: '300px',
+                              padding: '15px',
+                              border: '2px solid #DC2626',
+                              borderRadius: '8px',
+                              fontSize: '14px',
+                              fontFamily: 'monospace',
+                              backgroundColor: 'white',
+                              color: '#374151',
+                              resize: 'vertical',
+                              outline: 'none'
+                            }}
+                            placeholder="Edit your formal report here..."
+                          />
+
+                          <div style={{
+                            display: 'flex',
+                            gap: '12px',
+                            marginTop: '20px',
+                            justifyContent: 'flex-end'
+                          }}>
+                            <button
+                              onClick={() => setShowReportModal(false)}
+                              style={{
+                                backgroundColor: '#6B7280',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '12px 20px',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#4B5563';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#6B7280';
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                if (editableReportText.trim()) {
+                                  setNewMessage(editableReportText);
+                                  setShowReportModal(false);
+                                  setShowFormalReportingInfo(false);
+                                } else {
+                                  alert('Please provide a report description before sending.');
+                                }
+                              }}
+                              style={{
+                                backgroundColor: '#DC2626',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '12px 20px',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#B91C1C';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#DC2626';
+                              }}
+                            >
+                              Send Report
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Block Status Warning */}
+                    {userBlockStatus && (
+                      <div style={{
+                        backgroundColor: '#FEF2F2',
+                        border: '2px solid #FECACA',
+                        borderRadius: '8px',
+                        padding: '1rem',
+                        margin: '1rem 0',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{
+                          color: '#DC2626',
+                          fontWeight: 'bold',
+                          fontSize: '1rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          🚫 You are temporarily blocked from messaging this seller
+                        </div>
+                        <div style={{
+                          color: '#7F1D1D',
+                          fontSize: '0.875rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <strong>Reason:</strong> {userBlockStatus.reason}
+                        </div>
+                        <div style={{
+                          color: '#7F1D1D',
+                          fontSize: '0.875rem'
+                        }}>
+                          <strong>Time remaining:</strong> {userBlockStatus.remainingHours > 24 ? 
+                            `${Math.ceil(userBlockStatus.remainingHours / 24)} day(s)` : 
+                            `${userBlockStatus.remainingHours} hour(s)`}
+                        </div>
+                        <div style={{
+                          color: '#7F1D1D',
+                          fontSize: '0.75rem',
+                          marginTop: '0.5rem',
+                          fontStyle: 'italic'
+                        }}>
+                          This restriction was put in place to protect sellers. Contact support if you believe this was done in error.
+                        </div>
+                      </div>
+                    )}
+
                     <div className="message-input-area">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                        placeholder="Type your message..."
+                        onKeyPress={(e) => e.key === 'Enter' && !userBlockStatus && sendMessage()}
+                        placeholder={userBlockStatus ? "You are blocked from messaging this seller" : "Type your message..."}
                         className="message-input"
+                        disabled={!!userBlockStatus}
+                        style={{
+                          backgroundColor: userBlockStatus ? '#F3F4F6' : '',
+                          color: userBlockStatus ? '#6B7280' : '',
+                          cursor: userBlockStatus ? 'not-allowed' : 'text'
+                        }}
                       />
                       <button
                         onClick={sendMessage}
-                        disabled={!newMessage.trim()}
+                        disabled={!newMessage.trim() || !!userBlockStatus}
                         className="send-button"
+                        style={{
+                          backgroundColor: userBlockStatus ? '#9CA3AF' : '',
+                          cursor: userBlockStatus ? 'not-allowed' : 'pointer'
+                        }}
                       >
-                        Send
+                        {userBlockStatus ? 'Blocked' : 'Send'}
                       </button>
                       
                       {!isSeller && (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -81,6 +81,18 @@ function StorePreviewPage() {
   const [reviews, setReviews] = useState([]);
   const { addToCart } = useCart();
   const [showAdded, setShowAdded] = useState(false);
+  
+  // Help/Report functionality states
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  
+  // Enhanced reporting states
+  const [userStoreHistory, setUserStoreHistory] = useState([]);
+  const [selectedReportStore, setSelectedReportStore] = useState(null);
+  const [loadingStoreHistory, setLoadingStoreHistory] = useState(false);
   
   // Store fee settings
   const [storeFeeSettings, setStoreFeeSettings] = useState({
@@ -508,6 +520,222 @@ function StorePreviewPage() {
     }
   };
 
+  // Handle report submission
+  const handleSubmitReport = async () => {
+    if (!authUser || !reportReason.trim()) {
+      alert('Please select a reason for reporting.');
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      // Get user data for the report
+      const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+      let userData = {
+        userName: authUser.displayName || authUser.email?.split('@')[0] || 'Anonymous',
+        userEmail: authUser.email
+      };
+      
+      if (userDoc.exists()) {
+        const firestoreUserData = userDoc.data();
+        userData = {
+          userName: firestoreUserData.name || firestoreUserData.displayName || userData.userName,
+          userEmail: firestoreUserData.email || authUser.email
+        };
+      }
+
+      // Submit the report to admin_complaints collection
+      await addDoc(collection(db, 'admin_complaints'), {
+        type: 'store_report',
+        reason: reportReason,
+        details: reportDetails.trim(),
+        reportedStoreId: id,
+        reportedStoreName: store.storeName,
+        reportedStoreOwner: store.ownerId,
+        reporterUserId: authUser.uid,
+        reporterName: userData.userName,
+        reporterEmail: userData.userEmail,
+        status: 'pending_review',
+        submittedAt: serverTimestamp(),
+        timestamp: serverTimestamp()
+      });
+
+      alert('Report submitted successfully. Our team will review it soon.');
+      setShowReportModal(false);
+      setReportReason('');
+      setReportDetails('');
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      alert('Failed to submit report. Please try again.');
+    }
+    setReportSubmitting(false);
+  };
+
+  // Handle contact admin functionality
+  const handleContactAdmin = async () => {
+    if (!authUser) {
+      alert('Please log in to contact admin.');
+      return;
+    }
+
+    try {
+      // Get user data
+      const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+      let userData = {
+        userName: authUser.displayName || authUser.email?.split('@')[0] || 'Anonymous',
+        userEmail: authUser.email
+      };
+      
+      if (userDoc.exists()) {
+        const firestoreUserData = userDoc.data();
+        userData = {
+          userName: firestoreUserData.name || firestoreUserData.displayName || userData.userName,
+          userEmail: firestoreUserData.email || authUser.email
+        };
+      }
+
+      const conversationId = `admin_${authUser.uid}`;
+
+      // Create initial admin conversation message
+      await addDoc(collection(db, 'messages'), {
+        conversationId: conversationId,
+        senderId: 'admin',
+        senderName: 'Lokal Admin Support',
+        senderEmail: 'admin@lokal.com',
+        receiverId: authUser.uid,
+        receiverName: userData.userName,
+        receiverEmail: userData.userEmail,
+        message: 'Hello! I\'m here to help you with any issues you may have. Please use the reporting form below to provide details about your concern.',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        messageType: 'text',
+        isAdminMessage: true
+      });
+
+      // Navigate to messages page with admin conversation setup
+      navigate('/messages', {
+        state: {
+          newConversation: {
+            otherUserId: 'admin',
+            otherUserName: 'Lokal Admin Support',
+            otherUserEmail: 'admin@lokal.com',
+            isAdminChat: true,
+            storeContext: {
+              storeId: id,
+              storeName: store?.storeName || 'Unknown Store',
+              storeOwner: store?.ownerId || 'Unknown'
+            },
+            conversationId: conversationId
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error setting up admin contact:', error);
+      alert('Failed to contact admin. Please try again.');
+    }
+  };
+
+  // Fetch user's store history for reporting
+  const fetchUserStoreHistory = async () => {
+    if (!authUser) return;
+    
+    setLoadingStoreHistory(true);
+    try {
+      const storeHistoryMap = new Map();
+      
+      // Get recently viewed stores from localStorage
+      const viewedKey = `viewedStores_${authUser.uid}`;
+      const recentlyViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+      
+      // Get store details for recently viewed stores
+      for (const storeId of recentlyViewed.slice(0, 10)) { // Limit to last 10 viewed
+        try {
+          const storeDoc = await getDoc(doc(db, 'stores', storeId));
+          if (storeDoc.exists()) {
+            const storeData = storeDoc.data();
+            storeHistoryMap.set(storeId, {
+              id: storeId,
+              name: storeData.storeName || storeData.businessName || 'Unknown Store',
+              email: storeData.email || 'N/A',
+              location: storeData.storeLocation || storeData.address || 'N/A',
+              ownerId: storeData.ownerId || storeId,
+              type: 'viewed',
+              interactionDate: new Date() // Recent view
+            });
+          }
+        } catch (error) {
+          console.log(`Could not fetch store ${storeId}:`, error);
+        }
+      }
+
+      // Get order history from user's orders
+      try {
+        const ordersQuery = query(
+          collection(db, 'orders'),
+          where('customerId', '==', authUser.uid),
+          orderBy('createdAt', 'desc')
+        );
+        
+        const ordersSnapshot = await getDocs(ordersQuery);
+        const processedStores = new Set();
+        
+        ordersSnapshot.docs.slice(0, 20).forEach(orderDoc => { // Limit to last 20 orders
+          const orderData = orderDoc.data();
+          const storeId = orderData.sellerId;
+          
+          if (storeId && !processedStores.has(storeId)) {
+            processedStores.add(storeId);
+            
+            // Either update existing entry or create new one
+            const existingStore = storeHistoryMap.get(storeId);
+            if (existingStore) {
+              storeHistoryMap.set(storeId, {
+                ...existingStore,
+                type: 'ordered', // Upgrade from viewed to ordered
+                interactionDate: orderData.createdAt?.toDate() || new Date(),
+                orderCount: (existingStore.orderCount || 0) + 1
+              });
+            } else {
+              storeHistoryMap.set(storeId, {
+                id: storeId,
+                name: orderData.sellerName || orderData.storeName || 'Unknown Store',
+                email: orderData.sellerEmail || 'N/A',
+                location: orderData.storeLocation || 'N/A',
+                ownerId: storeId,
+                type: 'ordered',
+                interactionDate: orderData.createdAt?.toDate() || new Date(),
+                orderCount: 1
+              });
+            }
+          }
+        });
+      } catch (error) {
+        console.log('Could not fetch order history:', error);
+      }
+
+      // Convert map to sorted array
+      const storeHistoryArray = Array.from(storeHistoryMap.values())
+        .sort((a, b) => {
+          // Prioritize ordered stores, then by interaction date
+          if (a.type === 'ordered' && b.type === 'viewed') return -1;
+          if (a.type === 'viewed' && b.type === 'ordered') return 1;
+          return new Date(b.interactionDate) - new Date(a.interactionDate);
+        });
+
+      setUserStoreHistory(storeHistoryArray);
+    } catch (error) {
+      console.error('Error fetching store history:', error);
+    }
+    setLoadingStoreHistory(false);
+  };
+
+  // Load store history when report modal is opened
+  useEffect(() => {
+    if (showReportModal && authUser && userStoreHistory.length === 0) {
+      fetchUserStoreHistory();
+    }
+  }, [showReportModal, authUser]);
+
   if (loading) {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
@@ -570,6 +798,31 @@ function StorePreviewPage() {
         }
       `}</style>
       <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem', position: 'relative' }}>
+        {/* Help Icon - Only show for buyers */}
+        {userType === 'buyer' && !isStoreOwner && (
+          <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }}>
+            <button
+              onClick={() => setShowHelpModal(true)}
+              style={{
+                background: '#F0F9FF',
+                border: '1px solid #007B7F',
+                borderRadius: '50%',
+                width: 36,
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: '#007B7F',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+              title="Get help or report this store"
+            >
+              ?
+            </button>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             {store.backgroundImg && (
@@ -869,6 +1122,267 @@ function StorePreviewPage() {
           </div>
         )}
       </div>
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: '2rem',
+            maxWidth: 400,
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{ margin: 0, color: '#007B7F' }}>Help & Support</h3>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <button
+                onClick={() => {
+                  setShowHelpModal(false);
+                  setShowReportModal(true);
+                }}
+                style={{
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: 8,
+                  padding: '1rem',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontSize: '1rem'
+                }}
+              >
+                <div style={{ fontWeight: 600, color: '#DC2626', marginBottom: '0.5rem' }}>
+                  🚨 Report this store
+                </div>
+                <div style={{ color: '#7F1D1D', fontSize: '0.9rem' }}>
+                  Report inappropriate content, fake products, or other issues
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowHelpModal(false);
+                  handleContactAdmin();
+                }}
+                style={{
+                  background: '#F0F9FF',
+                  border: '1px solid #BAE6FD',
+                  borderRadius: 8,
+                  padding: '1rem',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontSize: '1rem'
+                }}
+              >
+                <div style={{ fontWeight: 600, color: '#0369A1', marginBottom: '0.5rem' }}>
+                  � Contact Admin
+                </div>
+                <div style={{ color: '#1E40AF', fontSize: '0.9rem' }}>
+                  Get help with store issues or platform problems
+                </div>
+              </button>
+
+              <div style={{
+                background: '#F9FAFB',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                padding: '1rem',
+                fontSize: '0.9rem',
+                color: '#6B7280'
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>ℹ️ Need more help?</div>
+                <div>If you need general support or have questions about using Lokal, please contact our support team through the settings page.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: '2rem',
+            maxWidth: 500,
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{ margin: 0, color: '#DC2626' }}>Report Store</h3>
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportDetails('');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Reason for reporting *
+              </label>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: 8,
+                  fontSize: '1rem'
+                }}
+              >
+                <option value="">Select a reason</option>
+                <option value="fake_products">Selling fake/counterfeit products</option>
+                <option value="inappropriate_content">Inappropriate content or images</option>
+                <option value="misleading_info">Misleading product information</option>
+                <option value="poor_service">Poor customer service</option>
+                <option value="not_delivering">Not delivering products</option>
+                <option value="overcharging">Overcharging customers</option>
+                <option value="spam">Spam or unwanted messages</option>
+                <option value="scam">Suspected scam or fraudulent activity</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Additional details (optional)
+              </label>
+              <textarea
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Please provide any additional information that might help us understand the issue..."
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: 8,
+                  fontSize: '1rem',
+                  minHeight: 100,
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+
+            <div style={{
+              background: '#FEF3C7',
+              border: '1px solid #FCD34D',
+              borderRadius: 8,
+              padding: '1rem',
+              marginBottom: '1.5rem',
+              fontSize: '0.9rem'
+            }}>
+              <div style={{ fontWeight: 600, color: '#92400E', marginBottom: '0.5rem' }}>
+                ⚠️ Important
+              </div>
+              <div style={{ color: '#451A03' }}>
+                Please only submit genuine reports. False reports may result in restrictions on your account. 
+                All reports are reviewed by our moderation team.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportDetails('');
+                }}
+                style={{
+                  background: '#F3F4F6',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: 8,
+                  padding: '0.75rem 1.5rem',
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+                disabled={reportSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReport}
+                disabled={!reportReason.trim() || reportSubmitting}
+                style={{
+                  background: reportSubmitting ? '#9CA3AF' : '#DC2626',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '0.75rem 1.5rem',
+                  cursor: reportSubmitting || !reportReason.trim() ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 600
+                }}
+              >
+                {reportSubmitting ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

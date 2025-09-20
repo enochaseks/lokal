@@ -119,13 +119,28 @@ function AdminSetupPage() {
     setLoading(true);
     setMessage('');
 
+    // Validate form data
+    if (!formData.email || !formData.password) {
+      setMessage('❌ Please fill in both email and password');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setMessage('❌ Password must be at least 6 characters long');
+      setLoading(false);
+      return;
+    }
+
     try {
       const auth = getAuth();
+      console.log('Creating admin account with email:', formData.email);
       
       // Try to create the Firebase account
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
         const user = userCredential.user;
+        console.log('Admin account created successfully:', user.uid);
 
         // Generate a unique verification code
         const code = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -140,38 +155,57 @@ function AdminSetupPage() {
           used: false
         });
 
-        setMessage(`✅ Admin account created! Admins should check Firestore 'admin_verification_codes' collection for your verification code.`);
+        setMessage(`✅ Admin account created successfully! Check the Firestore 'admin_verification_codes' collection for your verification code.`);
         setStep('code');
 
       } catch (createError) {
+        console.error('Account creation error:', createError);
+        
         if (createError.code === 'auth/email-already-in-use') {
-          // Email already exists, sign in instead
-          const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
-          const user = userCredential.user;
+          // Email already exists, try to sign in instead
+          console.log('Email exists, attempting sign in...');
+          try {
+            const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+            const user = userCredential.user;
+            console.log('Signed in existing user:', user.uid);
 
-          // Generate a unique verification code
-          const code = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-          setGeneratedCode(code);
+            // Generate a unique verification code
+            const code = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            setGeneratedCode(code);
 
-          // Store the verification code in Firestore
-          await addDoc(collection(db, 'admin_verification_codes'), {
-            code: code,
-            userId: user.uid,
-            email: formData.email,
-            createdAt: Timestamp.now(),
-            used: false
-          });
+            // Store the verification code in Firestore
+            await addDoc(collection(db, 'admin_verification_codes'), {
+              code: code,
+              userId: user.uid,
+              email: formData.email,
+              createdAt: Timestamp.now(),
+              used: false
+            });
 
-          setMessage(`✅ Account found and signed in! Admins should check Firestore 'admin_verification_codes' collection for your verification code.`);
-          setStep('code');
+            setMessage(`✅ Signed into existing account! Check the Firestore 'admin_verification_codes' collection for your verification code.`);
+            setStep('code');
+          } catch (signInError) {
+            console.error('Sign in error:', signInError);
+            if (signInError.code === 'auth/invalid-credential' || signInError.code === 'auth/wrong-password') {
+              setMessage('❌ Email exists but password is incorrect. Please use the correct password.');
+            } else {
+              setMessage('❌ Error signing in: ' + signInError.message);
+            }
+          }
+        } else if (createError.code === 'auth/weak-password') {
+          setMessage('❌ Password is too weak. Please use at least 6 characters.');
+        } else if (createError.code === 'auth/invalid-email') {
+          setMessage('❌ Invalid email format. Please enter a valid email address.');
+        } else if (createError.code === 'auth/operation-not-allowed') {
+          setMessage('❌ Email/password authentication is not enabled. Please contact support.');
         } else {
-          throw createError;
+          setMessage('❌ Account creation failed: ' + createError.message);
         }
       }
 
     } catch (error) {
-      console.error('Error with account:', error);
-      setMessage('❌ Error with account: ' + error.message);
+      console.error('Unexpected error:', error);
+      setMessage('❌ Unexpected error: ' + error.message);
     }
     setLoading(false);
   };
@@ -329,6 +363,7 @@ function AdminSetupPage() {
                 value={formData.password}
                 onChange={handleInputChange}
                 required
+                minLength="6"
                 style={{
                   width: '100%',
                   padding: '0.75rem',
@@ -337,8 +372,11 @@ function AdminSetupPage() {
                   fontSize: '1rem',
                   boxSizing: 'border-box'
                 }}
-                placeholder="Enter admin password"
+                placeholder="Enter admin password (min 6 characters)"
               />
+              <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '0.25rem' }}>
+                Password must be at least 6 characters long
+              </div>
             </div>
 
             <div style={{
@@ -349,7 +387,7 @@ function AdminSetupPage() {
               marginBottom: '1.5rem'
             }}>
               <p style={{ margin: 0, fontSize: '0.875rem', color: '#3730A3' }}>
-                � <strong>Secure Admin Access:</strong> Enter your admin credentials to create secure access to the management dashboard.
+                🔒 <strong>Secure Admin Access:</strong> Enter your admin credentials to create secure access to the management dashboard.
               </p>
             </div>
 
@@ -384,7 +422,7 @@ function AdminSetupPage() {
             }}>
               <p style={{ margin: 0, fontSize: '0.875rem', color: '#3730A3' }}>
                 🔄 <strong>Creating Admin Account...</strong><br />
-                This will generate a verification code for secure access.
+                This will generate a verification code stored securely in Firestore database. Admins must access the database directly to retrieve the code.
               </p>
             </div>
 
