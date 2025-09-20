@@ -110,86 +110,56 @@ function StorePreviewPage() {
   // Only declare daysOfWeek ONCE at the top of the file
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+  // Optimize authentication and user type detection
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setAuthUser(user || null);
+      
       if (user) {
-        try {
-          // Check if user is a buyer or seller
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setUserType('buyer');
+        // Use non-blocking approach for user type detection
+        setTimeout(async () => {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            setUserType(userDoc.exists() ? 'buyer' : 'seller');
             
-            // Add this store to viewed stores for buyers only
-            if (id) {
+            // Add to viewed stores for buyers only (non-blocking)
+            if (userDoc.exists() && id) {
               const viewedKey = `viewedStores_${user.uid}`;
               const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
-              
-              // Remove store if it already exists (to move it to front)
               const filteredViewed = existingViewed.filter(storeId => storeId !== id);
-              
-              // Add store to beginning of array
-              const updatedViewed = [id, ...filteredViewed];
-              
-              // Keep only last 20 viewed stores
-              const limitedViewed = updatedViewed.slice(0, 20);
-              
-              // Save back to localStorage
-              localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
-              
-              console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid);
+              const updatedViewed = [id, ...filteredViewed].slice(0, 20);
+              localStorage.setItem(viewedKey, JSON.stringify(updatedViewed));
             }
-          } else {
-            setUserType('seller');
+          } catch (error) {
+            console.error('Error checking user type:', error);
+            setUserType('');
           }
-        } catch (error) {
-          console.error('Error checking user type:', error);
-          setUserType('');
-        }
+        }, 0); // Execute after current call stack
       } else {
         setUserType('');
       }
     });
     return () => unsubscribe();
-  }, [id]); // Add id as dependency
-
-  useEffect(() => {
-    setLoading(true);
-    const unsubStore = onSnapshot(doc(db, 'stores', id), (docSnap) => {
-      if (docSnap.exists()) {
-        setStore(docSnap.data());
-      } else {
-        setStore(null);
-      }
-      setLoading(false);
-    });
-    const unsubItems = onSnapshot(collection(db, 'stores', id, 'items'), (querySnapshot) => {
-      setItems(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => {
-      unsubStore();
-      unsubItems();
-    };
   }, [id]);
 
-  // Load store fee settings with real-time updates
+  // Consolidate store data loading (store info + fee settings) into single listener
   useEffect(() => {
     if (!id) return;
     
-    const unsubscribe = onSnapshot(doc(db, 'stores', id), (docSnap) => {
+    setLoading(true);
+    const unsubStore = onSnapshot(doc(db, 'stores', id), (docSnap) => {
       if (docSnap.exists()) {
         const storeData = docSnap.data();
-        console.log('Store data updated:', storeData);
+        setStore(storeData);
         
+        // Handle fee settings in same listener to avoid duplicate fetching
         if (storeData.feeSettings) {
-          console.log('Fee settings found:', storeData.feeSettings);
           setStoreFeeSettings({
             ...storeData.feeSettings,
-            refundsEnabled: storeData.feeSettings.refundsEnabled !== false // default to true
+            refundsEnabled: storeData.feeSettings.refundsEnabled !== false
           });
         } else {
-          console.log('No fee settings found in store data, using defaults');
           // Set default values if no settings found
           setStoreFeeSettings({
             deliveryEnabled: false,
@@ -204,8 +174,8 @@ function StorePreviewPage() {
           });
         }
       } else {
-        console.log('Store document does not exist');
-        // Set default values if store doesn't exist
+        setStore(null);
+        // Set default fee settings for non-existent store
         setStoreFeeSettings({
           deliveryEnabled: false,
           deliveryFee: 0,
@@ -218,38 +188,39 @@ function StorePreviewPage() {
           refundsEnabled: true
         });
       }
+      setLoading(false);
     }, (error) => {
       console.error('Error loading store data:', error);
-      // Set default values on error
-      setStoreFeeSettings({
-        deliveryEnabled: false,
-        deliveryFee: 0,
-        freeDeliveryThreshold: 0,
-        serviceFeeEnabled: false,
-        serviceFeeType: 'percentage',
-        serviceFeeRate: 2.5,
-        serviceFeeAmount: 0,
-        serviceFeeMax: 0,
-        refundsEnabled: true
-      });
+      setLoading(false);
     });
-
-    return () => unsubscribe();
+    
+    const unsubItems = onSnapshot(collection(db, 'stores', id, 'items'), (querySnapshot) => {
+      setItems(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    
+    return () => {
+      unsubStore();
+      unsubItems();
+    };
   }, [id]);
 
-  // Check if already following
+  // Defer following status check until after initial load
   useEffect(() => {
-    if (!authUser || !id) return;
+    if (!authUser || !id || loading) return; // Wait for auth and store to load
+    
     const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
     const unsub = onSnapshot(followerRef, (docSnap) => {
       setFollowing(docSnap.exists());
     });
     return () => unsub();
-  }, [authUser, id]);
+  }, [authUser, id, loading]); // Add loading dependency
 
-  // Add useEffect to load and calculate ratings with enhanced user data fetching
+  // Optimize reviews loading with user data caching
   useEffect(() => {
     if (!id) return;
+    
+    // Cache for user data to avoid repeated fetches
+    const userDataCache = new Map();
     
     const unsubscribe = onSnapshot(collection(db, 'stores', id, 'reviews'), async (querySnapshot) => {
       const reviewsData = querySnapshot.docs.map(doc => ({ 
@@ -257,33 +228,7 @@ function StorePreviewPage() {
         ...doc.data() 
       }));
       
-      // Fetch current user data for each review
-      const reviewsWithCurrentUserData = await Promise.all(
-        reviewsData.map(async (review) => {
-          try {
-            // Try to fetch current user data from Firestore
-            const userDoc = await getDoc(doc(db, 'users', review.userId));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              return {
-                ...review,
-                userName: userData.name || userData.displayName || review.userName || 'Anonymous',
-                userPhoto: userData.photoURL || userData.profilePicture || review.userPhoto || null
-              };
-            }
-            // If user document doesn't exist, keep original review data
-            return review;
-          } catch (error) {
-            console.error('Error fetching user data for review:', error);
-            // If there's an error, keep original review data
-            return review;
-          }
-        })
-      );
-      
-      setReviews(reviewsWithCurrentUserData);
-      
-      // Calculate average rating and count
+      // Calculate ratings immediately for faster UI update
       if (reviewsData.length > 0) {
         const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
         const avgRating = (totalRating / reviewsData.length).toFixed(1);
@@ -293,6 +238,51 @@ function StorePreviewPage() {
         setAvgRating(0);
         setRatingCount(0);
       }
+      
+      // Set reviews with existing data first (for immediate display)
+      setReviews(reviewsData);
+      
+      // Then enhance with user data in background (non-blocking)
+      setTimeout(async () => {
+        try {
+          const reviewsWithUserData = await Promise.all(
+            reviewsData.map(async (review) => {
+              // Check cache first
+              if (userDataCache.has(review.userId)) {
+                const userData = userDataCache.get(review.userId);
+                return {
+                  ...review,
+                  userName: userData.name || userData.displayName || review.userName || 'Anonymous',
+                  userPhoto: userData.photoURL || userData.profilePicture || review.userPhoto || null
+                };
+              }
+              
+              try {
+                // Fetch and cache user data
+                const userDoc = await getDoc(doc(db, 'users', review.userId));
+                if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  userDataCache.set(review.userId, userData); // Cache the data
+                  return {
+                    ...review,
+                    userName: userData.name || userData.displayName || review.userName || 'Anonymous',
+                    userPhoto: userData.photoURL || userData.profilePicture || review.userPhoto || null
+                  };
+                }
+                return review;
+              } catch (error) {
+                console.error('Error fetching user data for review:', error);
+                return review;
+              }
+            })
+          );
+          
+          // Update reviews with enhanced user data
+          setReviews(reviewsWithUserData);
+        } catch (error) {
+          console.error('Error enhancing reviews with user data:', error);
+        }
+      }, 100); // Small delay to not block initial render
     });
 
     return () => unsubscribe();
@@ -740,7 +730,104 @@ function StorePreviewPage() {
     return (
       <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
         <Navbar />
-        <div style={{ textAlign: 'center', marginTop: 80 }}>Loading store...</div>
+        <div style={{ maxWidth: 800, margin: '2rem auto', padding: '0 1rem' }}>
+          {/* Store Header Skeleton */}
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            boxShadow: '0 2px 8px #B8B8B8',
+            padding: '2rem',
+            marginBottom: '2rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                backgroundColor: '#E5E7EB',
+                animation: 'pulse 2s infinite'
+              }}></div>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  height: '2rem',
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: '8px',
+                  marginBottom: '0.5rem',
+                  animation: 'pulse 2s infinite'
+                }}></div>
+                <div style={{
+                  height: '1rem',
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: '8px',
+                  width: '60%',
+                  animation: 'pulse 2s infinite'
+                }}></div>
+              </div>
+            </div>
+            
+            {/* Stats Skeleton */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} style={{
+                  height: '60px',
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: '8px',
+                  animation: 'pulse 2s infinite'
+                }}></div>
+              ))}
+            </div>
+            
+            {/* Action Buttons Skeleton */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{
+                  width: '120px',
+                  height: '40px',
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: '8px',
+                  animation: 'pulse 2s infinite'
+                }}></div>
+              ))}
+            </div>
+          </div>
+
+          {/* Products Section Skeleton */}
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            boxShadow: '0 2px 8px #B8B8B8',
+            padding: '2rem'
+          }}>
+            <div style={{
+              height: '1.5rem',
+              backgroundColor: '#E5E7EB',
+              borderRadius: '8px',
+              marginBottom: '1.5rem',
+              width: '150px',
+              animation: 'pulse 2s infinite'
+            }}></div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} style={{
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: '12px',
+                  height: '200px',
+                  animation: 'pulse 2s infinite'
+                }}></div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        <style>
+          {`
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.5; }
+            }
+          `}
+        </style>
       </div>
     );
   }
@@ -837,6 +924,30 @@ function StorePreviewPage() {
           <div className="store-info" style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
             <div style={{ color: '#444', fontSize: '1rem' }}>{store.storeLocation}</div>
+            {store.phoneNumber && (
+              <div style={{ color: '#007B7F', fontSize: '1rem', marginTop: 4 }}>
+                <a 
+                  href={`tel:${store.phoneNumber}`}
+                  style={{ 
+                    color: '#007B7F', 
+                    textDecoration: 'none', 
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontWeight: 600
+                  }}
+                  onMouseOver={(e) => e.target.style.color = '#005a5f'}
+                  onMouseOut={(e) => e.target.style.color = '#007B7F'}
+                >
+                  <span>{store.phoneType === 'personal' ? '📱' : '📞'}</span>
+                  <span>{store.phoneNumber}</span>
+                  <span style={{ fontSize: '0.8rem', opacity: 0.8, marginLeft: 2 }}>
+                    ({store.phoneType === 'personal' ? 'Personal' : 'Work'})
+                  </span>
+                </a>
+              </div>
+            )}
             <div style={{ color: '#007B7F', fontSize: '1rem' }}>
               ⭐ {avgRating > 0 ? avgRating : 'No ratings'} {ratingCount > 0 && `(${ratingCount} review${ratingCount !== 1 ? 's' : ''})`}
             </div>

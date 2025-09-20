@@ -124,8 +124,18 @@ function App() {
         <Router>
           <DeletedAccountGuard>
             <OnboardingGuard>
-          <div className="App" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#F9F5EE' }}>
+          <div className="App" style={{ 
+            minHeight: '100vh', 
+            width: '100%', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            background: '#F9F5EE',
+            overflowY: 'auto',
+            overflowX: 'hidden'
+          }}>
             <div
+              className="main-app-container"
               style={{
                 width: '100%',
                 maxWidth: '1200px',
@@ -136,6 +146,8 @@ function App() {
                 flexDirection: 'column',
                 flex: 1,
                 padding: '0 16px',
+                paddingTop: '10px', // Reduced from 70px for better mobile experience
+                position: 'relative'
               }}
             >
               <Routes>
@@ -166,10 +178,31 @@ function App() {
               </Routes>
             </div>
             <style>{`
-              @media (max-width: 600px) {
+              @media (max-width: 1024px) {
                 .App > div {
                   max-width: 100vw !important;
                   padding: 0 4px !important;
+                  padding-top: 10px !important; /* Reduced from 70px to minimize spacing */
+                }
+                
+                /* Global mobile and tablet scroll fixes */
+                body {
+                  overflow-x: hidden;
+                  -webkit-overflow-scrolling: touch;
+                }
+                
+                /* Ensure all page content is scrollable on mobile and tablets */
+                .main-app-container {
+                  min-height: calc(100vh - 60px) !important;
+                  overflow-y: auto;
+                  -webkit-overflow-scrolling: touch;
+                  scroll-behavior: smooth;
+                }
+              }
+              
+              @media (min-width: 1025px) {
+                .App > div {
+                  padding-top: 70px; /* Keep desktop spacing */
                 }
               }
             `}</style>

@@ -60,144 +60,643 @@ function Navbar() {
       display: 'flex', 
       justifyContent: 'space-between', 
       alignItems: 'center', 
-      padding: '1rem', 
-      background: '#F9F5EE', 
-      borderBottom: '2px solid #B8B8B8' 
+      padding: '0.5rem 1rem', 
+      background: 'rgba(255, 255, 255, 0.95)', 
+      backdropFilter: 'blur(20px)',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 1000,
+      transition: 'all 0.3s ease',
+      minHeight: '60px'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
-          <img src={process.env.PUBLIC_URL + '/images/logo png.png'} alt="Lokal Logo" style={{ maxHeight: '60px', verticalAlign: 'middle' }} />
+          <img 
+            src={process.env.PUBLIC_URL + '/images/logo png.png'} 
+            alt="Lokal Logo" 
+            style={{ 
+              maxHeight: '35px', 
+              verticalAlign: 'middle',
+              transition: 'transform 0.2s ease'
+            }} 
+            onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
+            onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+          />
         </a>
-        {/* Hamburger menu beside logo for all users */}
+        {/* Modern Hamburger menu */}
         <button
           onClick={() => setSidebarOpen(true)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginLeft: 12 }}
+          style={{ 
+            background: 'rgba(0, 123, 127, 0.1)', 
+            border: 'none', 
+            cursor: 'pointer', 
+            padding: '6px', 
+            borderRadius: '8px',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseEnter={e => {
+            e.target.style.background = 'rgba(0, 123, 127, 0.2)';
+            e.target.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={e => {
+            e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+            e.target.style.transform = 'scale(1)';
+          }}
           aria-label="Open menu"
         >
           <div style={{ width: 20, height: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div style={{ height: 3, background: '#007B7F', borderRadius: 2 }}></div>
-            <div style={{ height: 3, background: '#007B7F', borderRadius: 2 }}></div>
-            <div style={{ height: 3, background: '#007B7F', borderRadius: 2 }}></div>
+            <div style={{ height: 2.5, background: '#007B7F', borderRadius: 2 }}></div>
+            <div style={{ height: 2.5, background: '#007B7F', borderRadius: 2 }}></div>
+            <div style={{ height: 2.5, background: '#007B7F', borderRadius: 2 }}></div>
           </div>
         </button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {!user ? (
           <>
-            <a href="/login" style={{ color: '#007B7F', marginRight: '1rem', textDecoration: 'none', fontWeight: 'bold' }}>Login</a>
-            <a href="/register" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold' }}>Register</a>
+            <a 
+              href="/login" 
+              style={{ 
+                color: '#007B7F', 
+                textDecoration: 'none', 
+                fontWeight: '600', 
+                padding: '0.4rem 0.8rem',
+                borderRadius: '8px',
+                background: 'rgba(0, 123, 127, 0.1)',
+                transition: 'all 0.2s ease',
+                fontSize: '0.9rem'
+              }}
+              onMouseEnter={e => {
+                e.target.style.background = 'rgba(0, 123, 127, 0.2)';
+                e.target.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              Login
+            </a>
+            <a 
+              href="/register" 
+              style={{ 
+                color: 'white', 
+                textDecoration: 'none', 
+                fontWeight: '600',
+                padding: '0.4rem 0.8rem',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #007B7F, #00A3A8)',
+                boxShadow: '0 3px 10px rgba(0, 123, 127, 0.3)',
+                transition: 'all 0.2s ease',
+                fontSize: '0.9rem'
+              }}
+              onMouseEnter={e => {
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 6px 20px rgba(0, 123, 127, 0.4)';
+              }}
+              onMouseLeave={e => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.3)';
+              }}
+            >
+              Register
+            </a>
           </>
         ) : (
           <>
             {userType === 'buyer' ? (
               <>
-                <a href="/profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '0.5rem' }} title="Profile">
+                <a 
+                  href="/profile" 
+                  style={{ 
+                    color: '#007B7F', 
+                    textDecoration: 'none', 
+                    fontWeight: 'bold', 
+                    fontSize: '1.2rem', 
+                    padding: '6px',
+                    borderRadius: '8px',
+                    background: 'rgba(0, 123, 127, 0.1)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }} 
+                  title="Profile"
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.2)';
+                    e.target.style.transform = 'scale(1.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.target.style.transform = 'scale(1)';
+                  }}
+                >
                   <span role="img" aria-label="profile">👤</span>
                 </a>
                 {showCart && (
                   <button
                     onClick={() => navigate('/shop-cart')}
-                    style={{ background: 'none', border: 'none', margin: '0 0.2rem', position: 'relative', cursor: 'pointer' }}
+                    style={{ 
+                      background: 'rgba(0, 123, 127, 0.1)', 
+                      border: 'none', 
+                      padding: '6px', 
+                      position: 'relative', 
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.2)';
+                      e.target.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                      e.target.style.transform = 'scale(1)';
+                    }}
                     aria-label="Cart"
                   >
-                    <img src={process.env.PUBLIC_URL + '/images/cart.png'} alt="Cart" style={{ width: 20, height: 20 }} />
+                    <img src={process.env.PUBLIC_URL + '/images/cart.png'} alt="Cart" style={{ width: 18, height: 18 }} />
                     {cart && cart.length > 0 && (
-                      <span style={{ position: 'absolute', top: -8, right: -8, background: '#D92D20', color: '#fff', borderRadius: '50%', padding: '2px 8px', fontSize: 14, fontWeight: 700 }}>{cart.length}</span>
+                      <span style={{ 
+                        position: 'absolute', 
+                        top: -4, 
+                        right: -4, 
+                        background: 'linear-gradient(135deg, #DC2626, #EF4444)', 
+                        color: '#fff', 
+                        borderRadius: '50%', 
+                        padding: '2px 6px', 
+                        fontSize: '12px', 
+                        fontWeight: '700',
+                        minWidth: '18px',
+                        height: '18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(220, 38, 38, 0.4)'
+                      }}>
+                        {cart.length}
+                      </span>
                     )}
                   </button>
                 )}
               </>
             ) : (
-              <a href="/store-profile" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.7rem', verticalAlign: 'middle', marginRight: '1rem' }} title="Profile">
+              <a 
+                href="/store-profile" 
+                style={{ 
+                  color: '#007B7F', 
+                  textDecoration: 'none', 
+                  fontWeight: 'bold', 
+                  fontSize: '1.2rem', 
+                  padding: '6px',
+                  borderRadius: '8px',
+                  background: 'rgba(0, 123, 127, 0.1)',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }} 
+                title="Store Profile"
+                onMouseEnter={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.2)';
+                  e.target.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
                 <span role="img" aria-label="profile">👤</span>
               </a>
             )}
-            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#D92D20', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>Logout</button>
+            <button 
+              onClick={handleLogout} 
+              style={{ 
+                background: 'rgba(220, 38, 38, 0.1)', 
+                border: 'none', 
+                color: '#DC2626', 
+                fontWeight: '600', 
+                cursor: 'pointer', 
+                fontSize: '0.85rem',
+                padding: '0.4rem 0.8rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.target.style.background = 'rgba(220, 38, 38, 0.2)';
+                e.target.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.target.style.background = 'rgba(220, 38, 38, 0.1)';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              Logout
+            </button>
           </>
         )}
       </div>
       {sidebarOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 240,
-          height: '100vh',
-          background: '#fff',
-          boxShadow: '2px 0 12px rgba(0,0,0,0.12)',
-          zIndex: 2000,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: '2rem 1.2rem',
-        }}>
-          <button
+        <>
+          {/* Backdrop */}
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0, 0, 0, 0.3)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 1999,
+              animation: 'fadeIn 0.3s ease'
+            }}
             onClick={() => setSidebarOpen(false)}
-            style={{ alignSelf: 'flex-end', background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#007B7F', marginBottom: 24 }}
-            aria-label="Close menu"
-          >
-            ×
-          </button>
-          <button onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>My Reviews</button>
-          {user && (
-            <button 
-              onClick={() => { setSidebarOpen(false); navigate('/messages'); }} 
-              style={{ 
-                color: '#007B7F', 
-                background: 'none', 
-                border: 'none', 
-                fontWeight: 'bold', 
-                fontSize: '1.1rem', 
-                textAlign: 'center', 
-                marginBottom: 24, 
-                cursor: 'pointer',
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%'
-              }}
-            >
-              Messages
-              {unreadMessageCount > 0 && (
-                <span style={{ 
-                  position: 'absolute', 
-                  top: -8, 
-                  right: 20, 
-                  background: '#D92D20', 
-                  color: '#fff', 
-                  borderRadius: '50%', 
-                  padding: '2px 6px', 
-                  fontSize: 12, 
-                  fontWeight: 700,
-                  minWidth: 18,
-                  height: 18,
+          />
+          {/* Modern Sidebar */}
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: 280,
+            height: '100vh',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '4px 0 30px rgba(0, 0, 0, 0.15)',
+            zIndex: 2000,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '2rem 0',
+            animation: 'slideIn 0.3s ease'
+          }}>
+            {/* Header */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              padding: '0 2rem',
+              marginBottom: '2rem' 
+            }}>
+              <h3 style={{ 
+                color: '#1F2937', 
+                margin: 0, 
+                fontSize: '1.2rem', 
+                fontWeight: '700' 
+              }}>
+                Menu
+              </h3>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                style={{ 
+                  background: 'rgba(220, 38, 38, 0.1)', 
+                  border: 'none', 
+                  borderRadius: '12px',
+                  width: '36px',
+                  height: '36px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                </span>
+                  justifyContent: 'center',
+                  fontSize: '18px', 
+                  cursor: 'pointer', 
+                  color: '#DC2626',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.target.style.background = 'rgba(220, 38, 38, 0.2)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.background = 'rgba(220, 38, 38, 0.1)';
+                  e.target.style.transform = 'scale(1)';
+                }}
+                aria-label="Close menu"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Menu Items */}
+            <div style={{ flex: 1, padding: '0 1rem' }}>
+              <button 
+                onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} 
+                style={{ 
+                  color: '#1F2937', 
+                  background: 'rgba(0, 123, 127, 0.05)', 
+                  border: '1px solid rgba(0, 123, 127, 0.1)', 
+                  fontWeight: '600', 
+                  fontSize: '1rem', 
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  marginBottom: '0.5rem', 
+                  cursor: 'pointer',
+                  borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseEnter={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                  e.target.style.transform = 'translateX(4px)';
+                  e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                  e.target.style.transform = 'translateX(0)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>⭐</span>
+                My Reviews
+              </button>
+              
+              {user && (
+                <button 
+                  onClick={() => { setSidebarOpen(false); navigate('/messages'); }} 
+                  style={{ 
+                    color: '#1F2937', 
+                    background: 'rgba(0, 123, 127, 0.05)', 
+                    border: '1px solid rgba(0, 123, 127, 0.1)', 
+                    fontWeight: '600', 
+                    fontSize: '1rem', 
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '0.5rem', 
+                    cursor: 'pointer',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.target.style.transform = 'translateX(4px)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                    e.target.style.transform = 'translateX(0)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>💬</span>
+                  Messages
+                  {unreadMessageCount > 0 && (
+                    <span style={{ 
+                      position: 'absolute', 
+                      top: '8px', 
+                      right: '12px', 
+                      background: 'linear-gradient(135deg, #DC2626, #EF4444)', 
+                      color: '#fff', 
+                      borderRadius: '50%', 
+                      padding: '2px 6px', 
+                      fontSize: '11px', 
+                      fontWeight: '700',
+                      minWidth: '18px',
+                      height: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
+                    }}>
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  )}
+                </button>
               )}
-              {console.log('🔔 Navbar - Unread count:', unreadMessageCount)}
-            </button>
-          )}
-          {user && userType === 'seller' && (
-            <button onClick={() => { setSidebarOpen(false); navigate('/reports'); }} style={{ color: '#007B7F', background: 'none', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center', marginBottom: 24, cursor: 'pointer' }}>Reports</button>
-          )}
-          {!user ? (
-            <>
-              <a href="/about" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>About</a>
-              <a href="/admin-login" style={{ color: '#DC2626', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>🛡️ Admin Login</a>
-            </>
-          ) : (
-            <>
-              <Link to="/explore" onClick={() => setSidebarOpen(false)} style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Explore</Link>
-              <Link to="/feed" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Feed</Link>
-              <a href="/settings" style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: 24 }}>Settings</a>
-            </>
-          )}
-        </div>
+              
+              {user && userType === 'seller' && (
+                <button 
+                  onClick={() => { setSidebarOpen(false); navigate('/reports'); }} 
+                  style={{ 
+                    color: '#1F2937', 
+                    background: 'rgba(0, 123, 127, 0.05)', 
+                    border: '1px solid rgba(0, 123, 127, 0.1)', 
+                    fontWeight: '600', 
+                    fontSize: '1rem', 
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '0.5rem', 
+                    cursor: 'pointer',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.target.style.transform = 'translateX(4px)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                    e.target.style.transform = 'translateX(0)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>📊</span>
+                  Reports
+                </button>
+              )}
+              
+              {!user ? (
+                <>
+                  <a 
+                    href="/about" 
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      color: '#1F2937', 
+                      textDecoration: 'none', 
+                      fontWeight: '600', 
+                      fontSize: '1rem',
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      marginBottom: '0.5rem',
+                      borderRadius: '12px',
+                      background: 'rgba(0, 123, 127, 0.05)',
+                      border: '1px solid rgba(0, 123, 127, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                      e.target.style.transform = 'translateX(4px)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                      e.target.style.transform = 'translateX(0)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>ℹ️</span>
+                    About
+                  </a>
+                  <a 
+                    href="/admin-login" 
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      color: '#DC2626', 
+                      textDecoration: 'none', 
+                      fontWeight: '600', 
+                      fontSize: '1rem',
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      marginBottom: '0.5rem',
+                      borderRadius: '12px',
+                      background: 'rgba(220, 38, 38, 0.05)',
+                      border: '1px solid rgba(220, 38, 38, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(220, 38, 38, 0.1)';
+                      e.target.style.transform = 'translateX(4px)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(220, 38, 38, 0.1)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(220, 38, 38, 0.05)';
+                      e.target.style.transform = 'translateX(0)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>🛡️</span>
+                    Admin Login
+                  </a>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setSidebarOpen(false); navigate('/explore'); }}
+                    style={{ 
+                      color: '#1F2937', 
+                      background: 'rgba(0, 123, 127, 0.05)', 
+                      border: '1px solid rgba(0, 123, 127, 0.1)', 
+                      fontWeight: '600', 
+                      fontSize: '1rem', 
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      marginBottom: '0.5rem', 
+                      cursor: 'pointer',
+                      borderRadius: '12px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                      e.target.style.transform = 'translateX(4px)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                      e.target.style.transform = 'translateX(0)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                    Explore
+                  </button>
+                  <button
+                    onClick={() => { setSidebarOpen(false); navigate('/feed'); }}
+                    style={{ 
+                      color: '#1F2937', 
+                      background: 'rgba(0, 123, 127, 0.05)', 
+                      border: '1px solid rgba(0, 123, 127, 0.1)', 
+                      fontWeight: '600', 
+                      fontSize: '1rem', 
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      marginBottom: '0.5rem', 
+                      cursor: 'pointer',
+                      borderRadius: '12px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                      e.target.style.transform = 'translateX(4px)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                      e.target.style.transform = 'translateX(0)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>📱</span>
+                    Feed
+                  </button>
+                  <a 
+                    href="/settings" 
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      color: '#1F2937', 
+                      textDecoration: 'none', 
+                      fontWeight: '600', 
+                      fontSize: '1rem',
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      marginBottom: '0.5rem',
+                      borderRadius: '12px',
+                      background: 'rgba(0, 123, 127, 0.05)',
+                      border: '1px solid rgba(0, 123, 127, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                      e.target.style.transform = 'translateX(4px)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                      e.target.style.transform = 'translateX(0)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>⚙️</span>
+                    Settings
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+          <style>
+            {`
+              @keyframes slideIn {
+                from { transform: translateX(-100%); }
+                to { transform: translateX(0); }
+              }
+              @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+              }
+            `}
+          </style>
+        </>
       )}
     </nav>
   );

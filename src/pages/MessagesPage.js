@@ -975,6 +975,7 @@ function MessagesPage() {
       // Check if this is an admin conversation
       if (newConv.isAdminChat) {
         setIsAdminConversation(true);
+        setStoreInfo(null); // Clear store info for admin conversations
         const adminConversation = {
           id: newConv.conversationId,
           otherUserId: newConv.otherUserId,
@@ -1143,6 +1144,13 @@ function MessagesPage() {
   useEffect(() => {
     if (!selectedConversation) return;
 
+    // Clear store info for admin conversations
+    if (isAdminConversation) {
+      setStoreInfo(null);
+      setStoreRefundsEnabled(true);
+      return;
+    }
+
     const fetchStoreInfo = async () => {
       try {
         // For buyers, fetch store info from the other user (seller)
@@ -1190,11 +1198,11 @@ function MessagesPage() {
     };
 
     fetchStoreInfo();
-  }, [selectedConversation, isSeller, currentUser]);
+  }, [selectedConversation, isSeller, currentUser, isAdminConversation]);
 
   // Fetch store items and info when showing items
   useEffect(() => {
-    if (!showStoreItems || !selectedConversation || isSeller) return;
+    if (!showStoreItems || !selectedConversation || isSeller || isAdminConversation) return;
 
     const fetchStoreData = async () => {
       setLoadingItems(true);
@@ -1222,7 +1230,7 @@ function MessagesPage() {
     };
 
     fetchStoreData();
-  }, [showStoreItems, selectedConversation, isSeller]);
+  }, [showStoreItems, selectedConversation, isSeller, isAdminConversation]);
 
   // Fetch wallet data for sellers
   useEffect(() => {
@@ -6455,7 +6463,15 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         // Handle admin conversation state
                         if (conversation.isAdminChat) {
                           setIsAdminConversation(true);
+                          setStoreInfo(null); // Immediately clear store info for admin conversations
                           setShowFormalReportingInfo(false); // Don't auto-show form for existing admin conversations
+                          
+                          // Clear any store-related data from the conversation object
+                          setSelectedConversation(prev => ({
+                            ...prev,
+                            storeAddress: null,
+                            customerAddress: null
+                          }));
                         } else {
                           setIsAdminConversation(false);
                           setShowFormalReportingInfo(false);
@@ -6547,7 +6563,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         return (email && email !== 'store@example.com') ? email : '';
                       })()}
                     </div>
-                    {!isSeller && selectedConversation.storeAddress && (
+                    {!isSeller && selectedConversation.storeAddress && !isAdminConversation && (
                       <div 
                         className="chat-store-address"
                         onClick={() => {
@@ -6566,7 +6582,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         📍 {selectedConversation.storeAddress}
                       </div>
                     )}
-                    {!isSeller && storeInfo?.storeLocation && !selectedConversation.storeAddress && (
+                    {!isSeller && storeInfo?.storeLocation && !selectedConversation.storeAddress && !isAdminConversation && (
                       <div 
                         className="chat-store-address"
                         onClick={() => {
@@ -6585,7 +6601,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         📍 {storeInfo.storeLocation}
                       </div>
                     )}
-                    {!isSeller && !selectedConversation.storeAddress && !storeInfo?.storeLocation && storeInfo?.address && (
+                    {!isSeller && !selectedConversation.storeAddress && !storeInfo?.storeLocation && storeInfo?.address && !isAdminConversation && (
                       <div 
                         className="chat-store-address"
                         onClick={() => {
@@ -6602,6 +6618,31 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                         }}
                       >
                         📍 {storeInfo.address}
+                      </div>
+                    )}
+                    {!isSeller && storeInfo?.phoneNumber && !isAdminConversation && (
+                      <div 
+                        className="chat-store-phone"
+                        onClick={() => {
+                          window.open(`tel:${storeInfo.phoneNumber}`, '_self');
+                        }}
+                        style={{
+                          color: '#007B7F',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <span>{storeInfo.phoneType === 'personal' ? '📱' : '📞'}</span>
+                        <span>{storeInfo.phoneNumber}</span>
+                        <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                          ({storeInfo.phoneType === 'personal' ? 'Personal' : 'Work'})
+                        </span>
                       </div>
                     )}
                     {isSeller && selectedConversation.customerAddress && storeInfo?.deliveryType === 'Delivery' && (

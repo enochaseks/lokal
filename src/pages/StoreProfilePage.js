@@ -71,6 +71,8 @@ function StoreProfilePage() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editSellsAlcohol, setEditSellsAlcohol] = useState('');
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editPhoneType, setEditPhoneType] = useState('work');
 
   // Add at the top, after other useState hooks
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -107,6 +109,8 @@ function StoreProfilePage() {
           setClosingTimes(data.closingTimes || {});
           setEditSellsAlcohol(data.sellsAlcohol || '');
           setEditAlcoholLicense(data.alcoholLicense || null);
+          setEditPhoneNumber(data.phoneNumber || '');
+          setEditPhoneType(data.phoneType || 'work');
           // Load change history
           setChangeHistory({
             nameChanges: data.nameChanges || [],
@@ -294,6 +298,8 @@ function StoreProfilePage() {
         closingTimes: cleanedClosingTimes,
         sellsAlcohol: editSellsAlcohol,
         alcoholLicense: editAlcoholLicense,
+        phoneNumber: editPhoneNumber,
+        phoneType: editPhoneType,
       };
 
       // Handle significant changes that require license updates
@@ -1049,6 +1055,53 @@ function StoreProfilePage() {
                     <input type="file" accept="image/*,application/pdf" onChange={e => setEditAlcoholLicense(e.target.files[0])} style={{ width: '100%' }} required />
                   </div>
                 )}
+                
+                {/* Phone Number Section */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Phone Number (optional)</label>
+                  <input 
+                    type="tel" 
+                    value={editPhoneNumber} 
+                    onChange={e => setEditPhoneNumber(e.target.value)} 
+                    placeholder="e.g., +44 20 1234 5678" 
+                    style={{ 
+                      width: '100%', 
+                      padding: '0.5rem', 
+                      border: '1px solid #B8B8B8', 
+                      borderRadius: 4,
+                      marginBottom: 8
+                    }} 
+                  />
+                  <div style={{ marginBottom: 4 }}>
+                    <label style={{ fontWeight: 500, fontSize: '0.9rem', color: '#666' }}>Phone Type:</label>
+                  </div>
+                  <div style={{ display: 'flex', gap: 15, alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem' }}>
+                      <input
+                        type="radio"
+                        name="phoneType"
+                        value="work"
+                        checked={editPhoneType === 'work'}
+                        onChange={e => setEditPhoneType(e.target.value)}
+                      />
+                      <span style={{ color: '#007B7F' }}>📞 Work</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem' }}>
+                      <input
+                        type="radio"
+                        name="phoneType"
+                        value="personal"
+                        checked={editPhoneType === 'personal'}
+                        onChange={e => setEditPhoneType(e.target.value)}
+                      />
+                      <span style={{ color: '#666' }}>📱 Personal</span>
+                    </label>
+                  </div>
+                  <small style={{ color: '#888', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
+                    Adding a phone number helps customers contact you directly
+                  </small>
+                </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Opening Time</label>
                   <input type="time" value={editOpeningTime} onChange={e => setEditOpeningTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />

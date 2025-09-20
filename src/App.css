@@ -36,3 +36,130 @@
     transform: rotate(360deg);
   }
 }
+
+/* Global Mobile Responsive Design - Fix navbar overlap issue for ALL pages */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: #F9F5EE;
+}
+
+/* Global container styles for all pages to avoid navbar overlap */
+.page-container,
+.main-content,
+[class*="page-"],
+[class*="container-"] {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Global mobile fixes - applies to all pages and tablets */
+@media (max-width: 1024px) {
+  body {
+    padding-top: 60px !important; /* Account for fixed navbar */
+    position: relative;
+    overflow-x: hidden;
+  }
+  
+  /* Ensure all main page content areas have proper top spacing on mobile and tablets */
+  .page-container,
+  .main-content,
+  [class*="page-"],
+  [class*="container-"],
+  .App > div,
+  main {
+    padding-top: 8px !important; /* Reduced from 20px to minimize spacing */
+    min-height: calc(100vh - 60px) !important; /* Full height minus navbar */
+    overflow-x: hidden;
+    position: relative;
+  }
+  
+  /* Smooth scrolling for mobile and tablets */
+  * {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Prevent content from being hidden behind navbar - reduced spacing */
+  .content-wrapper {
+    margin-top: 10px !important; /* Reduced from 70px */
+  }
+  
+  /* Ensure proper scrolling on mobile and tablets */
+  .scroll-container {
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Fix any existing fixed positioned elements */
+  .fixed-element {
+    top: 60px !important; /* Below navbar */
+  }
+  
+  /* Horizontal scroll improvements */
+  .horizontal-scroll {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  .horizontal-scroll::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+  
+  .horizontal-scroll > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  /* Form and input improvements for mobile */
+  input, textarea, select {
+    font-size: 16px !important; /* Prevent zoom on iOS */
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 8px;
+  }
+  
+  /* Button improvements */
+  button {
+    min-height: 44px; /* Touch target size */
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Card and container improvements */
+  .card, .shop-card, [class*="card-"] {
+    margin: 0.5rem !important;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+}
+
+/* Desktop - no changes needed */
+@media (min-width: 1025px) {
+  body {
+    padding-top: 0;
+  }
+  
+  .page-container,
+  .main-content,
+  [class*="page-"],
+  [class*="container-"] {
+    padding-top: 0 !important;
+  }
+}

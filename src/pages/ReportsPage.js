@@ -62,6 +62,9 @@ function ReportsPage() {
 
   useEffect(() => {
     const auth = getAuth();
+    let unsubscribeComplaints1 = null;
+    let unsubscribeComplaints2 = null;
+    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
@@ -72,79 +75,105 @@ function ReportsPage() {
           if (storeDoc.exists()) {
             setIsSeller(true);
             
-            // Fetch complaints for this seller - both old format (sellerId) and new store reports (reportedStoreOwner)
-            const complaintsQuery1 = query(
-              collection(db, 'admin_complaints'),
-              where('sellerId', '==', user.uid),
-              orderBy('timestamp', 'desc')
-            );
-            
-            const complaintsQuery2 = query(
-              collection(db, 'admin_complaints'),
-              where('reportedStoreOwner', '==', user.uid),
-              orderBy('timestamp', 'desc')
-            );
-            
-            // Listen to both queries
-            const unsubscribeComplaints1 = onSnapshot(complaintsQuery1, (snapshot) => {
-              const complaintsData1 = [];
-              snapshot.forEach((doc) => {
-                complaintsData1.push({
+            // Use Promise.all to handle both queries simultaneously
+            try {
+              const complaintsQuery1 = query(
+                collection(db, 'admin_complaints'),
+                where('sellerId', '==', user.uid),
+                orderBy('timestamp', 'desc')
+              );
+              
+              const complaintsQuery2 = query(
+                collection(db, 'admin_complaints'),
+                where('reportedStoreOwner', '==', user.uid),
+                orderBy('timestamp', 'desc')
+              );
+
+              // Track loaded state
+              let complaintsData1 = [];
+              let complaintsData2 = [];
+              let loaded1 = false;
+              let loaded2 = false;
+
+              const updateComplaints = () => {
+                if (loaded1 && loaded2) {
+                  // Combine both arrays and remove duplicates
+                  const allComplaints = [...complaintsData1, ...complaintsData2];
+                  const uniqueComplaints = allComplaints.filter((complaint, index, self) => 
+                    index === self.findIndex((c) => c.id === complaint.id)
+                  );
+                  
+                  // Sort by timestamp descending
+                  uniqueComplaints.sort((a, b) => {
+                    const timestampA = a.timestamp || a.submittedAt;
+                    const timestampB = b.timestamp || b.submittedAt;
+                    if (!timestampA || !timestampB) return 0;
+                    return timestampB.toMillis() - timestampA.toMillis();
+                  });
+                  
+                  setComplaints(uniqueComplaints);
+                  setLoading(false);
+                }
+              };
+
+              // Set up first listener
+              unsubscribeComplaints1 = onSnapshot(complaintsQuery1, (snapshot) => {
+                complaintsData1 = snapshot.docs.map(doc => ({
                   id: doc.id,
                   ...doc.data()
-                });
+                }));
+                loaded1 = true;
+                updateComplaints();
+              }, (error) => {
+                console.error('Error fetching complaints (query 1):', error);
+                loaded1 = true;
+                updateComplaints();
+              });
+
+              // Set up second listener
+              unsubscribeComplaints2 = onSnapshot(complaintsQuery2, (snapshot) => {
+                complaintsData2 = snapshot.docs.map(doc => ({
+                  id: doc.id,
+                  ...doc.data()
+                }));
+                loaded2 = true;
+                updateComplaints();
+              }, (error) => {
+                console.error('Error fetching complaints (query 2):', error);
+                loaded2 = true;
+                updateComplaints();
               });
               
-              // Now get store reports too
-              const unsubscribeComplaints2 = onSnapshot(complaintsQuery2, (snapshot2) => {
-                const complaintsData2 = [];
-                snapshot2.forEach((doc) => {
-                  complaintsData2.push({
-                    id: doc.id,
-                    ...doc.data()
-                  });
-                });
-                
-                // Combine both arrays and remove duplicates (if any)
-                const allComplaints = [...complaintsData1, ...complaintsData2];
-                const uniqueComplaints = allComplaints.filter((complaint, index, self) => 
-                  index === self.findIndex((c) => c.id === complaint.id)
-                );
-                
-                // Sort by timestamp descending
-                uniqueComplaints.sort((a, b) => {
-                  const timestampA = a.timestamp || a.submittedAt;
-                  const timestampB = b.timestamp || b.submittedAt;
-                  if (!timestampA || !timestampB) return 0;
-                  return timestampB.toMillis() - timestampA.toMillis();
-                });
-                
-                setComplaints(uniqueComplaints);
-                setLoading(false);
-              });
-              
-              return () => {
-                unsubscribeComplaints1();
-                unsubscribeComplaints2();
-              };
-            });
+            } catch (queryError) {
+              console.error('Error setting up queries:', queryError);
+              setLoading(false);
+            }
             
-            return () => unsubscribeComplaints1();
           } else {
             // Not a seller, redirect
+            setLoading(false);
             navigate('/explore');
           }
         } catch (error) {
           console.error('Error checking seller status:', error);
+          setLoading(false);
           navigate('/explore');
         }
       } else {
+        setLoading(false);
         navigate('/login');
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeComplaints1) {
+        unsubscribeComplaints1();
+      }
+      if (unsubscribeComplaints2) {
+        unsubscribeComplaints2();
+      }
+    };
   }, [navigate]);
 
   if (loading) {
