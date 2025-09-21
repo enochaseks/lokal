@@ -615,119 +615,301 @@ function ExplorePage() {
     <div style={{ background: '#F9F5EE', minHeight: '100vh', minHeight: '100dvh' }}>
       <style>{responsiveStyles}</style>
       <Navbar />
-      <div className="explore-controls" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem', background: '#F9F5EE', position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, marginRight: '1rem' }}>
-          <span 
-            onClick={refreshLocation}
-            style={{ 
-              fontSize: '1rem', 
-              marginRight: '0.3rem', 
-              cursor: 'pointer',
-              transition: 'transform 0.2s ease',
-              userSelect: 'none',
-              animation: locationLoading ? 'spin 1s linear infinite' : 'none'
-            }}
-            onMouseEnter={(e) => {
-              if (!locationLoading) e.target.style.transform = 'scale(1.2)';
-            }}
-            onMouseLeave={(e) => {
-              if (!locationLoading) e.target.style.transform = 'scale(1)';
-            }}
-            title={locationLoading ? "Detecting location..." : "Click to refresh location"}
-            aria-label="Refresh location"
-          >
-            {locationLoading ? '🔄' : '📍'}
-          </span>
-          <span style={{ fontSize: '1rem', color: locationError ? '#D92D20' : '#1C1C1C' }}>
-            {locationLoading 
-              ? 'Detecting location...' 
-              : city || (locationDetected ? 'Location unavailable' : 'Detecting city...')
-            }
-          </span>
-          {locationError && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              background: '#FEF2F2',
-              border: '1px solid #FECACA',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              fontSize: '0.9rem',
-              color: '#B91C1C',
-              marginTop: '4px',
-              zIndex: 10,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
-              <div style={{ fontWeight: '600', marginBottom: '4px' }}>⚠️ Location Issue</div>
-              <div style={{ marginBottom: '8px' }}>{locationError}</div>
-              {locationError.includes('denied') && (
-                <div style={{ fontSize: '0.8rem', color: '#7F1D1D', marginBottom: '8px' }}>
-                  💡 <strong>Why we need location:</strong> To show you nearby stores and calculate accurate delivery times.
-                  <br />
-                  📱 <strong>How to enable:</strong> Look for the location icon in your browser's address bar or check your browser settings.
-                </div>
-              )}
-              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #FECACA' }}>
-                <button
-                  onClick={() => setShowManualLocation(!showManualLocation)}
-                  style={{
-                    background: '#007B7F',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '4px 8px',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                    marginRight: '8px'
-                  }}
-                >
-                  {showManualLocation ? 'Cancel' : 'Enter Location Manually'}
-                </button>
-                {showManualLocation && (
-                  <div style={{ marginTop: '8px' }}>
-                    <input
-                      type="text"
-                      placeholder="Enter your city or area"
-                      value={manualLocation}
-                      onChange={(e) => setManualLocation(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          setManualLocationHandler(manualLocation);
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '6px 8px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '4px',
-                        fontSize: '0.8rem',
-                        marginBottom: '4px'
-                      }}
-                    />
-                    <button
-                      onClick={() => setManualLocationHandler(manualLocation)}
-                      disabled={!manualLocation.trim() || locationLoading}
-                      style={{
-                        background: manualLocation.trim() && !locationLoading ? '#007B7F' : '#9CA3AF',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        padding: '4px 8px',
-                        fontSize: '0.8rem',
-                        cursor: manualLocation.trim() && !locationLoading ? 'pointer' : 'not-allowed'
-                      }}
-                    >
-                      {locationLoading ? 'Setting...' : 'Set Location'}
-                    </button>
+      {/* Fixed Desktop Layout */}
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        padding: '1rem', 
+        gap: '1rem', 
+        background: '#F9F5EE',
+        position: 'relative'
+      }}>
+        {/* Location Display - Top Left */}
+        <div style={{ 
+          width: '100%', 
+          maxWidth: '900px',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'flex-start', 
+          marginBottom: '0.5rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+            <span 
+              onClick={refreshLocation}
+              style={{ 
+                fontSize: '1rem', 
+                marginRight: '0.3rem', 
+                cursor: 'pointer',
+                transition: 'transform 0.2s ease',
+                userSelect: 'none',
+                animation: locationLoading ? 'spin 1s linear infinite' : 'none'
+              }}
+              onMouseEnter={(e) => {
+                if (!locationLoading) e.target.style.transform = 'scale(1.2)';
+              }}
+              onMouseLeave={(e) => {
+                if (!locationLoading) e.target.style.transform = 'scale(1)';
+              }}
+              title={locationLoading ? "Detecting location..." : "Click to refresh location"}
+              aria-label="Refresh location"
+            >
+              {locationLoading ? '🔄' : '📍'}
+            </span>
+            <span style={{ fontSize: '1rem', color: locationError ? '#D92D20' : '#1C1C1C' }}>
+              {locationLoading 
+                ? 'Detecting location...' 
+                : city || (locationDetected ? 'Location unavailable' : 'Detecting city...')
+              }
+            </span>
+            {locationError && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontSize: '0.9rem',
+                color: '#B91C1C',
+                marginTop: '4px',
+                zIndex: 10,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '4px' }}>⚠️ Location Issue</div>
+                <div style={{ marginBottom: '8px' }}>{locationError}</div>
+                {locationError.includes('denied') && (
+                  <div style={{ fontSize: '0.8rem', color: '#7F1D1D', marginBottom: '8px' }}>
+                    💡 <strong>Why we need location:</strong> To show you nearby stores and calculate accurate delivery times.
+                    <br />
+                    📱 <strong>How to enable:</strong> Look for the location icon in your browser's address bar or check your browser settings.
                   </div>
                 )}
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #FECACA' }}>
+                  <button
+                    onClick={() => setShowManualLocation(!showManualLocation)}
+                    style={{
+                      background: '#007B7F',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      marginRight: '8px'
+                    }}
+                  >
+                    {showManualLocation ? 'Cancel' : 'Enter Location Manually'}
+                  </button>
+                  {showManualLocation && (
+                    <div style={{ marginTop: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="Enter your city or area"
+                        value={manualLocation}
+                        onChange={(e) => setManualLocation(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            setManualLocationHandler(manualLocation);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: '4px',
+                          fontSize: '0.8rem',
+                          marginBottom: '4px'
+                        }}
+                      />
+                      <button
+                        onClick={() => setManualLocationHandler(manualLocation)}
+                        disabled={!manualLocation.trim() || locationLoading}
+                        style={{
+                          background: manualLocation.trim() && !locationLoading ? '#007B7F' : '#9CA3AF',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          fontSize: '0.8rem',
+                          cursor: manualLocation.trim() && !locationLoading ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        {locationLoading ? 'Setting...' : 'Set Location'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-        <div className={`explore-bar${isMobile ? ' mobile' : ''}${showDropdowns ? ' show-dropdowns' : ''}`} style={{ 
+
+        {/* Desktop Search Controls Row 1: Search Bar */}
+        {!isMobile && (
+          <div style={{ 
+            display: 'flex', 
+            width: '100%', 
+            maxWidth: '900px',
+            marginBottom: '10px'
+          }}>
+            <div style={{ 
+              display: 'flex',
+              background: 'rgba(255, 255, 255, 0.9)', 
+              backdropFilter: 'blur(10px)', 
+              border: '1px solid rgba(255, 255, 255, 0.2)', 
+              borderRadius: '20px', 
+              width: '100%',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            }}>
+              <input
+                type="text"
+                placeholder="🔍 Search stores, products..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '1rem 1.25rem',
+                  fontSize: '1rem',
+                  border: 'none',
+                  outline: 'none',
+                  color: '#1F2937',
+                  background: 'transparent',
+                  borderRadius: '20px',
+                  fontWeight: '500',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Search Controls Row 2: All Dropdowns */}
+        {!isMobile && (
+          <div style={{ 
+            display: 'flex',
+            width: '100%', 
+            maxWidth: '900px',
+            marginBottom: '16px',
+            gap: '10px'
+          }}>
+            {/* Category Dropdown */}
+            <div style={{ 
+              flex: '1 1 0',
+              background: 'rgba(255, 255, 255, 0.9)', 
+              backdropFilter: 'blur(10px)', 
+              border: '1px solid rgba(255, 255, 255, 0.2)', 
+              borderRadius: '12px', 
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            }}>
+              <select
+                value={selectedCategory}
+                onChange={e => setSelectedCategory(e.target.value)}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem 2.5rem 0.75rem 1rem', 
+                  fontSize: '1rem', 
+                  border: 'none', 
+                  color: '#1F2937', 
+                  background: 'transparent', 
+                  outline: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.75rem center',
+                  backgroundSize: '1rem',
+                }}
+              >
+                <option value="">📂 Category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter By Dropdown */}
+            <div style={{ 
+              flex: '1 1 0',
+              background: 'rgba(255, 255, 255, 0.9)', 
+              backdropFilter: 'blur(10px)', 
+              border: '1px solid rgba(255, 255, 255, 0.2)', 
+              borderRadius: '12px', 
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            }}>
+              <select
+                value={filterBy}
+                onChange={e => setFilterBy(e.target.value)}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem 2.5rem 0.75rem 1rem', 
+                  fontSize: '1rem', 
+                  border: 'none', 
+                  color: '#1F2937', 
+                  background: 'transparent', 
+                  outline: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.75rem center',
+                  backgroundSize: '1rem',
+                }}
+              >
+                <option value="">🔍 Filter By</option>
+                <option value="Open Now">🟢 Open Now</option>
+                <option value="Top Rated">⭐ Top Rated</option>
+              </select>
+            </div>
+
+            {/* Sort By Dropdown */}
+            <div style={{ 
+              flex: '1 1 0',
+              background: 'rgba(255, 255, 255, 0.9)', 
+              backdropFilter: 'blur(10px)', 
+              border: '1px solid rgba(255, 255, 255, 0.2)', 
+              borderRadius: '12px', 
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            }}>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem 2.5rem 0.75rem 1rem', 
+                  fontSize: '1rem', 
+                  border: 'none', 
+                  color: '#1F2937', 
+                  background: 'transparent', 
+                  outline: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.75rem center',
+                  backgroundSize: '1rem',
+                }}
+              >
+                <option value="">📊 Sort By</option>
+                <option value="Newest">🆕 Newest</option>
+                <option value="Oldest">📅 Oldest</option>
+                <option value="Rating">⭐ Rating</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Search Bar with All Controls */}
+        {isMobile && (
+        <div className={`explore-bar mobile${showDropdowns ? ' show-dropdowns' : ''}`} style={{ 
           display: 'flex', 
           background: 'rgba(255, 255, 255, 0.9)', 
           backdropFilter: 'blur(10px)', 
@@ -735,11 +917,10 @@ function ExplorePage() {
           borderRadius: '20px', 
           overflow: 'visible', 
           width: '100%', 
-          maxWidth: 900, 
           position: 'relative',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
           transition: 'all 0.3s ease',
-          zIndex: isMobile && showDropdowns ? 1010 : 'auto'
+          zIndex: showDropdowns ? 1010 : 'auto'
         }}>
           <input
             type="text"
@@ -776,7 +957,7 @@ function ExplorePage() {
             type="button"
             className="explore-dropdown-toggle"
             style={{
-              display: isMobile ? 'flex' : 'none',
+              display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               background: 'rgba(0, 123, 127, 0.1)',
@@ -803,25 +984,26 @@ function ExplorePage() {
             {showDropdowns ? '▲' : '▼'}
           </button>
           <div className="explore-dropdowns" style={{ 
-            display: isMobile ? (showDropdowns ? 'flex' : 'none') : 'flex', 
-            flexDirection: isMobile ? 'column' : 'row', 
-            width: isMobile ? '100%' : 'auto', 
-            background: isMobile ? 'rgba(255, 255, 255, 0.95)' : 'transparent', 
-            backdropFilter: isMobile ? 'blur(10px)' : 'none',
-            position: isMobile ? 'absolute' : 'static', 
+            display: showDropdowns ? 'flex' : 'none',
+            flexDirection: 'column',
+            width: '100%',
+            background: 'rgba(255, 255, 255, 0.95)', 
+            backdropFilter: 'blur(10px)',
+            position: 'absolute',
             left: 0, 
             top: '100%', 
             zIndex: 10, 
-            border: isMobile ? '1px solid rgba(255, 255, 255, 0.2)' : 'none', 
-            borderRadius: isMobile ? '0 0 20px 20px' : '0', 
-            marginTop: isMobile ? '4px' : '0',
-            boxShadow: isMobile ? '0 8px 32px rgba(0, 0, 0, 0.1)' : 'none'
+            border: '1px solid rgba(255, 255, 255, 0.2)', 
+            borderRadius: '0 0 20px 20px',
+            marginTop: '4px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            overflow: 'visible'
           }}>
             <select
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
               style={{ 
-                padding: '1rem 1.25rem', 
+                padding: '1rem 2.5rem 1rem 1.25rem', 
                 fontSize: '1rem', 
                 border: 'none', 
                 color: '#1F2937', 
@@ -836,7 +1018,7 @@ function ExplorePage() {
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right 0.75rem center',
                 backgroundSize: '1rem',
-                paddingRight: '2.5rem'
+                minWidth: '140px'
               }}
             >
               <option value="">📂 Category</option>
@@ -848,7 +1030,7 @@ function ExplorePage() {
               value={filterBy}
               onChange={e => setFilterBy(e.target.value)}
               style={{ 
-                padding: '1rem 1.25rem', 
+                padding: '1rem 2.5rem 1rem 1.25rem', 
                 fontSize: '1rem', 
                 border: 'none', 
                 color: '#1F2937', 
@@ -863,7 +1045,7 @@ function ExplorePage() {
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right 0.75rem center',
                 backgroundSize: '1rem',
-                paddingRight: '2.5rem'
+                minWidth: '120px'
               }}
             >
               <option value="">🔍 Filter By</option>
@@ -874,7 +1056,7 @@ function ExplorePage() {
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
               style={{ 
-                padding: '1rem 1.25rem', 
+                padding: '1rem 2.5rem 1rem 1.25rem', 
                 fontSize: '1rem', 
                 border: 'none', 
                 color: '#1F2937', 
@@ -888,7 +1070,9 @@ function ExplorePage() {
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'right 0.75rem center',
                 backgroundSize: '1rem',
-                paddingRight: '2.5rem'
+                minWidth: '140px',
+                flex: '0 0 140px',
+                flexShrink: 0
               }}
             >
               <option value="">📊 Sort By</option>
@@ -898,8 +1082,9 @@ function ExplorePage() {
             </select>
           </div>
         </div>
+      )}
       </div>
-
+        
       {/* Compact City Selector - Left Aligned */}
       <div style={{ 
         display: 'flex', 

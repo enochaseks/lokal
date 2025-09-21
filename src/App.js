@@ -135,19 +135,21 @@ function App() {
             overflowX: 'hidden'
           }}>
             <div
-              className="main-app-container"
               style={{
-                width: '100%',
                 maxWidth: '1200px',
+                margin: '0 auto',
                 minHeight: '100vh',
-                background: 'inherit',
-                boxShadow: '0 0 0 #fff',
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1,
+                minHeight: 'calc(100vh - var(--safe-area-inset-bottom))',
+                width: '100%',
                 padding: '0 16px',
-                paddingTop: '10px', // Reduced from 70px for better mobile experience
-                position: 'relative'
+                paddingTop: '60px', // Exactly match navbar height
+                paddingBottom: '0', // Remove extra padding
+                position: 'relative',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS devices
+                display: 'flex',
+                flexDirection: 'column'
               }}
             >
               <Routes>
@@ -178,31 +180,136 @@ function App() {
               </Routes>
             </div>
             <style>{`
-              @media (max-width: 1024px) {
-                .App > div {
-                  max-width: 100vw !important;
-                  padding: 0 4px !important;
-                  padding-top: 10px !important; /* Reduced from 70px to minimize spacing */
-                }
-                
-                /* Global mobile and tablet scroll fixes */
+              /* Root variables for consistent sizing */
+              :root {
+                --safe-area-inset-top: env(safe-area-inset-top, 0px);
+                --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+                --safe-area-inset-left: env(safe-area-inset-left, 0px);
+                --safe-area-inset-right: env(safe-area-inset-right, 0px);
+              }
+
+              /* Fix for iOS notch and modern Android displays */
+              @supports (padding-top: constant(safe-area-inset-top)) or (padding-top: env(safe-area-inset-top)) {
                 body {
-                  overflow-x: hidden;
-                  -webkit-overflow-scrolling: touch;
-                }
-                
-                /* Ensure all page content is scrollable on mobile and tablets */
-                .main-app-container {
-                  min-height: calc(100vh - 60px) !important;
-                  overflow-y: auto;
-                  -webkit-overflow-scrolling: touch;
-                  scroll-behavior: smooth;
+                  padding-top: var(--safe-area-inset-top);
+                  padding-bottom: var(--safe-area-inset-bottom);
+                  padding-left: var(--safe-area-inset-left);
+                  padding-right: var(--safe-area-inset-right);
                 }
               }
               
-              @media (min-width: 1025px) {
+              /* Ensure navbar always stays on top without extra spacing */
+              nav {
+                z-index: 9999 !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                transform: translateZ(0);
+                backface-visibility: hidden;
+                will-change: transform;
+                padding-top: var(--safe-area-inset-top) !important;
+                margin-top: 0 !important;
+                height: 60px !important;
+              }
+              
+              /* Remove all extra spacing while ensuring content is visible */
+              body, html {
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow-x: hidden !important;
+                width: 100% !important;
+                height: 100% !important;
+              }
+              
+              .App {
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              
+              .App > div {
+                padding-top: 60px !important; /* Exactly match navbar height */
+                padding-bottom: var(--safe-area-inset-bottom) !important;
+                padding-left: calc(var(--safe-area-inset-left) + 8px) !important;
+                padding-right: calc(var(--safe-area-inset-right) + 8px) !important;
+                margin: 0 !important;
+              }
+
+              /* Responsive design for all screen sizes without extra spacing */
+              
+              /* Extra small devices (phones, up to 430px) */
+              @media only screen and (max-width: 430px) {
                 .App > div {
-                  padding-top: 70px; /* Keep desktop spacing */
+                  max-width: 100% !important;
+                  padding-left: 4px !important;
+                  padding-right: 4px !important;
+                  padding-top: 60px !important;
+                  width: 100vw !important;
+                }
+                
+                nav {
+                  height: 60px !important;
+                  padding: 0 8px !important;
+                }
+              }
+              
+              /* Small devices (large phones, 431px to 767px) */
+              @media only screen and (min-width: 431px) and (max-width: 767px) {
+                .App > div {
+                  max-width: 100% !important;
+                  padding-left: 8px !important;
+                  padding-right: 8px !important;
+                  padding-top: 60px !important;
+                  width: 100% !important;
+                }
+                
+                nav {
+                  height: 60px !important;
+                }
+              }
+              
+              /* Medium devices (tablets, 768px to 1023px) */
+              @media only screen and (min-width: 768px) and (max-width: 1023px) {
+                .App > div {
+                  max-width: 900px !important;
+                  padding-left: 16px !important;
+                  padding-right: 16px !important;
+                  padding-top: 60px !important;
+                }
+              }
+              
+              /* Large devices (laptops/desktops, 1024px to 1439px) */
+              @media only screen and (min-width: 1024px) and (max-width: 1439px) {
+                .App > div {
+                  max-width: 1000px !important;
+                  padding-top: 60px !important;
+                }
+              }
+              
+              /* Extra large devices (large desktops, 1440px and up) */
+              @media only screen and (min-width: 1440px) {
+                .App > div {
+                  max-width: 1200px !important;
+                  padding-top: 60px !important;
+                }
+              }
+              
+              /* Device-specific fixes */
+              
+              /* iPhone X to iPhone 16 Pro Max (notched iPhones) */
+              @media only screen and (device-width: 375px) and (device-height: 812px),
+                     only screen and (device-width: 390px) and (device-height: 844px),
+                     only screen and (device-width: 428px) and (device-height: 926px),
+                     only screen and (device-width: 430px) and (device-height: 932px) {
+                .App > div {
+                  padding-bottom: calc(20px + 34px) !important; /* Extra padding for home indicator */
+                }
+              }
+              
+              /* Samsung Galaxy phones with cutouts/holes */
+              @media only screen and (max-width: 450px) and (min-height: 900px) {
+                nav {
+                  padding-top: 0.75rem !important;
                 }
               }
             `}</style>
