@@ -406,9 +406,53 @@ function FeedPage() {
               <img src={storeProfile.backgroundImg || 'https://via.placeholder.com/44'} alt="avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
               <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder="What's on your mind?" rows={2} style={{ flex: 1, borderRadius: 22, border: '1px solid #ccd0d5', padding: '12px 18px', fontSize: '1.1rem', background: '#F0F2F5', resize: 'vertical', outline: 'none' }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <input type="file" accept="image/*,video/*" multiple capture style={{ flex: 1 }} onChange={handleMediaChange} />
-              <button type="button" onClick={handlePost} disabled={loading} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.5rem', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? 'Posting...' : 'Post'}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button 
+                type="button" 
+                onClick={handlePost} 
+                disabled={loading} 
+                style={{ 
+                  background: 'rgba(0, 123, 127, 0.8)', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  padding: '0.4rem 1rem', 
+                  fontWeight: '600', 
+                  fontSize: '0.9rem', 
+                  cursor: 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 4px 10px rgba(0, 123, 127, 0.2)',
+                  transition: 'all 0.2s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 15px rgba(0, 123, 127, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 10px rgba(0, 123, 127, 0.2)';
+                }}
+              >
+                {loading ? 'Posting...' : 'Post'}
+              </button>
+              <input 
+                type="file" 
+                accept="image/*,video/*" 
+                multiple 
+                capture 
+                style={{ 
+                  flex: 1,
+                  background: 'rgba(255, 255, 255, 0.7)',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '8px',
+                  padding: '6px'
+                }} 
+                onChange={handleMediaChange} 
+              />
             </div>
             {/* Campaign icon/button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
