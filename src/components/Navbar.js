@@ -11,9 +11,29 @@ function Navbar() {
   const [userType, setUserType] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [adminCode, setAdminCode] = useState('');
+  const [showAdminCodeModal, setShowAdminCodeModal] = useState(false);
+  const [adminCodeError, setAdminCodeError] = useState('');
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
   const { unreadMessageCount } = useMessage();
+
+  // Handle window resize to detect mobile devices
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    // Add event listener
+    window.addEventListener('resize', handleResize);
+    
+    // Call handler right away so state gets updated with initial window size
+    handleResize();
+    
+    // Remove event listener on cleanup
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const auth = getAuth(app);
@@ -51,6 +71,77 @@ function Navbar() {
       console.error("Error signing out:", error);
     }
   };
+  
+  // Function to handle admin access code validation
+  const handleAdminAccess = (e) => {
+    e.preventDefault();
+    setSidebarOpen(false);
+    setShowAdminCodeModal(true);
+  };
+  
+  // Function to verify admin code and grant access to admin portal
+  const verifyAdminCode = () => {
+    // Check if code matches the secret code
+    if (adminCode === '109826') {
+      setAdminCodeError('');
+      setAdminCode('');
+      setShowAdminCodeModal(false);
+      
+      // Show success message
+      const successModal = document.createElement('div');
+      successModal.style.position = 'fixed';
+      successModal.style.top = '0';
+      successModal.style.left = '0';
+      successModal.style.right = '0';
+      successModal.style.bottom = '0';
+      successModal.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      successModal.style.display = 'flex';
+      successModal.style.justifyContent = 'center';
+      successModal.style.alignItems = 'center';
+      successModal.style.zIndex = '10000';
+      
+      const successContent = document.createElement('div');
+      successContent.style.backgroundColor = 'white';
+      successContent.style.borderRadius = '8px';
+      successContent.style.padding = '2rem';
+      successContent.style.width = '90%';
+      successContent.style.maxWidth = '400px';
+      successContent.style.textAlign = 'center';
+      
+      const icon = document.createElement('div');
+      icon.innerHTML = '✅';
+      icon.style.fontSize = '3rem';
+      icon.style.marginBottom = '1rem';
+      icon.style.color = '#10B981';
+      
+      const title = document.createElement('h2');
+      title.innerText = 'Access Granted';
+      title.style.fontSize = '1.5rem';
+      title.style.marginBottom = '1rem';
+      title.style.fontWeight = 'bold';
+      
+      const message = document.createElement('p');
+      message.innerText = 'You have been verified. Redirecting to the admin portal...';
+      message.style.marginBottom = '1.5rem';
+      message.style.color = '#4B5563';
+      
+      successContent.appendChild(icon);
+      successContent.appendChild(title);
+      successContent.appendChild(message);
+      successModal.appendChild(successContent);
+      document.body.appendChild(successModal);
+      
+      // Redirect to admin dashboard after a short delay
+      setTimeout(() => {
+        document.body.removeChild(successModal);
+        navigate('/admin-login');
+      }, 1500);
+      
+    } else {
+      // Show error message for incorrect code
+      setAdminCodeError('Invalid access code. Please try again.');
+    }
+  };
 
   // Only show cart if userType is 'buyer' and onboardingStep is 'complete' and user is logged in
   const showCart = user && userType === 'buyer' && onboardingStep === 'complete';
@@ -79,19 +170,34 @@ function Navbar() {
       margin: 0
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
-          <img 
-            src={process.env.PUBLIC_URL + '/images/logo png.png'} 
-            alt="Lokal Logo" 
-            style={{ 
-              maxHeight: '35px', 
-              verticalAlign: 'middle',
-              transition: 'transform 0.2s ease'
-            }} 
-            onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
-            onMouseLeave={e => e.target.style.transform = 'scale(1)'}
-          />
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+          <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
+            <img 
+              src={process.env.PUBLIC_URL + '/images/logo png.png'} 
+              alt="Lokal Logo" 
+              style={{ 
+                maxHeight: '35px', 
+                verticalAlign: 'middle',
+                transition: 'transform 0.2s ease'
+              }} 
+              onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
+              onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+            />
+          </a>
+          <span style={{ 
+            fontSize: '12px', 
+            fontWeight: 'bold', 
+            color: 'rgba(0, 123, 127, 0.8)', 
+            marginLeft: '5px',
+            padding: '1px 6px',
+            borderRadius: '10px',
+            background: 'rgba(0, 123, 127, 0.1)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            beta
+          </span>
+        </div>
         {/* Modern Hamburger menu */}
         <button
           onClick={() => setSidebarOpen(true)}
@@ -436,7 +542,7 @@ function Navbar() {
                     fontSize: '1rem', 
                     width: '100%',
                     padding: '0.75rem 1rem',
-                    marginBottom: '0.5rem', 
+                    marginBottom: '0.5rem',
                     cursor: 'pointer',
                     borderRadius: '12px',
                     transition: 'all 0.2s ease',
@@ -482,7 +588,40 @@ function Navbar() {
                 </button>
               )}
               
-              {user && userType === 'seller' && (
+              {user && userType === 'buyer' && (
+                <button 
+                  onClick={() => { setSidebarOpen(false); navigate('/receipts'); }} 
+                  style={{ 
+                    color: '#1F2937', 
+                    background: 'rgba(0, 123, 127, 0.05)', 
+                    border: '1px solid rgba(0, 123, 127, 0.1)', 
+                    fontWeight: '600', 
+                    fontSize: '1rem', 
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '0.5rem',
+                    cursor: 'pointer',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.target.style.transform = 'translateX(4px)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                    e.target.style.transform = 'translateX(0)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>🧾</span>
+                  Receipts
+                </button>
+              )}              {user && userType === 'seller' && (
                 <button 
                   onClick={() => { setSidebarOpen(false); navigate('/reports'); }} 
                   style={{ 
@@ -552,39 +691,43 @@ function Navbar() {
                     <span style={{ fontSize: '1.2rem' }}>ℹ️</span>
                     About
                   </a>
-                  <a 
-                    href="/admin-login" 
-                    onClick={() => setSidebarOpen(false)}
-                    style={{ 
-                      color: '#DC2626', 
-                      textDecoration: 'none', 
-                      fontWeight: '600', 
-                      fontSize: '1rem',
-                      width: '100%',
-                      padding: '0.75rem 1rem',
-                      marginBottom: '0.5rem',
-                      borderRadius: '12px',
-                      background: 'rgba(220, 38, 38, 0.05)',
-                      border: '1px solid rgba(220, 38, 38, 0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={e => {
-                      e.target.style.background = 'rgba(220, 38, 38, 0.1)';
-                      e.target.style.transform = 'translateX(4px)';
-                      e.target.style.boxShadow = '0 4px 15px rgba(220, 38, 38, 0.1)';
-                    }}
-                    onMouseLeave={e => {
-                      e.target.style.background = 'rgba(220, 38, 38, 0.05)';
-                      e.target.style.transform = 'translateX(0)';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  >
-                    <span style={{ fontSize: '1.2rem' }}>🛡️</span>
-                    Admin Login
-                  </a>
+                  
+                  {/* Only show Admin Login on non-mobile devices */}
+                  {!isMobile && (
+                    <button 
+                      onClick={handleAdminAccess}
+                      style={{ 
+                        color: '#DC2626', 
+                        textDecoration: 'none', 
+                        fontWeight: '600', 
+                        fontSize: '1rem',
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        marginBottom: '0.5rem',
+                        borderRadius: '12px',
+                        background: 'rgba(220, 38, 38, 0.05)',
+                        border: '1px solid rgba(220, 38, 38, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={e => {
+                        e.target.style.background = 'rgba(220, 38, 38, 0.1)';
+                        e.target.style.transform = 'translateX(4px)';
+                        e.target.style.boxShadow = '0 4px 15px rgba(220, 38, 38, 0.1)';
+                      }}
+                      onMouseLeave={e => {
+                        e.target.style.background = 'rgba(220, 38, 38, 0.05)';
+                        e.target.style.transform = 'translateX(0)';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                      Admin Portal
+                    </button>
+                  )}
                 </>
               ) : (
                 <>
@@ -702,6 +845,103 @@ function Navbar() {
             `}
           </style>
         </>
+      )}
+      
+      {/* Admin Code Modal */}
+      {showAdminCodeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '0.5rem',
+            padding: '1.5rem',
+            width: '100%',
+            maxWidth: '400px',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                Admin Portal Access
+              </h2>
+              <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                Enter the access code (109826) to verify your identity and access the admin portal.
+              </p>
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.875rem', color: '#4b5563', marginBottom: '0.5rem' }}>
+                Access Code
+              </label>
+              <input
+                type="password"
+                value={adminCode}
+                onChange={(e) => setAdminCode(e.target.value)}
+                placeholder="Enter 6-digit access code"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  fontSize: '1rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #d1d5db',
+                  marginBottom: adminCodeError ? '0.5rem' : '0'
+                }}
+              />
+              {adminCodeError && (
+                <p style={{ color: '#DC2626', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                  {adminCodeError}
+                </p>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAdminCodeModal(false)}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  backgroundColor: '#f3f4f6',
+                  color: '#1f2937',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={verifyAdminCode}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  backgroundColor: '#DC2626',
+                  color: 'white',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <span style={{ fontSize: '1rem' }}>�</span>
+                Verify Access Code
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </nav>
   );

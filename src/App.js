@@ -26,6 +26,7 @@ import ReportsPage from './pages/ReportsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminSetupPage from './pages/AdminSetupPage';
+import ReceiptsPage from './pages/ReceiptsPage';
 import { useEffect } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 import { db } from './firebase';
@@ -174,6 +175,7 @@ function App() {
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/shop-cart" element={<ShopCartPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/receipts" element={<ReceiptsPage />} />
                 <Route path="/admin-setup" element={<AdminSetupPage />} />
                 <Route path="/admin-login" element={<AdminLoginPage />} />
                 <Route path="/admin-dashboard" element={<AdminDashboardPage />} />

@@ -190,6 +190,11 @@ function MessagesPage() {
   // Store refunds policy state
   const [storeRefundsEnabled, setStoreRefundsEnabled] = useState(true);
   
+  // Wallet refund modal states
+  const [showWalletRefundModal, setShowWalletRefundModal] = useState(false);
+  const [walletRefundReason, setWalletRefundReason] = useState('');
+  const [pendingWalletRefund, setPendingWalletRefund] = useState(null);
+  
   // Store operating hours (you can make this configurable per store)
   const storeHours = {
     monday: { open: '09:00', close: '18:00' },
@@ -619,14 +624,21 @@ function MessagesPage() {
       if (sellerWalletSnap.exists()) {
         const currentData = sellerWalletSnap.data();
         const currentBalance = currentData.balance || 0;
+        const currentTotalEarnings = currentData.totalEarnings || 0;
         const newBalance = Math.max(0, currentBalance - refundAmount); // Prevent negative balance
+        const newTotalEarnings = Math.max(0, currentTotalEarnings - refundAmount); // Also update total earnings
         
         await updateDoc(sellerWalletRef, {
           balance: newBalance,
+          totalEarnings: newTotalEarnings,
           lastUpdated: serverTimestamp()
         });
 
         // Create refund transaction record
+        const refundDescription = refundData.refundReason 
+          ? `${paymentMethod.toUpperCase()} refund: "${refundData.refundReason}" (Order: ${refundData.orderId})`
+          : `${paymentMethod.toUpperCase()} refund deduction for order: ${refundData.orderId}`;
+          
         await addDoc(collection(db, 'transactions'), {
           sellerId: refundData.sellerId,
           orderId: refundData.orderId,
@@ -637,13 +649,14 @@ function MessagesPage() {
           currency: refundData.currency || 'GBP',
           paymentMethod: paymentMethod,
           stripeRefundId: refundData.stripeRefundId || null,
-          description: `${paymentMethod.toUpperCase()} refund deduction for order: ${refundData.orderId}`,
+          description: refundDescription,
+          refundReason: refundData.refundReason || null,
           status: 'completed',
           createdAt: serverTimestamp(),
           timestamp: serverTimestamp()
         });
 
-        console.log(`💰 Seller wallet updated for ${paymentMethod}: deducted ${refundAmount} ${refundData.currency}. New balance: ${newBalance}`);
+        console.log(`💰 Seller wallet updated for ${paymentMethod}: deducted ${refundAmount} ${refundData.currency}. New balance: ${newBalance}, New total earnings: ${newTotalEarnings}`);
         
         // Special logging for digital wallet refunds
         if (['google_pay', 'apple_pay'].includes(paymentMethod)) {
@@ -1024,6 +1037,8 @@ function MessagesPage() {
     if (!currentUser) return;
 
     // For sellers, we need to fetch both sent and received messages to see all conversations
+    // For sellers, fetch all messages to see all conversations
+    // For customers, fetch messages where they are sender OR receiver to see all their conversations
     const messagesQuery = isSeller 
       ? query(
           collection(db, 'messages'),
@@ -1031,7 +1046,8 @@ function MessagesPage() {
         )
       : query(
           collection(db, 'messages'),
-          where('senderId', '==', currentUser.uid),
+          // For customers, we'll filter by either senderId OR receiverId in the code below
+          // This gets ALL messages and we'll filter them in the forEach loop
           orderBy('timestamp', 'desc')
         );
 
@@ -1063,12 +1079,20 @@ function MessagesPage() {
             conversationId = message.conversationId;
           }
         } else {
-          // Customer logic (unchanged)
+          // Customer logic - include conversations where customer is sender OR receiver
           if (message.senderId === currentUser.uid) {
+            // Customer sending a message
             shouldInclude = true;
             otherUserId = message.receiverId;
             otherUserName = message.receiverName;
             otherUserEmail = message.receiverEmail;
+            conversationId = message.conversationId;
+          } else if (message.receiverId === currentUser.uid) {
+            // Customer receiving a message
+            shouldInclude = true;
+            otherUserId = message.senderId;
+            otherUserName = message.senderName;
+            otherUserEmail = message.senderEmail;
             conversationId = message.conversationId;
           }
         }
@@ -5534,7 +5558,14 @@ Bring your pickup code when you collect.`,
     }
 
     // Open refund modal with order data
-    setPendingRefundOrder(orderData);
+    // Make sure we have the correct total amount for display, accounting for different field names
+    const normalizedOrderData = {
+      ...orderData,
+      // Ensure there's always a totalAmount field for display
+      totalAmount: orderData.total || orderData.amount || orderData.totalAmount || 0
+    };
+    
+    setPendingRefundOrder(normalizedOrderData);
     setRefundReason('');
     setRefundDetails('');
     setShowRefundModal(true);
@@ -5813,6 +5844,9 @@ Bring your pickup code when you collect.`,
             customerId: selectedConversation.otherUserId
           }, refundAmount);
 
+          const refundReason = refundOrderData.refundReason ? 
+            `\n\nReason: "${refundOrderData.refundReason}"` : '';
+
           const approvalMessage = {
             conversationId: conversationId,
             senderId: currentUser.uid,
@@ -5820,7 +5854,7 @@ Bring your pickup code when you collect.`,
             senderEmail: currentUser.email,
             receiverId: selectedConversation.otherUserId,
             receiverName: selectedConversation.otherUserName,
-                message: `✅ REFUND APPROVED & PROCESSED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}\n\n💳 Your refund has been processed by Stripe and will appear in your bank account within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}`,
+                message: `✅ REFUND APPROVED & PROCESSED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}${refundReason}\n\n💳 Your refund has been processed by Stripe and will appear in your bank account within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}`,
             messageType: 'refund_approved',
             timestamp: serverTimestamp(),
             isRead: false,
@@ -5829,7 +5863,8 @@ Bring your pickup code when you collect.`,
               refundApproved: true,
               refundAmount: refundAmount,
               refundProcessedAt: new Date().toISOString(),
-              stripeRefundId: result.refundId
+              stripeRefundId: result.refundId,
+              refundReason: refundOrderData.refundReason
             }
           };
 
@@ -8845,6 +8880,27 @@ I hereby confirm this is a formal report and all information provided is accurat
                                 Validate
                               </button>
                             )}
+                            {transaction.type === 'sale' && storeRefundsEnabled && transaction.orderId && (
+                              <button
+                                className="refund-btn"
+                                onClick={() => {
+                                  // Set pending wallet refund data and show modal
+                                  setPendingWalletRefund({
+                                    orderId: transaction.orderId,
+                                    requiresStripeRefund: transaction.paymentMethod !== 'bank_transfer',
+                                    currency: transaction.currency || 'GBP',
+                                    amount: transaction.amount,
+                                    paymentMethod: transaction.paymentMethod || 'card',
+                                    transaction: transaction
+                                  });
+                                  setWalletRefundReason('');
+                                  setShowWalletRefundModal(true);
+                                }}
+                                title="Process refund for this payment"
+                              >
+                                Refund
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -9986,7 +10042,7 @@ I hereby confirm this is a formal report and all information provided is accurat
                   <div className="order-summary-box">
                     <h4>Order to Cancel:</h4>
                     <p><strong>Order ID:</strong> {pendingRefundOrder.orderId}</p>
-                    <p><strong>Total:</strong> {getCurrencySymbol(pendingRefundOrder.currency)}{formatPrice(pendingRefundOrder.totalAmount, pendingRefundOrder.currency)}</p>
+                    <p><strong>Total:</strong> {getCurrencySymbol(pendingRefundOrder.currency)}{formatPrice(parseFloat(pendingRefundOrder.totalAmount) || 0, pendingRefundOrder.currency)}</p>
                   </div>
                 )}
 
@@ -11186,6 +11242,23 @@ I hereby confirm this is a formal report and all information provided is accurat
 
         .quick-validate-btn:hover {
           background: #15803d;
+        }
+        
+        .refund-btn {
+          padding: 0.25rem 0.5rem;
+          background: #e11d48;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-size: 0.75rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.2s;
+          margin-top: 0.25rem;
+        }
+        
+        .refund-btn:hover {
+          background: #be123c;
         }
 
         .empty-state {
@@ -13612,8 +13685,124 @@ I hereby confirm this is a formal report and all information provided is accurat
             justify-content: center;
           }
         }
+        
+        /* Wallet Refund Modal Styles */
+        .wallet-refund-modal {
+          max-width: 550px;
+          width: 90%;
+          max-height: 90vh;
+        }
+        
+        .refund-reason-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        
+        .refund-reason-label {
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          color: #333;
+        }
+        
+        .refund-reason-textarea {
+          width: 100%;
+          min-height: 120px;
+          padding: 0.75rem;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          font-size: 0.95rem;
+          resize: vertical;
+        }
+        
+        .refund-reason-textarea:focus {
+          border-color: #007B7F;
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(0, 123, 127, 0.2);
+        }
+        
+        .refund-transaction-info {
+          background: #f9f9f9;
+          border: 1px solid #eee;
+          border-radius: 6px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+        }
+        
+        .refund-transaction-info p {
+          margin: 0.5rem 0;
+        }
       `}
 </style>
+
+      {/* Wallet Refund Modal */}
+      {showWalletRefundModal && pendingWalletRefund && (
+        <div className="payment-modal-overlay" onClick={() => setShowWalletRefundModal(false)}>
+          <div className="payment-modal wallet-refund-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-header">
+              <h2>💸 Process Refund</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowWalletRefundModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-content">
+              <div className="refund-transaction-info">
+                <p><strong>Order ID:</strong> {pendingWalletRefund.orderId}</p>
+                <p><strong>Amount:</strong> {formatCurrency(pendingWalletRefund.amount)}</p>
+                <p><strong>Payment Method:</strong> {pendingWalletRefund.paymentMethod.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                <p><strong>Transaction Type:</strong> {pendingWalletRefund.transaction?.description || 'Sale'}</p>
+              </div>
+              
+              <div className="refund-reason-form">
+                <label className="refund-reason-label" htmlFor="walletRefundReason">
+                  Please provide a reason for this refund: *
+                </label>
+                <textarea 
+                  id="walletRefundReason"
+                  className="refund-reason-textarea"
+                  value={walletRefundReason}
+                  onChange={(e) => setWalletRefundReason(e.target.value)}
+                  placeholder="Please explain why you are processing this refund..."
+                  required
+                ></textarea>
+                
+                <div className="payment-actions">
+                  <button 
+                    className="cancel-btn" 
+                    onClick={() => setShowWalletRefundModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="pay-btn"
+                    disabled={!walletRefundReason.trim()}
+                    onClick={() => {
+                      if (!walletRefundReason.trim()) {
+                        alert('Please provide a reason for the refund.');
+                        return;
+                      }
+                      
+                      // Process the refund with the reason
+                      approveRefund({
+                        ...pendingWalletRefund,
+                        refundReason: walletRefundReason.trim()
+                      }, pendingWalletRefund.amount);
+                      
+                      setShowWalletRefundModal(false);
+                    }}
+                  >
+                    Process Refund
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
