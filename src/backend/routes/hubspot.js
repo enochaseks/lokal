@@ -9,6 +9,15 @@ const HUBSPOT_API_KEY = process.env.HUBSPOT_API_KEY;
 // Use EU region API URL since your API key starts with pat-eu1-
 const HUBSPOT_API_URL = 'https://api.hubapi.com'; // HubSpot now uses same base URL for all regions
 
+// Additional CORS handling for this specific route if needed
+router.options('/contact', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', true);
+  res.status(200).send();
+});
+
 // Proxy endpoint to create or update a contact
 router.post('/contact', async (req, res) => {
   try {

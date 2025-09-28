@@ -8,7 +8,20 @@ const app = express();
 // Import routes
 const hubspotRoutes = require('./routes/hubspot');
 
-app.use(cors());
+// Configure CORS with specific options
+app.use(cors({
+  origin: [
+    'http://localhost:3000',  // Local development
+    'http://127.0.0.1:3000',  // Alternative local
+    'https://lokal-app.com',  // Production domain (if applicable)
+    process.env.FRONTEND_URL  // From environment variable if set
+  ].filter(Boolean), // Filter out undefined values
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Allow cookies if needed
+  maxAge: 86400 // OPTION preflight cache time (24 hours)
+}));
+
 app.use(express.json());
 
 // Use API routes

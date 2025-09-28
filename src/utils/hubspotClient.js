@@ -2,7 +2,10 @@
 // Uses our backend proxy to avoid CORS issues
 
 // Get the backend API URL from environment variables or use default
-const API_URL = process.env.REACT_APP_API_URL || 'https://lokal-rqpx.onrender.com';
+// For development, prefer localhost if we're running locally
+const isDevelopment = process.env.NODE_ENV === 'development';
+const DEFAULT_API_URL = isDevelopment ? 'http://localhost:3001' : 'https://lokal-rqpx.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || DEFAULT_API_URL;
 const HUBSPOT_PROXY_URL = `${API_URL}/api/hubspot`;
 
 // Debug flag - set to true to see detailed logs
@@ -39,7 +42,9 @@ export const addOrUpdateContact = async (contactData) => {
         firstName,
         lastName,
         marketingConsent
-      })
+      }),
+      credentials: 'include', // Include cookies if needed
+      mode: 'cors' // Explicitly request CORS mode
     });
 
     const responseData = await response.json();
