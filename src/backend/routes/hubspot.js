@@ -59,16 +59,19 @@ router.post('/contact', async (req, res) => {
     
     // Store marketing consent using the most basic properties available in all HubSpot accounts
     if (marketingConsent !== undefined) {
-      // Use lifecycle stage which exists in all HubSpot accounts
-      properties.lifecyclestage = marketingConsent ? 'marketingqualifiedlead' : 'subscriber';
+      // Use lifecycle stage which exists in all HubSpot accounts, but with valid values
+      properties.lifecyclestage = marketingConsent ? 'lead' : 'subscriber';
       
       // Add a simple note in a standard field that exists in all accounts
       properties.message = marketingConsent 
         ? 'User has consented to marketing' 
         : 'User has not consented to marketing';
       
-      // Add the date of the consent
+      // Use a standard field for content membership status
       properties.hs_content_membership_status = marketingConsent ? 'active' : 'inactive';
+      
+      // Add a standard lead status field with valid values
+      properties.hs_lead_status = marketingConsent ? 'OPEN' : 'NEW';
     }
     
     // Log the properties we're about to send
@@ -77,6 +80,45 @@ router.post('/contact', async (req, res) => {
     if (searchData.results && searchData.results.length > 0) {
       // Contact exists, update it
       const contactId = searchData.results[0].id;
+      
+      // Get the current properties to avoid updating unchanged values
+      const currentContactResponse = await fetch(
+        `${HUBSPOT_API_URL}/crm/v3/objects/contacts/${contactId}?properties=email,firstname,lastname,lifecyclestage,message,hs_content_membership_status,hs_lead_status`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${HUBSPOT_API_KEY}`
+          }
+        }
+      );
+      
+      const currentContact = await currentContactResponse.json();
+      console.log('Current contact properties:', currentContact);
+      
+      // Only update properties that are different from current values
+      const updatedProperties = {};
+      
+      // Compare and only include changed properties
+      Object.keys(properties).forEach(key => {
+        const currentValue = currentContact.properties[key];
+        if (properties[key] !== undefined && properties[key] !== currentValue) {
+          updatedProperties[key] = properties[key];
+        }
+      });
+      
+      // If no properties have changed, return success without making an API call
+      if (Object.keys(updatedProperties).length === 0) {
+        console.log('No property changes detected, skipping update');
+        return res.json({ 
+          success: true, 
+          data: { 
+            message: 'No changes needed', 
+            id: contactId 
+          } 
+        });
+      }
+      
+      console.log('Sending updated properties:', updatedProperties);
       
       hubspotResponse = await fetch(
         `${HUBSPOT_API_URL}/crm/v3/objects/contacts/${contactId}`,
@@ -87,7 +129,7 @@ router.post('/contact', async (req, res) => {
             'Authorization': `Bearer ${HUBSPOT_API_KEY}`
           },
           body: JSON.stringify({
-            properties: properties
+            properties: updatedProperties
           })
         }
       );

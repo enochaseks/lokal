@@ -528,10 +528,13 @@ function SettingsPage() {
       
       if (success) {
         console.log('Successfully updated HubSpot contact');
-        alert(`Marketing preferences ${newConsentValue ? 'enabled' : 'disabled'} successfully!`);
+        // Success message but without alert to avoid too many popups
+        // Just update the UI silently on success
       } else {
         console.error('HubSpot update failed, but Firestore updated successfully');
-        alert('Your preferences were saved, but there was an issue connecting to our marketing service.');
+        // Show a toast or silent message instead of an alert for better UX
+        // We've already saved to Firestore, so the core functionality works
+        console.log('Marketing preferences saved locally but not synced with marketing service');
       }
     } catch (error) {
       console.error('Error updating marketing consent:', error);

@@ -46,14 +46,27 @@ export const addOrUpdateContact = async (contactData) => {
     
     if (DEBUG) console.log('HubSpot proxy response:', responseData);
     
+    // Accept 200 OK responses where the backend returns success:true
+    // This is for cases where the backend decides to skip an update because no changes are needed
+    if (responseData.success === true) {
+      if (DEBUG) console.log('HubSpot: Operation successful via proxy');
+      return true;
+    }
+    
+    // Handle error cases
     if (!response.ok) {
+      // Special handling for property already having the same value (not a real error)
+      if (responseData.error && responseData.message && 
+          responseData.message.includes('already has that value')) {
+        console.log('HubSpot: Property already had that value, no change needed');
+        return true;
+      }
+      
       console.error('HubSpot: Error from proxy server:', responseData);
       return false;
     }
     
     if (DEBUG) console.log('HubSpot: Operation successful via proxy');
-    return true;
-    
     return true;
   } catch (error) {
     console.error('Error updating HubSpot contact:', error);
