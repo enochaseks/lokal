@@ -57,14 +57,18 @@ router.post('/contact', async (req, res) => {
     if (firstName) properties.firstname = firstName;
     if (lastName) properties.lastname = lastName;
     
-    // Store marketing consent in standard HubSpot properties
+    // Store marketing consent using the most basic properties available in all HubSpot accounts
     if (marketingConsent !== undefined) {
-      // Use ONLY standard HubSpot properties that exist in all accounts
-      properties.hs_lead_status = marketingConsent ? 'Marketing Qualified Lead' : 'Subscriber';
+      // Use lifecycle stage which exists in all HubSpot accounts
+      properties.lifecyclestage = marketingConsent ? 'marketingqualifiedlead' : 'subscriber';
       
-      // The lokal_marketing_consent property might not exist in your HubSpot account
-      // Don't use custom properties until they're created in HubSpot
-      // properties.lokal_marketing_consent = marketingConsent ? 'Yes' : 'No';
+      // Add a simple note in a standard field that exists in all accounts
+      properties.message = marketingConsent 
+        ? 'User has consented to marketing' 
+        : 'User has not consented to marketing';
+      
+      // Add the date of the consent
+      properties.hs_content_membership_status = marketingConsent ? 'active' : 'inactive';
     }
     
     // Log the properties we're about to send
