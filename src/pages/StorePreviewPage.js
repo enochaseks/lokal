@@ -5,6 +5,13 @@ import { db } from '../firebase';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { useCart } from '../CartContext';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import StripePaymentForm from '../components/StripePaymentForm';
+
+// Load Stripe outside of component render
+// Using the REACT_APP_STRIPE_PUBLIC_KEY from .env file
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
 
 const currencySymbols = {
   GBP: "£",
@@ -95,6 +102,17 @@ function StorePreviewPage() {
   const [loadingStoreHistory, setLoadingStoreHistory] = useState(false);
   
   // Store fee settings
+  // Boost store functionality
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [boostDuration, setBoostDuration] = useState(7); // Default 7 days
+  const [boostProcessing, setBoostProcessing] = useState(false);
+  const [boostError, setBoostError] = useState('');
+  const [boostSuccess, setBoostSuccess] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [stripeClientSecret, setStripeClientSecret] = useState('');
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState('');
+  const [processing, setProcessing] = useState(false);
+  
   const [storeFeeSettings, setStoreFeeSettings] = useState({
     deliveryEnabled: false,
     deliveryFee: 0,
@@ -302,6 +320,123 @@ function StorePreviewPage() {
     if (!authUser || !id) return;
     const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
     await deleteDoc(followerRef);
+  };
+  
+  // Handle boosting a store
+  const handleBoostStore = async () => {
+    if (!authUser) {
+      setBoostError('You must be logged in to boost a store');
+      return;
+    }
+    
+    if (!store) {
+      setBoostError('Store information not available');
+      return;
+    }
+    
+    try {
+      setBoostProcessing(true);
+      setBoostError('');
+      
+      const boostAmount = boostDuration * 1.99; // £1.99 per day
+      const currency = store.currency || 'GBP';
+      
+      // Create a payment intent for the boost
+      const apiUrl = process.env.NODE_ENV === 'production' 
+        ? process.env.REACT_APP_PRODUCTION_API_URL 
+        : process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        
+      const response = await fetch(`${apiUrl}/create-boost-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: boostAmount,
+          currency: currency,
+          storeId: id,
+          boostDuration: boostDuration,
+          userId: authUser.uid
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create payment intent for boost');
+      }
+
+      const { clientSecret, paymentIntentId } = await response.json();
+      
+      // Show Stripe payment form to collect card details
+      setShowPaymentForm(true);
+      setStripeClientSecret(clientSecret);
+      setStripePaymentIntentId(paymentIntentId);
+      
+    } catch (error) {
+      console.error('Error creating boost payment intent:', error);
+      setBoostError(error.message || 'Failed to create payment intent');
+      setProcessing(false);
+    }
+  };
+  
+  // Handle successful payment
+  const handlePaymentSuccess = async (paymentIntentId) => {
+    try {
+      // Update store in Firestore with boost information
+      await updateStoreWithBoost(paymentIntentId);
+      
+      // Show success message
+      setBoostSuccess(true);
+      setShowPaymentForm(false);
+    } catch (error) {
+      console.error('Error updating store after payment:', error);
+      setBoostError(error.message || 'Payment was successful but failed to update store status');
+    } finally {
+      setBoostProcessing(false);
+    }
+  };
+  
+  // Handle payment error
+  const handlePaymentError = (errorMessage) => {
+    setBoostError(errorMessage || 'Payment failed');
+    setBoostProcessing(false);
+  };
+  
+  // Update store with boost information
+  const updateStoreWithBoost = async (paymentIntentId) => {
+    // Calculate boost expiration date
+    const boostStartDate = new Date();
+    const boostExpiryDate = new Date();
+    boostExpiryDate.setDate(boostExpiryDate.getDate() + boostDuration);
+    
+    // Update store document
+    const storeRef = doc(db, 'stores', id);
+    await setDoc(storeRef, {
+      isBoosted: true,
+      boostExpiryDate: boostExpiryDate,
+      boostStartDate: boostStartDate,
+      boostDuration: boostDuration,
+      boostPaymentIntentId: paymentIntentId,
+      boostAmount: boostDuration * 1.99,
+      lastBoostedAt: new Date()
+    }, { merge: true });
+    
+    // Also record the boost transaction in a separate collection
+    await addDoc(collection(db, 'storeBoosts'), {
+      storeId: id,
+      storeName: store.storeName || store.name,
+      storeOwnerId: store.ownerId,
+      paymentIntentId: paymentIntentId,
+      boostStartDate: boostStartDate,
+      boostExpiryDate: boostExpiryDate,
+      boostDuration: boostDuration,
+      boostAmount: boostDuration * 1.99,
+      currency: store.currency || 'GBP',
+      paidById: authUser.uid,
+      paidByName: authUser.displayName,
+      paidByEmail: authUser.email,
+      createdAt: new Date()
+    });
   };
 
   const handleCheckbox = (item) => {
@@ -885,8 +1020,8 @@ function StorePreviewPage() {
         }
       `}</style>
       <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem', position: 'relative' }}>
-        {/* Help Icon - Only show for buyers */}
-        {userType === 'buyer' && !isStoreOwner && (
+        {/* Help Icon - Show only for authenticated buyers */}
+        {userType === 'buyer' && authUser && !isStoreOwner && (
           <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }}>
             <button
               onClick={() => setShowHelpModal(true)}
@@ -922,7 +1057,36 @@ function StorePreviewPage() {
             )}
           </div>
           <div className="store-info" style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
+              {store.isBoosted && (
+                <div 
+                  style={{ 
+                    backgroundColor: '#FFD700',
+                    color: '#333', 
+                    padding: '4px 10px',
+                    borderRadius: 20,
+                    fontSize: '0.85rem',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    animation: 'pulse 2s infinite'
+                  }}
+                  title="This store is boosted"
+                >
+                  <span style={{ fontSize: '0.9rem' }}>⭐</span> BOOSTED
+                </div>
+              )}
+              <style>{`
+                @keyframes pulse {
+                  0% { transform: scale(1); }
+                  50% { transform: scale(1.05); }
+                  100% { transform: scale(1); }
+                }
+              `}</style>
+            </div>
             <div style={{ color: '#444', fontSize: '1rem' }}>{store.storeLocation}</div>
             {store.phoneNumber && (
               <div style={{ color: '#007B7F', fontSize: '1rem', marginTop: 4 }}>
@@ -1013,22 +1177,82 @@ function StorePreviewPage() {
               </div>
             )}
           </div>
-          {userType === 'buyer' && !isStoreOwner && (
+          {/* Store actions for buyers and sellers */}
+          {!isStoreOwner && (
             <div className="store-action-buttons">
-              {following ? (
-                <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
-                  Unfollow
-                </button>
-              ) : (
-                <button onClick={handleFollow} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
-                  Follow
+              {/* Follow button - only shown to authenticated buyers */}
+              {userType === 'buyer' && authUser && (
+                following ? (
+                  <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                    Unfollow
+                  </button>
+                ) : (
+                  <button onClick={handleFollow} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                    Follow
+                  </button>
+                )
+              )}
+              
+              {/* Message button - shown to authenticated users (buyers and sellers) */}
+              {authUser && (
+                <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
+                  Message
                 </button>
               )}
-              <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
-                Message
+              
+              {/* Sign-in prompt for unauthenticated users */}
+              {!authUser && (
+                <button onClick={() => {
+                  alert('Please sign in to interact with this store');
+                  navigate('/login');
+                }} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
+                  Sign In to Interact
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Small Boost Store Button - Available to all logged in users */}
+          {authUser && (
+            <div style={{ 
+              position: 'absolute',
+              top: '10px',
+              left: '10px',
+              zIndex: 5
+            }}>
+              <button
+                onClick={() => setShowBoostModal(true)}
+                style={{ 
+                  background: store.isBoosted ? '#FEF9C3' : '#FFD700',
+                  color: '#333', 
+                  border: 'none', 
+                  borderRadius: '50%', 
+                  width: '40px',
+                  height: '40px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.2s, box-shadow 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'scale(1.1)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'none';
+                  e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
+                }}
+                title={store.isBoosted ? 'Store is boosted' : 'Boost this store'}
+                disabled={boostProcessing}
+                aria-label={store.isBoosted ? 'Store is boosted' : 'Boost this store'}
+              >
+                <span style={{ fontSize: '1.2rem' }}>⭐</span>
               </button>
             </div>
           )}
+          {/* Message button for store owners */}
           {isStoreOwner && (
             <div className="store-action-buttons">
               <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
@@ -1067,12 +1291,20 @@ function StorePreviewPage() {
                   <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
                   <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
                   <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
-                  {/* Only show these buttons for buyers/customers who are not the store owner */}
-                  {userType === 'buyer' && !isStoreOwner && storeIsOpen && (
+                  {/* Show these buttons for buyers and unauthenticated users who are not the store owner */}
+                  {(userType === 'buyer' || !authUser) && !isStoreOwner && storeIsOpen && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button
                         style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
-                        onClick={() => handleAddToCart(item)}
+                        onClick={() => {
+                          if (!authUser) {
+                            // Redirect to login page if not signed in
+                            alert('Please sign in to add items to your cart');
+                            navigate('/login');
+                          } else {
+                            handleAddToCart(item);
+                          }
+                        }}
                       >
                         Add to Cart
                       </button>
@@ -1084,6 +1316,15 @@ function StorePreviewPage() {
             {userType === 'buyer' && selectedItems.length > 0 && storeIsOpen && (
               <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec' }}>
                 Total: {getCurrencySymbol(selectedItems[0].currency)}{selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
+              </div>
+            )}
+            {!authUser && storeIsOpen && (
+              <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec', cursor: 'pointer' }} 
+                   onClick={() => {
+                     alert('Please sign in to view your cart and make purchases');
+                     navigate('/login');
+                   }}>
+                Sign in to purchase
               </div>
             )}
           </div>
@@ -1106,8 +1347,46 @@ function StorePreviewPage() {
               </div>
             </div>
 
-            {/* Only show review form for buyers who are not the store owner */}
-            {userType === 'buyer' && !isStoreOwner && (
+            {/* Show message for unauthenticated users */}
+            {!authUser && !isStoreOwner && (
+              <div style={{ marginBottom: 24, background: '#f8f9fa', borderRadius: 8, padding: 16, textAlign: 'center', border: '1px dashed #007B7F' }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#007B7F' }}>Want to leave a review?</div>
+                <p style={{ marginBottom: 16 }}>Please log in or register to share your experience with this store.</p>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+                  <button 
+                    onClick={() => navigate('/login')} 
+                    style={{ 
+                      background: '#007B7F', 
+                      color: '#fff', 
+                      border: 'none', 
+                      borderRadius: 6, 
+                      padding: '0.5rem 1.2rem', 
+                      fontWeight: 600, 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    Sign In
+                  </button>
+                  <button 
+                    onClick={() => navigate('/register')} 
+                    style={{ 
+                      background: '#fff', 
+                      color: '#007B7F', 
+                      border: '1px solid #007B7F', 
+                      borderRadius: 6, 
+                      padding: '0.5rem 1.2rem', 
+                      fontWeight: 600, 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    Register
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Only show review form for authenticated buyers who are not the store owner */}
+            {userType === 'buyer' && authUser && !isStoreOwner && (
               <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
                 <StarRating value={userRating} onChange={setUserRating} />
@@ -1494,8 +1773,232 @@ function StorePreviewPage() {
           </div>
         </div>
       )}
+
+      {/* Boost Store Modal */}
+      {showBoostModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: '90%',
+            maxWidth: 500,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem' }}>
+                <span style={{ marginRight: 8 }}>⭐</span>
+                Boost Store
+              </h2>
+              <button 
+                onClick={() => setShowBoostModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {boostSuccess ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
+                <h3 style={{ color: '#16A34A', marginBottom: 12 }}>Store Boosted Successfully!</h3>
+                <p style={{ marginBottom: 24 }}>
+                  {store.storeName} will now appear in the recommended section on the Explore page 
+                  for {boostDuration} days.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowBoostModal(false);
+                    setBoostSuccess(false);
+                  }}
+                  style={{
+                    background: '#007B7F',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '12px 24px',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    fontWeight: 600
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <p style={{ marginBottom: 24, fontSize: '1.1rem' }}>
+                  Boost your store to increase visibility! Boosted stores appear in the recommended 
+                  section on the Explore page.
+                </p>
+
+                {boostError && (
+                  <div style={{
+                    backgroundColor: '#FEF2F2',
+                    color: '#B91C1C',
+                    padding: 16,
+                    borderRadius: 8,
+                    marginBottom: 16
+                  }}>
+                    {boostError}
+                  </div>
+                )}
+
+                {showPaymentForm && stripeClientSecret ? (
+                  <div style={{ marginBottom: 24 }}>
+                    <h3 style={{ marginBottom: 16, fontWeight: 600 }}>Enter Payment Details</h3>
+                    <p style={{ marginBottom: 16, fontSize: '0.9rem', color: '#666' }}>
+                      Your payment is processed securely through Stripe. We do not store your card details.
+                    </p>
+                    
+                    <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret }}>
+                      <StripePaymentForm 
+                        paymentData={{
+                          total: boostDuration * 1.99,
+                          currency: store.currency || 'GBP',
+                          description: `Boost store for ${boostDuration} days`
+                        }}
+                        onPaymentSuccess={() => handlePaymentSuccess(stripePaymentIntentId)}
+                        onPaymentError={handlePaymentError}
+                        processing={processing}
+                        setProcessing={setProcessing}
+                        currentUser={authUser}
+                      />
+                    </Elements>
+                    
+                    <button
+                      onClick={() => {
+                        setShowPaymentForm(false);
+                        setBoostProcessing(false);
+                      }}
+                      style={{
+                        background: '#F3F4F6',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: 8,
+                        padding: '12px 24px',
+                        marginTop: 16,
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        width: '100%'
+                      }}
+                      disabled={processing}
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 24 }}>
+                      <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                        Boost Duration:
+                      </label>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {[3, 7, 14, 30].map(days => (
+                          <button 
+                            key={days} 
+                            type="button"
+                            onClick={() => setBoostDuration(days)}
+                            style={{
+                              padding: '12px 16px',
+                              border: boostDuration === days 
+                                ? '2px solid #FFD700' 
+                                : '1px solid #ccc',
+                              borderRadius: 8,
+                              background: boostDuration === days 
+                                ? '#FEF9C3' 
+                                : 'white',
+                              fontWeight: boostDuration === days ? 600 : 400,
+                              flex: 1,
+                              minWidth: '70px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {days} day{days > 1 ? 's' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 24, padding: 16, backgroundColor: '#F9F9F9', borderRadius: 8 }}>
+                      <div style={{ marginBottom: 8, fontWeight: 600 }}>Boost Cost:</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>
+                        {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(boostDuration * 1.99, store.currency || 'GBP')}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#555', marginTop: 4 }}>
+                        {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(1.99, store.currency || 'GBP')} per day for {boostDuration} days
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => setShowBoostModal(false)}
+                        style={{
+                          background: '#F3F4F6',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: 8,
+                          padding: '12px 24px',
+                          cursor: 'pointer',
+                          fontSize: '1rem'
+                        }}
+                        disabled={boostProcessing}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleBoostStore}
+                        disabled={boostProcessing}
+                        style={{
+                          background: boostProcessing ? '#9CA3AF' : '#FFD700',
+                          color: '#333',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '12px 24px',
+                          cursor: boostProcessing ? 'not-allowed' : 'pointer',
+                          fontSize: '1rem',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                      >
+                        {boostProcessing ? (
+                          <>Processing...</>
+                        ) : (
+                          <>
+                            <span>⭐</span>
+                            Boost Now
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+  }
 
 export default StorePreviewPage;

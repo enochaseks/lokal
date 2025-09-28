@@ -98,7 +98,7 @@ function StoreProfilePage() {
           const data = docSnap.data();
           setProfile(data);
           setEditName(data.storeName || '');
-          setEditLocation(data.storeLocation || '');
+          setEditLocation(data.storeLocation || data.storeAddress || '');
           setEditOrigin(data.origin || '');
           setEditDeliveryType(data.deliveryType || '');
           setEditPaymentType(data.paymentType || '');
@@ -284,6 +284,7 @@ function StoreProfilePage() {
       const updateData = {
         storeName: editName,
         storeLocation: editLocation,
+        storeAddress: editLocation, // Keep storeAddress in sync with storeLocation
         origin: editOrigin,
         backgroundImg: thumbnailUrl,
         deliveryType: editDeliveryType,
@@ -754,17 +755,31 @@ function StoreProfilePage() {
             </button>
           </div>
           {/* Location */}
-          {profile.storeLocation && (
+          {(profile.storeLocation || profile.storeAddress) && (
             <div style={{ width: '100%', textAlign: 'left', fontSize: '0.95rem', color: '#444', marginBottom: 4, wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'column', alignItems: 'flex-start' }}>
               {/* Show street on its own line if possible */}
               {(() => {
-                const parts = profile.storeLocation.split(',');
-                return (
-                  <>
-                    <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
-                    <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
-                  </>
-                );
+                if (profile.storeLocation) {
+                  const parts = profile.storeLocation.split(',');
+                  return (
+                    <>
+                      <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
+                      <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
+                    </>
+                  );
+                } else if (profile.storeAddress) {
+                  const parts = profile.storeAddress.split(',');
+                  return (
+                    <>
+                      <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
+                      <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
+                    </>
+                  );
+                } else {
+                  return (
+                    <span><span style={{ fontWeight: 500 }}>Address:</span> Location not set</span>
+                  );
+                }
               })()}
               <button
                 onClick={handleLocationEdit}

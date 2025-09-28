@@ -31,3 +31,10 @@ exports.helloWorld = onRequest((request, response) => {
     response.status(500).send("Internal Server Error");
   }
 });
+
+// Import the boost store functions
+const boostStoreFunctions = require('./boost-store-function');
+
+// Export the boost store functions
+exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
+exports.expireStoreBoosts = boostStoreFunctions.expireStoreBoosts;

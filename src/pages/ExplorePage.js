@@ -1,12 +1,44 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, serverTimestamp, setDoc, orderBy, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { Elements } from '@stripe/react-stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
+import StripePaymentForm from '../components/StripePaymentForm';
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
+
+// Currency helpers
+const currencySymbols = {
+  GBP: "£",
+  USD: "$",
+  EUR: "€",
+  CAD: "$",
+  AUD: "$",
+  ZAR: "R",
+  GHS: "GH₵",
+  KES: "KSh",
+  INR: "₹",
+  CNY: "¥"
+};
+
+function getCurrencySymbol(code) {
+  return currencySymbols[code] || code;
+}
+
+const currenciesWithDecimals = ["GBP", "USD", "EUR", "CAD", "AUD", "ZAR", "GHS", "KES", "INR", "CNY"];
+function formatPrice(price, currency) {
+  if (currenciesWithDecimals.includes(currency)) {
+    return Number(price).toFixed(2);
+  }
+  return price;
+}
 
 const responsiveStyles = `
 @keyframes spin {
@@ -134,6 +166,10 @@ function ExplorePage() {
   const [showDropdowns, setShowDropdowns] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [shops, setShops] = useState([]);
+  const [boostedShops, setBoostedShops] = useState([]);
+  const [recentlyViewedShops, setRecentlyViewedShops] = useState([]);
+  const [previouslyPurchasedItems, setPreviouslyPurchasedItems] = useState([]);
+  const [purchasedFromStores, setPurchasedFromStores] = useState([]);
   const [ratings, setRatings] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('');
   const [filterBy, setFilterBy] = useState('');
@@ -150,6 +186,17 @@ function ExplorePage() {
   const [locationError, setLocationError] = useState(null);
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLocation, setManualLocation] = useState('');
+  const [userType, setUserType] = useState('');
+  const [sellerStore, setSellerStore] = useState(null);
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [boostDuration, setBoostDuration] = useState(7);
+  const [boostProcessing, setBoostProcessing] = useState(false);
+  const [boostError, setBoostError] = useState(null);
+  const [stripeClientSecret, setStripeClientSecret] = useState('');
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState('');
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [boostSuccess, setBoostSuccess] = useState(false);
 
   // Fix the useEffect to properly set currentUser
   useEffect(() => {
@@ -158,17 +205,361 @@ function ExplorePage() {
       setCurrentUser(user);
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setProfile(userDoc.data());
+          // First check if user is a seller (has a store)
+          const storesQuery = query(
+            collection(db, 'stores'),
+            where('ownerId', '==', user.uid)
+          );
+          
+          const storeSnapshot = await getDocs(storesQuery);
+          if (!storeSnapshot.empty) {
+            // User has a store, so they're a seller
+            setUserType('seller');
+            const storeDoc = storeSnapshot.docs[0];
+            setSellerStore({
+              id: storeDoc.id,
+              ...storeDoc.data()
+            });
+            console.log("User is a seller with store:", storeDoc.data().storeName);
+          } else {
+            // Check if user exists in the 'users' collection (buyer)
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+              setProfile(userDoc.data());
+              setUserType('buyer');
+              console.log("User is a buyer");
+            } else {
+              // Fallback - treat as buyer if we can't determine
+              setUserType('buyer');
+              console.log("User type undetermined, defaulting to buyer");
+            }
           }
+          
+          // Fetch recently viewed stores when user is authenticated
+          const viewHistoryRef = collection(db, 'users', user.uid, 'viewHistory');
+          const viewHistorySnap = await getDocs(viewHistoryRef);
+          
+          if (!viewHistorySnap.empty) {
+            const storeIds = viewHistorySnap.docs.map(doc => doc.data().storeId);
+            const recentlyViewedStorePromises = storeIds.slice(0, 5).map(storeId => 
+              getDoc(doc(db, 'stores', storeId))
+            );
+            
+            const recentlyViewedResults = await Promise.all(recentlyViewedStorePromises);
+            const validRecentlyViewedStores = recentlyViewedResults
+              .filter(docSnap => docSnap.exists())
+              .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            
+            setRecentlyViewedShops(validRecentlyViewedStores);
+          }
+          
+          // Fetch user's purchase history
+          const purchaseStores = new Map(); // To track unique stores the user has purchased from
+          const purchasedItems = new Map(); // To track unique items the user has purchased
+          
+          // First check the orders collection
+          const ordersQuery = query(
+            collection(db, 'orders'),
+            where('buyerId', '==', user.uid),
+            orderBy('createdAt', 'desc')
+          );
+          
+          const ordersSnapshot = await getDocs(ordersQuery);
+          
+          if (!ordersSnapshot.empty) {
+            console.log(`Found ${ordersSnapshot.size} orders for user`);
+            
+            // Process each order
+            for (const orderDoc of ordersSnapshot.docs) {
+              const orderData = orderDoc.data();
+              
+              // Add the store to our purchase history if we have the storeId
+              if (orderData.sellerId) {
+                try {
+                  const storeDoc = await getDoc(doc(db, 'stores', orderData.sellerId));
+                  if (storeDoc.exists() && !purchaseStores.has(orderData.sellerId)) {
+                    purchaseStores.set(orderData.sellerId, { 
+                      id: orderData.sellerId, 
+                      ...storeDoc.data(),
+                      purchaseCount: 1  
+                    });
+                  } else if (purchaseStores.has(orderData.sellerId)) {
+                    // Increment purchase count for this store
+                    const storeData = purchaseStores.get(orderData.sellerId);
+                    storeData.purchaseCount += 1;
+                    purchaseStores.set(orderData.sellerId, storeData);
+                  }
+                } catch (error) {
+                  console.error('Error fetching store data:', error);
+                }
+              }
+              
+              // Process each item in the order
+              if (orderData.items && Array.isArray(orderData.items)) {
+                orderData.items.forEach(item => {
+                  if (item.id && !purchasedItems.has(item.id)) {
+                    purchasedItems.set(item.id, { 
+                      ...item, 
+                      storeId: orderData.sellerId,
+                      storeName: orderData.storeName || 'Store'
+                    });
+                  }
+                });
+              }
+            }
+            
+            // Set the purchased stores and items
+            setPurchasedFromStores(Array.from(purchaseStores.values()));
+            setPreviouslyPurchasedItems(Array.from(purchasedItems.values()));
+            
+            console.log(`Found ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from purchase history`);
+          } else {
+            console.log('No orders found for user');
+          }
+          
+          // Also check transactions collection for more purchase history
+          const transactionsQuery = query(
+            collection(db, 'transactions'),
+            where('buyerId', '==', user.uid),
+            where('type', '==', 'purchase'),
+            orderBy('timestamp', 'desc')
+          );
+          
+          const transactionsSnapshot = await getDocs(transactionsQuery);
+          
+          if (!transactionsSnapshot.empty) {
+            console.log(`Found ${transactionsSnapshot.size} purchase transactions for user`);
+            
+            // Process each transaction similar to orders
+            for (const transDoc of transactionsSnapshot.docs) {
+              const transData = transDoc.data();
+              
+              // Add the store to our purchase history if we have the storeId
+              if (transData.sellerId && !purchaseStores.has(transData.sellerId)) {
+                try {
+                  const storeDoc = await getDoc(doc(db, 'stores', transData.sellerId));
+                  if (storeDoc.exists()) {
+                    purchaseStores.set(transData.sellerId, { 
+                      id: transData.sellerId, 
+                      ...storeDoc.data(),
+                      purchaseCount: (purchaseStores.get(transData.sellerId)?.purchaseCount || 0) + 1  
+                    });
+                  }
+                } catch (error) {
+                  console.error('Error fetching store data from transaction:', error);
+                }
+              }
+              
+              // Process each item in the transaction
+              if (transData.items && Array.isArray(transData.items)) {
+                transData.items.forEach(item => {
+                  if (item.id && !purchasedItems.has(item.id)) {
+                    purchasedItems.set(item.id, { 
+                      ...item, 
+                      storeId: transData.sellerId,
+                      storeName: transData.storeName || transData.sellerName || 'Store'
+                    });
+                  }
+                });
+              }
+            }
+            
+            // Update the purchased stores and items
+            setPurchasedFromStores(Array.from(purchaseStores.values()));
+            setPreviouslyPurchasedItems(Array.from(purchasedItems.values()));
+            
+            console.log(`Updated to ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from all purchase history`);
+          }
+          
         } catch (error) {
-          console.error('Error fetching user profile:', error);
+          console.error('Error fetching user data:', error);
         }
       }
     });
     return () => unsubscribe();
   }, []);
+  
+  // Handle boosting a store
+  const handleBoostStore = async () => {
+    if (!currentUser) {
+      setBoostError('You must be logged in to boost a store');
+      return;
+    }
+    
+    if (!sellerStore) {
+      setBoostError('Store information not available');
+      return;
+    }
+    
+    try {
+      setBoostProcessing(true);
+      setBoostError('');
+      
+      const boostAmount = boostDuration * 1.99; // £1.99 per day
+      const currency = sellerStore.currency || 'GBP';
+      
+      // Create a payment intent for the boost
+      const apiUrl = process.env.NODE_ENV === 'production' 
+        ? process.env.REACT_APP_PRODUCTION_API_URL 
+        : process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        
+      const response = await fetch(`${apiUrl}/create-boost-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: boostAmount,
+          currency: currency,
+          storeId: sellerStore.id,
+          boostDuration: boostDuration,
+          userId: currentUser.uid
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create payment intent for boost');
+      }
+
+      const { clientSecret, paymentIntentId } = await response.json();
+      
+      // Show Stripe payment form to collect card details
+      setShowPaymentForm(true);
+      setStripeClientSecret(clientSecret);
+      setStripePaymentIntentId(paymentIntentId);
+      
+    } catch (error) {
+      console.error('Error creating boost payment intent:', error);
+      setBoostError(error.message || 'Failed to create payment intent');
+      setProcessing(false);
+    }
+  };
+  
+  // Handle successful payment
+  const handlePaymentSuccess = async (paymentIntentId) => {
+    try {
+      // Update store in Firestore with boost information
+      await updateStoreWithBoost(paymentIntentId);
+      
+      // Show success message
+      setBoostSuccess(true);
+      setShowPaymentForm(false);
+    } catch (error) {
+      console.error('Error updating store after payment:', error);
+      setBoostError(error.message || 'Payment was successful but failed to update store status');
+    } finally {
+      setBoostProcessing(false);
+    }
+  };
+  
+  // Handle payment error
+  const handlePaymentError = (errorMessage) => {
+    setBoostError(errorMessage || 'Payment failed');
+    setBoostProcessing(false);
+  };
+  
+  // Update store with boost information
+  const updateStoreWithBoost = async (paymentIntentId) => {
+    // Calculate boost expiration date
+    const boostStartDate = new Date();
+    const boostExpiryDate = new Date();
+    boostExpiryDate.setDate(boostExpiryDate.getDate() + boostDuration);
+    
+    // Update store document
+    const storeRef = doc(db, 'stores', sellerStore.id);
+    await setDoc(storeRef, {
+      isBoosted: true,
+      boostExpiryDate: boostExpiryDate,
+      boostStartDate: boostStartDate,
+      boostDuration: boostDuration,
+      boostPaymentIntentId: paymentIntentId,
+      boostAmount: boostDuration * 1.99,
+      lastBoostedAt: new Date()
+    }, { merge: true });
+    
+    // Also record the boost transaction in a separate collection
+    await addDoc(collection(db, 'storeBoosts'), {
+      storeId: sellerStore.id,
+      storeName: sellerStore.storeName || sellerStore.name,
+      storeOwnerId: sellerStore.ownerId,
+      paymentIntentId: paymentIntentId,
+      boostStartDate: boostStartDate,
+      boostExpiryDate: boostExpiryDate,
+      boostDuration: boostDuration,
+      boostAmount: boostDuration * 1.99,
+      currency: sellerStore.currency || 'GBP',
+      paidById: currentUser.uid,
+      paidByName: currentUser.displayName,
+      paidByEmail: currentUser.email,
+      createdAt: new Date()
+    });
+    
+    // Update local state
+    setSellerStore({
+      ...sellerStore,
+      isBoosted: true,
+      boostExpiryDate: boostExpiryDate,
+      boostStartDate: boostStartDate,
+      boostDuration: boostDuration
+    });
+    
+    // Refresh boosted stores if needed
+    fetchBoostedStores();
+  };
+  
+  // Fetch boosted stores
+  useEffect(() => {
+    const fetchBoostedStores = async () => {
+      try {
+        // Query for stores with active boost
+        const now = new Date();
+        const boostedStoresQuery = query(
+          collection(db, 'stores'),
+          where('isBoosted', '==', true),
+          where('boostExpiryDate', '>', now)
+        );
+        
+        const boostedStoresSnap = await getDocs(boostedStoresQuery);
+        const boostedStoresData = boostedStoresSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Sort by boost amount (higher boosted stores first)
+        boostedStoresData.sort((a, b) => (b.boostAmount || 0) - (a.boostAmount || 0));
+        
+        setBoostedShops(boostedStoresData);
+      } catch (error) {
+        console.error('Error fetching boosted stores:', error);
+      }
+    };
+    
+    fetchBoostedStores();
+  }, []);
+  
+  // Function to make fetchBoostedStores accessible
+  const fetchBoostedStores = async () => {
+    try {
+      const now = new Date();
+      const boostedStoresQuery = query(
+        collection(db, 'stores'),
+        where('isBoosted', '==', true),
+        where('boostExpiryDate', '>', now)
+      );
+      
+      const boostedStoresSnap = await getDocs(boostedStoresQuery);
+      const boostedStoresData = boostedStoresSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      boostedStoresData.sort((a, b) => (b.boostAmount || 0) - (a.boostAmount || 0));
+      setBoostedShops(boostedStoresData);
+    } catch (error) {
+      console.error('Error fetching boosted stores:', error);
+    }
+  };
 
   // Separate location detection useEffect that only runs once when profile is first loaded
   useEffect(() => {
@@ -482,7 +873,20 @@ function ExplorePage() {
       // Save back to localStorage
       localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
       
-      console.log('Saved viewed store:', storeId, 'for user:', currentUser.uid); // Debug log
+      // Also save to Firestore for cross-device persistence
+      try {
+        const viewHistoryRef = doc(db, 'users', currentUser.uid, 'viewHistory', storeId);
+        setDoc(viewHistoryRef, {
+          storeId: storeId,
+          timestamp: serverTimestamp()
+        }, { merge: true });
+        
+        console.log('Saved viewed store to Firestore:', storeId, 'for user:', currentUser.uid);
+      } catch (error) {
+        console.error('Error saving view history to Firestore:', error);
+      }
+      
+      console.log('Saved viewed store to localStorage:', storeId, 'for user:', currentUser.uid);
     }
     
     // Navigate to store page
@@ -612,7 +1016,7 @@ function ExplorePage() {
   };
 
   return (
-    <div style={{ background: '#F9F5EE', minHeight: '100vh', minHeight: '100dvh' }}>
+    <div style={{ background: '#F9F5EE', minHeight: '100dvh' }}>
       <style>{responsiveStyles}</style>
       <Navbar />
       {/* Fixed Desktop Layout */}
@@ -656,7 +1060,12 @@ function ExplorePage() {
             >
               {locationLoading ? '🔄' : '📍'}
             </span>
-            <span style={{ fontSize: '1rem', color: locationError ? '#D92D20' : '#1C1C1C' }}>
+            <span style={{ 
+              fontSize: '1.2rem', 
+              color: locationError ? '#D92D20' : '#007B7F',
+              fontWeight: '700',
+              textShadow: '0px 1px 1px rgba(0, 0, 0, 0.05)'
+            }}>
               {locationLoading 
                 ? 'Detecting location...' 
                 : city || (locationDetected ? 'Location unavailable' : 'Detecting city...')
@@ -747,8 +1156,8 @@ function ExplorePage() {
           </div>
         </div>
 
-        {/* Desktop Search Controls Row 1: Search Bar */}
-        {!isMobile && (
+        {/* Desktop Search Controls Row 1: Search Bar - Shown to buyers and unauthenticated users */}
+        {!isMobile && (userType === 'buyer' || !currentUser) && (
           <div style={{ 
             display: 'flex', 
             width: '100%', 
@@ -786,8 +1195,8 @@ function ExplorePage() {
           </div>
         )}
 
-        {/* Desktop Search Controls Row 2: All Dropdowns */}
-        {!isMobile && (
+        {/* Desktop Search Controls Row 2: All Dropdowns - Shown to buyers and unauthenticated users */}
+        {!isMobile && (userType === 'buyer' || !currentUser) && (
           <div style={{ 
             display: 'flex',
             width: '100%', 
@@ -795,7 +1204,7 @@ function ExplorePage() {
             marginBottom: '16px',
             gap: '10px'
           }}>
-            {/* Category Dropdown */}
+            {/* Category Dropdown - Shown to buyers and unauthenticated users */}
             <div style={{ 
               flex: '1 1 0',
               background: 'rgba(255, 255, 255, 0.9)', 
@@ -809,28 +1218,28 @@ function ExplorePage() {
                 value={selectedCategory}
                 onChange={e => setSelectedCategory(e.target.value)}
                 style={{ 
-                  width: '100%',
-                  padding: '0.75rem 2.5rem 0.75rem 1rem', 
-                  fontSize: '1rem', 
-                  border: 'none', 
-                  color: '#1F2937', 
-                  background: 'transparent', 
-                  outline: 'none',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 0.75rem center',
-                  backgroundSize: '1rem',
-                }}
-              >
-                <option value="">📂 Category</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+                width: '100%',
+                padding: '0.75rem 2.5rem 0.75rem 1rem', 
+                fontSize: '1rem', 
+                border: 'none', 
+                color: '#1F2937', 
+                background: 'transparent', 
+                outline: 'none',
+                fontWeight: '500',
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 0.75rem center',
+                backgroundSize: '1rem',
+              }}
+            >
+              <option value="">📂 Category</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
 
             {/* Filter By Dropdown */}
             <div style={{ 
@@ -907,8 +1316,8 @@ function ExplorePage() {
           </div>
         )}
 
-        {/* Mobile Search Bar with All Controls */}
-        {isMobile && (
+        {/* Mobile Search Bar with All Controls - Shown to buyers and unauthenticated users */}
+        {isMobile && (userType === 'buyer' || !currentUser) && (
         <div className={`explore-bar mobile${showDropdowns ? ' show-dropdowns' : ''}`} style={{ 
           display: 'flex', 
           background: 'rgba(255, 255, 255, 0.9)', 
@@ -999,6 +1408,7 @@ function ExplorePage() {
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
             overflow: 'visible'
           }}>
+            {/* Category Dropdown - Only shown to buyers on mobile */}
             <select
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
@@ -1168,44 +1578,983 @@ function ExplorePage() {
           </select>
         </div>
       </div>
-
-      <h2 style={{ 
-        margin: '3rem 0 1rem 1rem', 
-        color: '#1C1C1C', 
-        fontWeight: 'bold', 
-        fontSize: '1.5rem', 
-        textAlign: 'left',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
-      }}>
-        📍 Shops Near You
-        <span style={{ 
-          background: '#f0f9f9', 
-          color: '#007B7F', 
-          borderRadius: '12px', 
-          padding: '2px 8px', 
-          fontSize: '0.9rem',
-          fontWeight: '500'
-        }}>
-          {filteredShops.length}
-        </span>
-      </h2>
       
-      {filteredShops.length === 0 ? (
+      {/* Boosters Section - For promoting stores - Only visible to sellers */}
+      {currentUser && userType === 'seller' && (
+        <>
+          <h2 style={{ 
+            margin: '2rem 0 1rem 1rem', 
+            color: '#007B7F', 
+            fontWeight: '800', 
+            fontSize: '1.8rem', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
+            🚀 Boosters
+            <span style={{ 
+              background: '#e9f7ff', 
+              color: '#0284c7', 
+              borderRadius: '12px', 
+              padding: '2px 8px', 
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              border: '1px solid #0284c7'
+            }}>
+              {boostedShops.length}
+            </span>
+            
+            {/* Boost button for sellers */}
+            {sellerStore && (
+          <button
+            onClick={() => setShowBoostModal(true)}
+            style={{
+              marginLeft: 'auto',
+              marginRight: '1rem',
+              background: sellerStore.isBoosted ? '#6366f1' : '#0284c7',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = sellerStore.isBoosted ? '#4f46e5' : '#0369a1'}
+            onMouseLeave={(e) => e.target.style.background = sellerStore.isBoosted ? '#6366f1' : '#0284c7'}
+          >
+            {sellerStore.isBoosted ? (
+              <>🔄 Manage Boost</>
+            ) : (
+              <>⚡ Boost Your Store</>
+            )}
+          </button>
+        )}
+      </h2>
+
+      {boostedShops.length === 0 ? (
         <div style={{
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
           padding: '3rem 1rem',
-          background: '#f8fafc',
+          background: '#f0f9ff',
           borderRadius: '12px',
-          margin: '0 1rem',
-          border: '2px dashed #e2e8f0'
+          margin: '0 1rem 2rem',
+          border: '2px dashed #0284c7'
         }}>
           <div style={{
             textAlign: 'center',
-            color: '#64748b'
+            color: '#0369a1'
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🚀</div>
+            <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.25rem' }}>
+              No boosted stores available
+            </div>
+            <div style={{ fontSize: '0.875rem' }}>
+              {currentUser && userType === 'seller' ? 
+                'Be the first to boost your store and gain more visibility!' :
+                'Sellers can boost their stores to appear in this section'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '0 1rem 2rem', scrollbarWidth: 'thin' }}>
+          {boostedShops.map(shop => {
+            // Use the same store card logic from spotlight section
+            const today = daysOfWeek[new Date().getDay()];
+            const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
+            const todayOpening = shop.openingTimes && shop.openingTimes[today];
+            const todayClosing = shop.closingTimes && shop.closingTimes[today];
+            
+            function isStoreOpenForToday(shop) {
+              if (!shop) return false;
+              
+              const today = daysOfWeek[new Date().getDay()];
+              
+              // Check if store is closed today
+              if (shop.closedDays && shop.closedDays.includes(today)) {
+                return false;
+              }
+              
+              // Get today's opening and closing times
+              const todayOpening = shop.openingTimes && shop.openingTimes[today];
+              const todayClosing = shop.closingTimes && shop.closingTimes[today];
+              
+              // If no specific times set for today, fall back to general opening/closing times
+              const opening = todayOpening || shop.openingTime;
+              const closing = todayClosing || shop.closingTime;
+              
+              if (!opening || !closing) return false;
+              
+              const now = new Date();
+              const [openH, openM] = opening.split(':').map(Number);
+              const [closeH, closeM] = closing.split(':').map(Number);
+              
+              const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+              const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+              
+              // Handle overnight hours (e.g., 10 PM to 6 AM)
+              if (closeH < openH || (closeH === openH && closeM < openM)) {
+                const nextDayClose = new Date(closeDate);
+                nextDayClose.setDate(nextDayClose.getDate() + 1);
+                return now >= openDate || now <= nextDayClose;
+              }
+              
+              return now >= openDate && now <= closeDate;
+            }
+            
+            const open = isStoreOpenForToday(shop);
+            const storeRating = ratings[shop.id];
+            const boostDaysLeft = shop.boostExpiryDate ? 
+              Math.max(0, Math.ceil((shop.boostExpiryDate.toDate() - new Date()) / (1000 * 60 * 60 * 24))) : 0;
+            
+            return (
+              <div
+                key={shop.id}
+                onClick={() => {
+                  handleStoreClick(shop.id);
+                  navigate(`/store-preview/${shop.id}`);
+                }}
+                style={{
+                  width: 260,
+                  height: 320,
+                  border: '2px solid #0284c7',
+                  borderRadius: 16,
+                  background: '#f0f9ff',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  position: 'relative',
+                  opacity: open ? 1 : 0.7,
+                  filter: open ? 'none' : 'grayscale(0.3)',
+                  transition: 'all 0.3s ease, transform 0.2s ease',
+                  overflow: 'hidden'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-5px)';
+                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                {/* Boost badge */}
+                <div style={{
+                  position: 'absolute',
+                  top: 10,
+                  right: 10,
+                  background: '#0284c7',
+                  color: 'white',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  zIndex: 2,
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}>
+                  ⚡ BOOSTED {boostDaysLeft > 0 ? `• ${boostDaysLeft}d` : ''}
+                </div>
+                
+                <div style={{ 
+                  height: 150, 
+                  position: 'relative',
+                  overflow: 'hidden',
+                  borderTopLeftRadius: '14px',
+                  borderTopRightRadius: '14px',
+                }}>
+                  <img 
+                    src={shop.storePhotoURL || 'https://via.placeholder.com/300x150?text=Store'} 
+                    alt={shop.storeName} 
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://via.placeholder.com/300x150?text=Store';
+                    }}
+                  />
+                  {!open && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%) rotate(-15deg)',
+                      background: 'rgba(239, 68, 68, 0.85)',
+                      color: 'white',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      zIndex: 1,
+                      letterSpacing: '0.05rem',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                    }}>
+                      CLOSED
+                    </div>
+                  )}
+                </div>
+                
+                <div style={{ 
+                  padding: '10px 15px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                  flexGrow: 1
+                }}>
+                  <div style={{ 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start'
+                  }}>
+                    <h3 style={{ 
+                      margin: 0,
+                      fontSize: '1.1rem',
+                      color: '#1e293b',
+                      fontWeight: '700',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      WebkitLineClamp: 1,
+                      WebkitBoxOrient: 'vertical',
+                      display: '-webkit-box'
+                    }}>
+                      {shop.storeName || 'Store'}
+                    </h3>
+                    
+                    {storeRating && (
+                      <div style={{ 
+                        display: 'flex',
+                        alignItems: 'center',
+                        background: '#fffbeb',
+                        borderRadius: '6px',
+                        padding: '2px 6px',
+                        border: '1px solid #fcd34d'
+                      }}>
+                        <span style={{ color: '#f59e0b', marginRight: '2px', fontSize: '0.8rem' }}>⭐</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#92400e' }}>
+                          {Number(storeRating.avg).toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div style={{
+                    color: '#64748b',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginBottom: '3px'
+                  }}>
+                    <span style={{ color: '#0284c7', fontSize: '0.9rem' }}>📍</span>
+                    <span style={{ 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontWeight: '500'
+                    }}>
+                      {shop.storeLocation || shop.storeAddress || 'Location not set'}
+                    </span>
+                  </div>
+                  
+                  <div style={{ 
+                    fontSize: '0.8rem',
+                    color: '#64748b',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    display: '-webkit-box',
+                    flexGrow: 1
+                  }}>
+                    {shop.storeDescription || 'No description available'}
+                  </div>
+                  
+                  <div style={{ 
+                    marginTop: 'auto',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '0.75rem',
+                    color: open ? '#059669' : '#dc2626',
+                    fontWeight: '600',
+                  }}>
+                    <span>
+                      {open ? '🟢 OPEN NOW' : '🔴 CLOSED'}
+                    </span>
+                    {shop.category && (
+                      <span style={{ 
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.7rem',
+                        fontWeight: '600'
+                      }}>
+                        {shop.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+        </>
+      )}
+
+      {/* Boost Store Modal */}
+      {showBoostModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: '90%',
+            maxWidth: 500,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem' }}>
+                <span style={{ marginRight: 8 }}>⭐</span>
+                Boost Store
+              </h2>
+              <button 
+                onClick={() => setShowBoostModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {boostSuccess ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
+                <h3 style={{ color: '#16A34A', marginBottom: 12 }}>Store Boosted Successfully!</h3>
+                <p style={{ marginBottom: 24 }}>
+                  {sellerStore.storeName} will now appear in the recommended section on the Explore page 
+                  for {boostDuration} days.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowBoostModal(false);
+                    setBoostSuccess(false);
+                  }}
+                  style={{
+                    background: '#007B7F',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '12px 24px',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    fontWeight: 600
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <p style={{ marginBottom: 24, fontSize: '1.1rem' }}>
+                  Boost your store to increase visibility! Boosted stores appear in the recommended 
+                  section on the Explore page.
+                </p>
+
+                {boostError && (
+                  <div style={{
+                    backgroundColor: '#FEF2F2',
+                    color: '#B91C1C',
+                    padding: 16,
+                    borderRadius: 8,
+                    marginBottom: 16
+                  }}>
+                    {boostError}
+                  </div>
+                )}
+
+                {showPaymentForm && stripeClientSecret ? (
+                  <div style={{ marginBottom: 24 }}>
+                    <h3 style={{ marginBottom: 16, fontWeight: 600 }}>Enter Payment Details</h3>
+                    <p style={{ marginBottom: 16, fontSize: '0.9rem', color: '#666' }}>
+                      Your payment is processed securely through Stripe. We do not store your card details.
+                    </p>
+                    
+                    <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret }}>
+                      <StripePaymentForm 
+                        paymentData={{
+                          total: boostDuration * 1.99,
+                          currency: sellerStore.currency || 'GBP',
+                          description: `Boost store for ${boostDuration} days`
+                        }}
+                        onPaymentSuccess={() => handlePaymentSuccess(stripePaymentIntentId)}
+                        onPaymentError={handlePaymentError}
+                        processing={processing}
+                        setProcessing={setProcessing}
+                        currentUser={currentUser}
+                      />
+                    </Elements>
+                    
+                    <button
+                      onClick={() => {
+                        setShowPaymentForm(false);
+                        setBoostProcessing(false);
+                      }}
+                      style={{
+                        background: '#F3F4F6',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: 8,
+                        padding: '12px 24px',
+                        marginTop: 16,
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        width: '100%'
+                      }}
+                      disabled={processing}
+                    >
+                      Cancel Payment
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 24 }}>
+                      <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                        Boost Duration:
+                      </label>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {[3, 7, 14, 30].map(days => (
+                          <button 
+                            key={days} 
+                            type="button"
+                            onClick={() => setBoostDuration(days)}
+                            style={{
+                              padding: '12px 16px',
+                              border: boostDuration === days 
+                                ? '2px solid #FFD700' 
+                                : '1px solid #ccc',
+                              borderRadius: 8,
+                              background: boostDuration === days 
+                                ? '#FEF9C3' 
+                                : 'white',
+                              fontWeight: boostDuration === days ? 600 : 400,
+                              flex: 1,
+                              minWidth: '70px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {days} day{days > 1 ? 's' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 24, padding: 16, backgroundColor: '#F9F9F9', borderRadius: 8 }}>
+                      <div style={{ marginBottom: 8, fontWeight: 600 }}>Boost Cost:</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>
+                        {getCurrencySymbol(sellerStore.currency || 'GBP')}{formatPrice(boostDuration * 1.99, sellerStore.currency || 'GBP')}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#555', marginTop: 4 }}>
+                        {getCurrencySymbol(sellerStore.currency || 'GBP')}{formatPrice(1.99, sellerStore.currency || 'GBP')} per day for {boostDuration} days
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => setShowBoostModal(false)}
+                        style={{
+                          background: '#F3F4F6',
+                          border: '1px solid #D1D5DB',
+                          borderRadius: 8,
+                          padding: '12px 24px',
+                          cursor: 'pointer',
+                          fontSize: '1rem'
+                        }}
+                        disabled={boostProcessing}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleBoostStore}
+                        disabled={boostProcessing}
+                        style={{
+                          background: boostProcessing ? '#9CA3AF' : '#FFD700',
+                          color: '#333',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '12px 24px',
+                          cursor: boostProcessing ? 'not-allowed' : 'pointer',
+                          fontSize: '1rem',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                      >
+                        {boostProcessing ? (
+                          <>Processing...</>
+                        ) : (
+                          <>
+                            <span>⭐</span>
+                            Boost Now
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Recommended Stores Section */}
+      {/* Only show Recommended section for buyers (authenticated) */}
+      {currentUser && userType === 'buyer' && (
+        <>
+          <h2 style={{ 
+            margin: '2rem 0 0.5rem 1rem', 
+            color: '#007B7F', 
+            fontWeight: '800', 
+            fontSize: '1.8rem',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            ⭐ Recommended For You
+          </h2>
+          
+          <div style={{
+            display: 'flex',
+            overflowX: 'auto',
+            padding: '0.5rem 1rem 1rem 1rem',
+            gap: '1rem',
+            scrollbarWidth: 'none', // Firefox
+            msOverflowStyle: 'none', // IE and Edge
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            <style>{`
+              /* Hide scrollbar for Chrome, Safari and Opera */
+              div::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            
+            {boostedShops.length === 0 && recentlyViewedShops.length === 0 && purchasedFromStores.length === 0 && previouslyPurchasedItems.length === 0 ? (
+              <div style={{
+                width: '100%',
+                padding: '2rem',
+                textAlign: 'center',
+                color: '#6B7280',
+                background: 'rgba(255,255,255,0.7)',
+                borderRadius: '12px',
+                border: '2px dashed #E5E7EB',
+              }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+                <h3 style={{ marginBottom: '0.5rem', fontWeight: '600' }}>No recommendations yet</h3>
+                <p>Browse more stores and products to get personalized recommendations</p>
+              </div>
+            ) : (
+              <>
+                {/* Combine and deduplicate boosted, purchased from, and recently viewed shops */}
+                {[...boostedShops, ...purchasedFromStores, ...recentlyViewedShops]
+                  // Filter out duplicates by keeping the first occurrence of each store ID
+                  .filter((shop, index, self) => 
+                    shop && shop.id && index === self.findIndex((s) => s && s.id === shop.id)
+                  )
+                  // Limit to 10 shops max
+                  .slice(0, 10)
+                  .map(shop => (
+                    <div 
+                      key={shop.id}
+                      onClick={() => handleStoreClick(shop.id)}
+                      style={{
+                        minWidth: '240px',
+                        maxWidth: '260px',
+                        background: '#FFFFFF',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        position: 'relative',
+                        flex: '0 0 auto'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        e.currentTarget.style.boxShadow = '0 8px 15px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.05)';
+                      }}
+                    >
+                      {/* Shop image or placeholder */}
+                      <div style={{ height: '120px', background: '#f4f4f4', overflow: 'hidden' }}>
+                        {shop.backgroundImg ? (
+                          <img 
+                            src={shop.backgroundImg} 
+                            alt={shop.storeName || shop.businessName || shop.name || 'Shop'}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            background: '#e8f2f2',
+                            color: '#007B7F'
+                          }}>
+                            {shop.storeName?.charAt(0) || shop.businessName?.charAt(0) || 'L'}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div style={{ padding: '12px' }}>
+                        <div style={{ 
+                          fontWeight: 'bold', 
+                          fontSize: '1.1rem', 
+                          marginBottom: '4px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {shop.storeName || shop.businessName || shop.name || 'Shop'}
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.85rem',
+                          color: '#555',
+                          marginBottom: '8px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {shop.storeLocation || 'Location not available'}
+                        </div>
+                        
+                        {shop.isBoosted && (
+                          <div style={{ 
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: '#FFD700',
+                            color: '#333',
+                            borderRadius: '20px',
+                            padding: '2px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            <span>⭐</span> BOOSTED
+                          </div>
+                        )}
+                        
+                        {/* Show badge for purchased from stores */}
+                        {shop.purchaseCount && (
+                          <div style={{ 
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '8px',
+                            background: '#10B981',
+                            color: 'white',
+                            borderRadius: '20px',
+                            padding: '2px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            <span>🛒</span> PURCHASED
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                
+                {/* Display purchased items if available */}
+                {previouslyPurchasedItems.length > 0 && previouslyPurchasedItems
+                  .slice(0, 5) // Limit to 5 items
+                  .map(item => (
+                    <div 
+                      key={`item-${item.id}`}
+                      onClick={() => item.storeId && handleStoreClick(item.storeId)}
+                      style={{
+                        minWidth: '200px',
+                        maxWidth: '220px',
+                        background: '#FFFFFF',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        position: 'relative',
+                        flex: '0 0 auto'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        e.currentTarget.style.boxShadow = '0 8px 15px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.05)';
+                      }}
+                    >
+                      {/* Item image or placeholder */}
+                      <div style={{ height: '120px', background: '#f4f4f4', overflow: 'hidden' }}>
+                        {item.imageURL ? (
+                          <img 
+                            src={item.imageURL} 
+                            alt={item.name || 'Product'}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            background: '#f0f9f9',
+                            color: '#007B7F'
+                          }}>
+                            {item.name?.charAt(0) || 'P'}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div style={{ padding: '12px' }}>
+                        <div style={{ 
+                          fontWeight: 'bold', 
+                          fontSize: '1rem', 
+                          marginBottom: '4px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {item.name || 'Product'}
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.85rem',
+                          color: '#555',
+                          marginBottom: '4px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {item.storeName || 'Store'}
+                        </div>
+                        {item.price && (
+                          <div style={{ 
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            color: '#007B7F'
+                          }}>
+                            £{typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
+                          </div>
+                        )}
+                        
+                        <div style={{ 
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          background: '#3B82F6',
+                          color: 'white',
+                          borderRadius: '20px',
+                          padding: '2px 8px',
+                          fontSize: '0.7rem',
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}>
+                          <span>🔄</span> BUY AGAIN
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      <h2 style={{ 
+        margin: '3rem 0 1rem 1rem', 
+        color: '#007B7F', 
+        fontWeight: '800', 
+        fontSize: '1.8rem', 
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+      }}>
+        {(userType === 'buyer' || !currentUser) ? (
+          <>
+            📍 Shops Near You
+            <span style={{ 
+              background: '#f0f9f9', 
+              color: '#007B7F', 
+              borderRadius: '12px', 
+              padding: '2px 8px', 
+              fontSize: '0.9rem',
+              fontWeight: '500'
+            }}>
+              {filteredShops.length}
+            </span>
+          </>
+        ) : (
+          <>
+            🏪 Your Store
+          </>
+        )}
+      </h2>
+      
+      {userType === 'seller' && sellerStore ? (
+        // Show seller's own store
+        <div style={{
+          display: 'flex',
+          padding: '0 1rem 1rem',
+          gap: '1rem',
+          marginBottom: '2rem'
+        }}>
+          <div
+            onClick={() => navigate(`/store-preview/${sellerStore.id}`)}
+            style={{
+              minWidth: 200,
+              border: '1px solid #007B7F',
+              borderRadius: 16,
+              background: '#fff',
+              cursor: 'pointer',
+              boxShadow: '0 4px 8px -1px rgba(0, 123, 127, 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              transition: 'all 0.3s ease, transform 0.2s ease',
+              overflow: 'hidden'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 16px -1px rgba(0, 123, 127, 0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.boxShadow = '0 4px 8px -1px rgba(0, 123, 127, 0.2)';
+            }}
+          >
+            <div style={{ height: 120, overflow: 'hidden', position: 'relative' }}>
+              {sellerStore.backgroundImg ? (
+                <img 
+                  src={sellerStore.backgroundImg} 
+                  alt={sellerStore.storeName} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  loading="lazy"
+                />
+              ) : (
+                <div style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  background: 'linear-gradient(45deg, #e6f7f8, #dcf2f2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <span style={{ fontSize: '2rem' }}>🏪</span>
+                </div>
+              )}
+              
+              <div style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                background: '#007B7F',
+                color: 'white',
+                borderRadius: '20px',
+                padding: '4px 10px',
+                fontSize: '0.8rem',
+                fontWeight: 'bold',
+              }}>
+                MANAGE
+              </div>
+            </div>
+            
+            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1a202c' }}>
+                {sellerStore.storeName || 'My Store'}
+              </div>
+              
+              <div style={{ fontSize: '0.875rem', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#007B7F', fontSize: '1rem' }}>📍</span>
+                {sellerStore.storeLocation || sellerStore.storeAddress || (
+                  <span style={{ 
+                    color: '#D92D20', 
+                    fontStyle: 'italic',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    Location not set
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Show filtered shops for buyers
+        filteredShops.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '3rem 1rem',
+            background: '#f8fafc',
+            borderRadius: '12px',
+            margin: '0 1rem',
+            border: '2px dashed #e2e8f0'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              color: '#64748b'
+        
           }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🏪</div>
             <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.25rem' }}>
@@ -1297,9 +2646,11 @@ function ExplorePage() {
                 navigate(`/store-preview/${shop.id}`);
               }}
               style={{
-                minWidth: 200,
+                minWidth: 260,
+                width: '100%',
+                height: 320,
                 border: '1px solid #e2e8f0',
-                borderRadius: 16,
+                borderRadius: 12,
                 background: '#fff',
                 cursor: 'pointer',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
@@ -1322,9 +2673,9 @@ function ExplorePage() {
             >
               <div style={{ width: '100%', position: 'relative' }}>
                 <img
-                  src={shop.backgroundImg}
+                  src={shop.backgroundImg || 'https://via.placeholder.com/400x200?text=Store+Image'}
                   alt={shop.storeName}
-                  style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: '16px 16px 0 0' }}
+                  style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: '12px 12px 0 0' }}
                 />
                 
                 <div style={{ 
@@ -1413,12 +2764,16 @@ function ExplorePage() {
                   {shop.storeName}
                 </div>
                 <div style={{ 
-                  fontSize: '0.9rem', 
+                  fontSize: '0.95rem', 
                   color: '#6b7280',
                   marginBottom: '0.5rem',
-                  lineHeight: '1.4'
+                  lineHeight: '1.4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}>
-                  {shop.storeLocation}
+                  <span style={{ color: '#007B7F', fontSize: '1rem' }}>📍</span>
+                  {shop.storeLocation || shop.storeAddress || 'Location not set'}
                 </div>
                 {!isClosedToday && todayOpening && todayClosing && (
                   <div style={{ 
@@ -1437,18 +2792,19 @@ function ExplorePage() {
           );
         })}
         </div>
-      )}
+      ))}
       
       {/* Spotlight Store Section */}
       <h2 style={{ 
         margin: '3rem 0 1rem 1rem', 
-        color: '#1C1C1C', 
-        fontWeight: 'bold', 
-        fontSize: '1.5rem', 
+        color: '#007B7F', 
+        fontWeight: '800', 
+        fontSize: '1.8rem', 
         textAlign: 'left',
         display: 'flex',
         alignItems: 'center',
-        gap: '8px'
+        gap: '8px',
+        textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
       }}>
         ✨ Spotlight Store
         <span style={{ 
@@ -1717,18 +3073,19 @@ function ExplorePage() {
         </div>
       )}
 
-      {/* Categories Section - Each category as its own main section */}
-      {categories.map(category => {
+      {/* Categories Section - Each category as its own main section - Only shown to buyers */}
+      {(userType === 'buyer' || !currentUser) && categories.map(category => {
         const categoryShops = filteredShops.filter(shop => shop.category === category);
         
         return (
           <div key={category} style={{ marginBottom: '3rem' }}>
             <h2 style={{ 
               margin: '3rem 0 1rem 1rem', 
-              color: '#1C1C1C', 
-              fontWeight: 'bold', 
-              fontSize: '1.5rem', 
+              color: '#007B7F', 
+              fontWeight: '800', 
+              fontSize: '1.8rem', 
               textAlign: 'left',
+              textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
