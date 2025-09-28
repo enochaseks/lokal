@@ -4,7 +4,8 @@ const fetch = globalThis.fetch || require('node-fetch');
 async function testHubSpotAPI() {
   console.log('=== DIRECT HUBSPOT API TEST ===');
   
-  const API_KEY = 'pat-eu1-eec50d2f-2d8c-4b3a-b6aa-dc5a75fae261';
+  // const API_KEY = 'pat-eu1-eec50d2f-2d8c-4b3a-b6aa-dc5a75fae261'; // REMOVED: Do not hardcode secrets
+  const API_KEY = process.env.HUBSPOT_API_KEY;
   const API_URL = 'https://api.hubapi.com';
   
   const testEmail = `test-server-${Date.now()}@lokal-app.com`;
