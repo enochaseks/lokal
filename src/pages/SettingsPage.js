@@ -59,6 +59,9 @@ function SettingsPage() {
   const [reauthError, setReauthError] = useState('');
   const [pendingDelete, setPendingDelete] = useState(false);
   const [cardType, setCardType] = useState('');
+  const [showMarketingModal, setShowMarketingModal] = useState(false);
+  const [marketingModalMessage, setMarketingModalMessage] = useState('');
+  const [marketingModalType, setMarketingModalType] = useState('success'); // 'success' or 'error'
   const [paymentError, setPaymentError] = useState('');
   const [storeData, setStoreData] = useState(null);
   const navigate = useNavigate();
@@ -528,15 +531,20 @@ function SettingsPage() {
       
       if (success) {
         console.log('Successfully updated HubSpot contact');
-        // Add a small notification to show the user the action was successful
-        const statusText = newConsentValue ? 'enabled' : 'disabled';
-        alert(`Marketing preferences ${statusText} successfully!`);
+        // Show a success modal
+        if (newConsentValue) {
+          setMarketingModalMessage("You've successfully subscribed to marketing communications! You'll now receive updates about special offers, new features, and personalized recommendations.");
+        } else {
+          setMarketingModalMessage("You've successfully unsubscribed from marketing communications. You can resubscribe at any time if you change your mind.");
+        }
+        setMarketingModalType('success');
+        setShowMarketingModal(true);
       } else {
         console.error('HubSpot update failed, but Firestore updated successfully');
-        // Show a toast or silent message instead of an alert for better UX
-        // We've already saved to Firestore, so the core functionality works
-        console.log('Marketing preferences saved locally but not synced with marketing service');
-        alert('Your preferences were saved, but there was an issue connecting to our marketing service.');
+        // Show an error modal
+        setMarketingModalMessage('Your preferences were saved locally, but there was an issue connecting to our marketing service. Your selection will still be honored.');
+        setMarketingModalType('error');
+        setShowMarketingModal(true);
       }
     } catch (error) {
       console.error('Error updating marketing consent:', error);
@@ -1236,33 +1244,6 @@ function SettingsPage() {
     );
   }
 
-  // Test HubSpot connection function
-  const testHubSpotConnection = async () => {
-    try {
-      // Direct API call to test HubSpot
-      const testEmail = `test-${Date.now()}@lokal-app.com`;
-      console.log(`Creating direct test contact with email: ${testEmail}`);
-      
-      const { addOrUpdateContact } = await import('../utils/hubspotClient');
-      
-      const result = await addOrUpdateContact({
-        email: testEmail,
-        firstName: 'Test',
-        lastName: 'Direct',
-        marketingConsent: true
-      });
-      
-      if (result) {
-        alert(`HubSpot test successful! Created contact with email: ${testEmail}`);
-      } else {
-        alert('HubSpot test failed. Check console for details.');
-      }
-    } catch (error) {
-      console.error('Error in direct HubSpot test:', error);
-      alert(`HubSpot test error: ${error.message}`);
-    }
-  };
-
   // Communications Preferences view
   if (view === 'communications') {
     return (
@@ -1274,29 +1255,6 @@ function SettingsPage() {
           
           <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6, marginBottom: 30 }}>
             <p>Manage how Lokal communicates with you. You can update your preferences at any time.</p>
-          </div>
-          
-          {/* Developer Test Button - Remove in production */}
-          <div style={{ marginBottom: '30px', padding: '15px', backgroundColor: '#f8f8f8', borderRadius: '8px', border: '1px solid #ddd' }}>
-            <h4 style={{ marginTop: 0, marginBottom: '10px' }}>Developer Options</h4>
-            <button 
-              onClick={testHubSpotConnection}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#007B7F',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                marginRight: '10px',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
-            >
-              Test Direct HubSpot API
-            </button>
-            <p style={{ fontSize: '0.8rem', marginTop: '8px', color: '#666' }}>
-              Check the browser console (F12) for detailed logs.
-            </p>
           </div>
           
           <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -1346,6 +1304,79 @@ function SettingsPage() {
               <a href="mailto:helplokal@gmail.com" style={{ color: '#007B7F', textDecoration: 'none' }}>helplokal@gmail.com</a>
             </p>
           </div>
+          
+          {/* Marketing Consent Modal */}
+          {showMarketingModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                width: '90%',
+                maxWidth: '450px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                textAlign: 'center',
+                position: 'relative'
+              }}>
+                <div style={{ 
+                  width: '60px', 
+                  height: '60px', 
+                  borderRadius: '50%', 
+                  backgroundColor: marketingModalType === 'success' ? '#e1f7e1' : '#fff0f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px'
+                }}>
+                  {marketingModalType === 'success' ? (
+                    <span style={{ fontSize: '30px', color: '#28a745' }}>✓</span>
+                  ) : (
+                    <span style={{ fontSize: '30px', color: '#dc3545' }}>!</span>
+                  )}
+                </div>
+                
+                <h3 style={{ 
+                  fontSize: '1.3rem', 
+                  color: marketingModalType === 'success' ? '#28a745' : '#dc3545',
+                  margin: '0 0 15px 0'
+                }}>
+                  {marketingModalType === 'success' ? 'Preferences Updated' : 'Update Notice'}
+                </h3>
+                
+                <p style={{ fontSize: '1rem', lineHeight: '1.5', marginBottom: '25px', color: '#444' }}>
+                  {marketingModalMessage}
+                </p>
+                
+                <button 
+                  onClick={() => setShowMarketingModal(false)}
+                  style={{
+                    padding: '10px 30px',
+                    backgroundColor: marketingModalType === 'success' ? '#28a745' : '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          )}
           
         </div>
       </div>
