@@ -107,11 +107,18 @@ router.post('/contact', async (req, res) => {
       // Only update properties that are different from current values
       const updatedProperties = {};
       
+      // Add more detailed logging
+      console.log('Contact exists, current properties:', currentContact.properties);
+      console.log('New properties to set:', properties);
+      
       // Compare and only include changed properties
       Object.keys(properties).forEach(key => {
         const currentValue = currentContact.properties[key];
         if (properties[key] !== undefined && properties[key] !== currentValue) {
           updatedProperties[key] = properties[key];
+          console.log(`Property '${key}' changing from '${currentValue}' to '${properties[key]}'`);
+        } else {
+          console.log(`Property '${key}' unchanged (current: '${currentValue}')`);
         }
       });
       
@@ -122,7 +129,8 @@ router.post('/contact', async (req, res) => {
           success: true, 
           data: { 
             message: 'No changes needed', 
-            id: contactId 
+            id: contactId,
+            contactDetails: currentContact.properties
           } 
         });
       }

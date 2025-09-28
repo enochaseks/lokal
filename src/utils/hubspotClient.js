@@ -54,7 +54,19 @@ export const addOrUpdateContact = async (contactData) => {
     // Accept 200 OK responses where the backend returns success:true
     // This is for cases where the backend decides to skip an update because no changes are needed
     if (responseData.success === true) {
-      if (DEBUG) console.log('HubSpot: Operation successful via proxy');
+      if (DEBUG) {
+        console.log('HubSpot: Operation successful via proxy');
+        
+        // If we have contact details, display them
+        if (responseData.data && responseData.data.contactDetails) {
+          console.log('HubSpot contact details:', responseData.data.contactDetails);
+        }
+        
+        // If there was a message like "No changes needed", display it
+        if (responseData.data && responseData.data.message) {
+          console.log('HubSpot message:', responseData.data.message);
+        }
+      }
       return true;
     }
     
