@@ -56,9 +56,12 @@ router.post('/contact', async (req, res) => {
     if (firstName) properties.firstname = firstName;
     if (lastName) properties.lastname = lastName;
     
-    // Store marketing consent in notes for now
+    // Store marketing consent in a standard HubSpot property
     if (marketingConsent !== undefined) {
-      properties.note = `Marketing consent: ${marketingConsent ? 'Yes' : 'No'} (Added: ${new Date().toISOString()})`;
+      // Use hs_lead_status which is a standard HubSpot property
+      properties.hs_lead_status = marketingConsent ? 'Marketing Qualified Lead' : 'Subscriber';
+      // Use a custom property for explicit marketing consent tracking
+      properties.lokal_marketing_consent = marketingConsent ? 'Yes' : 'No';
     }
     
     if (searchData.results && searchData.results.length > 0) {
