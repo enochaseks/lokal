@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import { getDocs, collection, query, where, setDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addOrUpdateContact } from '../utils/hubspotClient';

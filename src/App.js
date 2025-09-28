@@ -3,7 +3,7 @@ import './App.css';
 import ExplorePage from './pages/ExplorePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import { BrowserRouter as Router, Routes, Route } from 'react-router';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import OnboardingPage from './pages/OnboardingPage';
 import OnboardingSellCategoryPage from './pages/OnboardingSellCategoryPage';
 import OnboardingSellLocationPage from './pages/OnboardingSellLocationPage';
