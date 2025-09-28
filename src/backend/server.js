@@ -65,6 +65,44 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 });
 
+// Create store boost payment intent
+app.post('/create-boost-payment-intent', async (req, res) => {
+  try {
+    const { amount, currency, storeId, boostDuration, userId } = req.body;
+    
+    // Validate required fields
+    if (!amount || !currency || !storeId || !boostDuration || !userId) {
+      return res.status(400).send({ 
+        error: 'Missing required fields. Please provide amount, currency, storeId, boostDuration, and userId' 
+      });
+    }
+    
+    // Create a payment intent specifically for store boosting
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+      metadata: {
+        type: 'store_boost',
+        storeId,
+        userId,
+        boostDuration,
+        boostStartDate: new Date().toISOString()
+      },
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
+  } catch (error) {
+    console.error('Boost payment error:', error);
+    res.status(400).send({ error: error.message });
+  }
+});
+
 // Process refund endpoint
 app.post('/api/process-refund', async (req, res) => {
   try {
@@ -202,6 +240,48 @@ app.post('/api/process-withdrawal', async (req, res) => {
       type: error.type || 'withdrawal_error'
     });
   }
+});
+
+// Process webhook for Stripe events
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      signature,
+      webhookSecret
+    );
+  } catch (error) {
+    console.error(`Webhook Error: ${error.message}`);
+    return res.status(400).send(`Webhook Error: ${error.message}`);
+  }
+
+  // Handle specific events
+  if (event.type === 'payment_intent.succeeded') {
+    const paymentIntent = event.data.object;
+    
+    // Handle store boost payments
+    if (paymentIntent.metadata.type === 'store_boost') {
+      try {
+        console.log('Store boost payment succeeded:', paymentIntent.id);
+        
+        // Here you would update your database to mark the store as boosted
+        // This would typically involve a Firestore update
+        
+        // Return success - actual database updates should be done via Firebase functions
+        // to ensure proper authentication and security rules are applied
+      } catch (error) {
+        console.error('Error processing boost payment:', error);
+      }
+    }
+  }
+
+  // Return success response
+  res.status(200).json({ received: true });
 });
 
 const PORT = process.env.PORT || 3001;
