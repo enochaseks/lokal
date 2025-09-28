@@ -5,6 +5,7 @@ import { app } from '../firebase';
 import { useNavigate } from 'react-router';
 import { getDocs, collection, query, where, setDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { addOrUpdateContact } from '../utils/hubspotClient';
 
 function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -23,6 +24,9 @@ function RegisterPage() {
     hasNumber: false,
     hasSpecialChar: false
   });
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const navigate = useNavigate();
 
   // Password validation function
@@ -85,6 +89,12 @@ function RegisterPage() {
       return;
     }
     
+    // Check if user has agreed to terms and privacy policy
+    if (!agreedToTerms || !agreedToPrivacy) {
+      setError('You must agree to both the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+    
     // Age validation
     const today = new Date();
     const dobDate = new Date(dob);
@@ -116,7 +126,22 @@ function RegisterPage() {
           email,
           createdAt: new Date().toISOString(),
           onboardingStep: 'onboarding',
+          marketingConsent: marketingConsent,
         });
+        
+        // Add the user to HubSpot if they consented to marketing
+        if (marketingConsent) {
+          try {
+            await addOrUpdateContact({
+              email,
+              marketingConsent: true
+            });
+            console.log('User added to HubSpot marketing');
+          } catch (hubspotError) {
+            console.error('Failed to add user to HubSpot:', hubspotError);
+            // Don't block registration if HubSpot integration fails
+          }
+        }
       }
       await sendEmailVerification(userCredential.user);
       setVerificationSent(true);
@@ -355,22 +380,84 @@ function RegisterPage() {
             <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Date of Birth</label>
             <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
           </div>
+          
+          {/* Terms of Service and Privacy Policy Checkboxes */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+              <input 
+                type="checkbox" 
+                id="termsCheckbox"
+                checked={agreedToTerms}
+                onChange={() => setAgreedToTerms(!agreedToTerms)}
+                style={{ marginRight: '8px', marginTop: '4px' }}
+                required
+              />
+              <label htmlFor="termsCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
+                I have read and agree to the <a 
+                  href="/settings" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.localStorage.setItem('redirectToTerms', 'true');
+                    navigate('/settings');
+                  }}
+                  style={{ color: '#007B7F', textDecoration: 'underline' }}
+                >Terms of Service</a>
+              </label>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+              <input 
+                type="checkbox" 
+                id="privacyCheckbox"
+                checked={agreedToPrivacy}
+                onChange={() => setAgreedToPrivacy(!agreedToPrivacy)}
+                style={{ marginRight: '8px', marginTop: '4px' }}
+                required
+              />
+              <label htmlFor="privacyCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
+                I have read and agree to the <a 
+                  href="/settings" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.localStorage.setItem('redirectToPrivacy', 'true');
+                    navigate('/settings');
+                  }}
+                  style={{ color: '#007B7F', textDecoration: 'underline' }}
+                >Privacy Policy</a>
+              </label>
+            </div>
+            
+            {/* Marketing Consent Checkbox */}
+            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+              <input 
+                type="checkbox" 
+                id="marketingCheckbox"
+                checked={marketingConsent}
+                onChange={() => setMarketingConsent(!marketingConsent)}
+                style={{ marginRight: '8px', marginTop: '4px' }}
+              />
+              <label htmlFor="marketingCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
+                I consent to receive marketing communications about special offers, new features, and personalized recommendations. You can unsubscribe at any time.
+              </label>
+            </div>
+          </div>
+
           {error && <div style={{ color: '#D92D20', marginBottom: '1rem' }}>{error}</div>}
           {success && <div style={{ color: '#3A8E3A', marginBottom: '1rem' }}>{success}</div>}
           <button 
             type="submit" 
             style={{ 
               width: '100%', 
-              background: (!isPasswordValid || password !== confirmPassword || verificationSent) ? '#ccc' : '#D92D20', 
+              background: (!isPasswordValid || password !== confirmPassword || !agreedToTerms || !agreedToPrivacy || verificationSent) ? '#ccc' : '#D92D20', 
               color: '#fff', 
               padding: '0.75rem', 
               border: 'none', 
               borderRadius: 4, 
               fontWeight: 'bold', 
               fontSize: '1rem',
-              cursor: (!isPasswordValid || password !== confirmPassword || verificationSent) ? 'not-allowed' : 'pointer'
+              cursor: (!isPasswordValid || password !== confirmPassword || !agreedToTerms || !agreedToPrivacy || verificationSent) ? 'not-allowed' : 'pointer'
             }} 
-            disabled={!isPasswordValid || password !== confirmPassword || verificationSent}
+            disabled={!isPasswordValid || password !== confirmPassword || !agreedToTerms || !agreedToPrivacy || verificationSent}
           >
             Register
           </button>

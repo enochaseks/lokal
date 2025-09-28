@@ -5,8 +5,14 @@ const cors = require('cors');
 
 const app = express();
 
+// Import routes
+const hubspotRoutes = require('./routes/hubspot');
+
 app.use(cors());
 app.use(express.json());
+
+// Use API routes
+app.use('/api/hubspot', hubspotRoutes);
 
 // Health check endpoint for Render
 app.get('/', (req, res) => {
