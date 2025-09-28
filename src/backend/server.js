@@ -14,6 +14,8 @@ app.use(cors({
     'http://localhost:3000',  // Local development
     'http://127.0.0.1:3000',  // Alternative local
     'https://lokal-app.com',  // Production domain (if applicable)
+    'https://lokalshops.co.uk', // Production domain
+    'https://www.lokalshops.co.uk', // www subdomain
     process.env.FRONTEND_URL  // From environment variable if set
   ].filter(Boolean), // Filter out undefined values
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
