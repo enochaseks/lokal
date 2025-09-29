@@ -119,6 +119,7 @@ function SettingsPage() {
         }
         // Get marketing consent if available
         if (storeSnap.data().hasOwnProperty('marketingConsent')) {
+          console.log('Seller marketing consent from Firestore:', storeSnap.data().marketingConsent);
           setMarketingConsent(storeSnap.data().marketingConsent);
         }
         // Listen for discounts
@@ -140,7 +141,10 @@ function SettingsPage() {
           setUserType('buyer');
           // Get marketing consent if available
           if (userSnap.data().hasOwnProperty('marketingConsent')) {
+            console.log('Buyer marketing consent from Firestore:', userSnap.data().marketingConsent);
             setMarketingConsent(userSnap.data().marketingConsent);
+          } else {
+            console.log('No marketing consent field found in user document');
           }
           setPaymentType(userSnap.data().paymentType || '');
         }
@@ -512,6 +516,8 @@ function SettingsPage() {
   // Handle marketing consent changes
   const handleMarketingConsentChange = async (newConsentValue) => {
     if (!user) return;
+    
+    // Immediately update UI for better user experience
     setMarketingConsent(newConsentValue);
     
     try {
@@ -591,14 +597,65 @@ function SettingsPage() {
             <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Terms of Service</h2>
             {/* Terms of Service content */}
             <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6 }}>
-              {/* Terms content - copy from the terms section below */}
               <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>1. Introduction</h3>
               <p>Welcome to Lokal, the dedicated marketplace for African & Caribbean stores and products. These Terms of Service ("Terms") govern your use of the Lokal platform, including our website, mobile application, and related services (collectively, the "Platform"). By accessing or using Lokal, you agree to be bound by these Terms.</p>
               
               <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>2. Platform Description</h3>
               <p>Lokal is an e-commerce platform that connects buyers with African & Caribbean sellers. We provide tools for sellers to create virtual stores, showcase products, manage inventory, and process payments. For buyers, we offer a marketplace to discover local stores, browse products, communicate with sellers, and make purchases.</p>
               
-              {/* Add the rest of your terms content here */}
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>3. Account Registration</h3>
+              <p>To fully use our Platform, you must register for an account. You can register as either a buyer or a seller. You are responsible for maintaining the confidentiality of your account information and for all activities that occur under your account. You must provide accurate, current, and complete information during registration and keep this information updated.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>4. Seller Terms</h3>
+              <p><strong>4.1 Store Creation:</strong> As a seller, you can create a virtual store on our Platform, add products, set prices, and manage inventory.</p>
+              <p><strong>4.2 Product Listings:</strong> All product listings must be accurate, comply with applicable laws, and not infringe on any third-party rights.</p>
+              <p><strong>4.3 Payment Processing:</strong> Sellers can manage payment methods including bank transfers and in-person payments. All payment information must be accurate and kept up-to-date.</p>
+              <p><strong>4.4 Delivery Options:</strong> Sellers can offer delivery services or in-store pickup. The terms of delivery must be clearly communicated to buyers.</p>
+              <p><strong>4.5 Discounts:</strong> Sellers can offer discounts on their products through the Platform's discount system.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>5. Buyer Terms</h3>
+              <p><strong>5.1 Purchases:</strong> Buyers can browse products, add items to their cart, and complete purchases through the Platform.</p>
+              <p><strong>5.2 Payment:</strong> Buyers must provide accurate payment information and authorize the Platform to process payments for purchases.</p>
+              <p><strong>5.3 Communications:</strong> Buyers can communicate with sellers through the Platform's messaging system.</p>
+              <p><strong>5.4 Reviews:</strong> Buyers can leave reviews for stores and products. All reviews must be honest, appropriate, and based on actual experiences.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>6. Payments and Fees</h3>
+              <p><strong>6.1 Payment Methods:</strong> The Platform supports various payment methods, including bank transfers and card payments.</p>
+              <p><strong>6.2 Currency:</strong> Transactions may be conducted in multiple currencies, including GBP, USD, EUR, NGN, CAD, AUD, ZAR, GHS, KES, and others.</p>
+              <p><strong>6.3 Platform Fees:</strong> Lokal may charge fees for the use of the Platform. These fees will be clearly communicated to users.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>7. Refunds and Returns</h3>
+              <p>Refund and return policies are set by individual sellers. Sellers must clearly communicate their refund and return policies to buyers. Lokal may facilitate the refund process but is not responsible for the outcome of refund requests.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>8. User Content</h3>
+              <p>Users may post content, including product descriptions, reviews, and messages. You retain ownership of your content, but grant Lokal a license to use, reproduce, modify, and display your content for the purpose of operating the Platform.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>9. Prohibited Activities</h3>
+              <p>Users may not engage in activities that violate applicable laws, infringe on others' rights, post false or misleading content, or interfere with the Platform's operation.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>10. Account Deactivation and Deletion</h3>
+              <p>You may deactivate or delete your account at any time through the Settings page. Deactivation will hide your profile but retain your data. Deletion will permanently remove your account and associated data.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>11. Privacy</h3>
+              <p>Your privacy is important to us. Our use of your information is governed by our Privacy Policy, which is incorporated into these Terms by reference.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>12. About Lokal</h3>
+              <p><strong>Our Platform:</strong> Lokal is your dedicated African & Caribbean e-commerce marketplace, designed to help you discover and connect with nearby stores in your community. Unlike generic search engines that provide vague locations and limited information, Lokal empowers you to create a vibrant virtual store, showcase your products, engage with customers, and receive real feedback—all in one place.</p>
+              
+              <p><strong>Our Story:</strong> The inspiration for Lokal began in 2023, when our founder recognized a significant gap in the market. Finding authentic African and Caribbean stores for daily shopping was a challenge, and even when such stores were found, accessibility was often an issue. Lokal—originally known as Folo—was created to bridge this gap, making it easy to find, shop, and communicate with local African and Caribbean businesses.</p>
+              
+              <p><strong>Our Mission:</strong> We aim to empower African & Caribbean businesses to reach new customers and grow their income in a way that is more accessible and community-driven than traditional platforms. We are building a space where business owners can not only sell to local shoppers, but also connect with vendors and partners from across Africa, the Caribbean, and around the world.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>13. Contact Information</h3>
+              <p>If you have any questions about these Terms, feedback, or need assistance, you can contact us through the following channels:</p>
+              
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li><strong>Email:</strong> <a href="mailto:helplokal@gmail.com" style={{ color: '#007B7F', textDecoration: 'none' }}>helplokal@gmail.com</a></li>
+                <li><strong>Instagram:</strong> <a href="https://www.instagram.com/lokaladmin/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" style={{ color: '#007B7F', textDecoration: 'none' }}>@lokaladmin</a></li>
+                <li><strong>In-App:</strong> Through our support channels available on the Platform</li>
+              </ul>
+              
+              <p style={{ marginTop: 25 }}><em>Last updated: September 28, 2025</em></p>
             </div>
           </div>
         </div>
@@ -625,7 +682,67 @@ function SettingsPage() {
               <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>1. Introduction</h3>
               <p>Welcome to Lokal's Privacy Policy. At Lokal, we respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our marketplace platform for African & Caribbean stores and products.</p>
               
-              {/* Add the rest of your privacy content here */}
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>2. About Our Platform</h3>
+              <p><strong>What is Lokal?</strong> Lokal is a dedicated e-commerce marketplace connecting customers with African & Caribbean businesses. Our platform helps you discover local stores, browse products, communicate with sellers, and make purchases—all in one place.</p>
+              
+              <p><strong>Our Background:</strong> Founded in 2023, Lokal (originally known as Folo) was created to address the challenge of finding authentic African and Caribbean stores for daily shopping. We provide a digital solution that makes it easy to find, shop from, and communicate with local African and Caribbean businesses.</p>
+              
+              <p><strong>Our Purpose:</strong> We aim to empower African & Caribbean businesses by creating a supportive community that helps everyone thrive—whether you are a store owner, a shopper, or a vendor. We celebrate culture, support local enterprise, and create opportunities for growth and connection.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>3. Information We Collect</h3>
+              
+              <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 16, marginBottom: 8 }}>3.1 Personal Information</h4>
+              <p>When you register for an account or use our services, we may collect:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li>Contact information (name, email address, phone number)</li>
+                <li>Account credentials (username, password)</li>
+                <li>Payment information (bank details, card information)</li>
+                <li>Shipping and billing addresses</li>
+                <li>Profile information (profile picture, biography)</li>
+              </ul>
+              
+              <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 16, marginBottom: 8 }}>3.2 Store Information</h4>
+              <p>For sellers, we collect additional information about your store:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li>Store name and description</li>
+                <li>Store location and operating hours</li>
+                <li>Product listings and inventory information</li>
+                <li>Store policies (refunds, shipping, etc.)</li>
+                <li>Banking and payment processing details</li>
+              </ul>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>4. How We Use Your Information</h3>
+              <p>We use your information for the following purposes:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li><strong>Provide our services:</strong> Enable you to buy and sell products, process payments, and communicate with other users</li>
+                <li><strong>Account management:</strong> Create and manage your account, authenticate your identity, and maintain your profile</li>
+                <li><strong>Communications:</strong> Send you service announcements, updates, security alerts, and support messages</li>
+                <li><strong>Marketing communications:</strong> Send promotional emails and offers about our services (only if you've explicitly provided consent)</li>
+                <li><strong>Improve our platform:</strong> Analyze usage patterns, troubleshoot issues, and develop new features</li>
+              </ul>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>5. Your Privacy Rights</h3>
+              <p>Depending on your location, you may have rights regarding your personal information, including:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li>Access and obtain a copy of your data</li>
+                <li>Rectify inaccurate or incomplete information</li>
+                <li>Request deletion of your personal information</li>
+                <li>Object to or restrict certain processing activities</li>
+              </ul>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>6. Data Security</h3>
+              <p>We implement appropriate technical and organizational measures to protect your personal information, including encryption, access controls, and regular security audits.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>7. Contact Us</h3>
+              <p>If you have questions, concerns, or requests regarding this Privacy Policy or our privacy practices, you can contact us through the following channels:</p>
+              
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li><strong>Email:</strong> <a href="mailto:helplokal@gmail.com" style={{ color: '#007B7F', textDecoration: 'none' }}>helplokal@gmail.com</a></li>
+                <li><strong>Instagram:</strong> <a href="https://www.instagram.com/lokaladmin/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" style={{ color: '#007B7F', textDecoration: 'none' }}>@lokaladmin</a></li>
+                <li><strong>In-App:</strong> Through our support channels available on the Platform</li>
+              </ul>
+              
+              <p style={{ marginTop: 25 }}><em>Last updated: September 28, 2025</em></p>
             </div>
           </div>
         </div>
@@ -1363,12 +1480,36 @@ function SettingsPage() {
                 id="marketingCheckbox"
                 checked={marketingConsent}
                 onChange={() => handleMarketingConsentChange(!marketingConsent)}
-                style={{ marginRight: '12px', marginTop: '4px', width: '16px', height: '16px' }}
+                style={{ 
+                  marginRight: '12px', 
+                  marginTop: '4px',
+                  width: '20px',
+                  height: '20px',
+                  minWidth: '20px', 
+                  minHeight: '20px',
+                  accentColor: '#D92D20',
+                  boxSizing: 'border-box',
+                  border: '2px solid #1C1C1C',
+                  cursor: 'pointer'
+                }}
               />
-              <label htmlFor="marketingCheckbox" style={{ fontSize: '1rem', lineHeight: '1.5' }}>
+              <label htmlFor="marketingCheckbox" style={{ fontSize: '1rem', lineHeight: '1.5', cursor: 'pointer' }}>
                 I consent to receive marketing communications about special offers, new features, and personalized recommendations.
               </label>
             </div>
+            
+            {marketingConsent && (
+              <div style={{ 
+                background: '#e6f7e6', 
+                border: '1px solid #28a745', 
+                borderRadius: '4px', 
+                padding: '10px', 
+                marginBottom: '15px',
+                color: '#155724'
+              }}>
+                <p style={{ margin: 0 }}>✓ You are currently subscribed to marketing communications.</p>
+              </div>
+            )}
             
             <div style={{ fontSize: '0.9rem', color: '#666', marginLeft: '28px' }}>
               <p>By opting in, you'll receive:</p>

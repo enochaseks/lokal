@@ -448,7 +448,7 @@ function RegisterPage() {
             </div>
             
             {/* Marketing Consent Checkbox */}
-            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '1rem', background: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
               <input 
                 type="checkbox" 
                 id="marketingCheckbox"
@@ -463,7 +463,8 @@ function RegisterPage() {
                   height: '20px',
                   accentColor: '#D92D20',
                   boxSizing: 'border-box',
-                  border: '2px solid #1C1C1C'
+                  border: '2px solid #1C1C1C',
+                  cursor: 'pointer'
                 }}
               />
               <label htmlFor="marketingCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
@@ -471,6 +472,21 @@ function RegisterPage() {
               </label>
             </div>
           </div>
+
+          {/* Marketing Status Message */}
+          {marketingConsent && (
+            <div style={{ 
+              marginBottom: '1rem',
+              background: '#e6f7e6', 
+              border: '1px solid #28a745', 
+              borderRadius: '4px', 
+              padding: '10px', 
+              fontSize: '0.9rem',
+              color: '#155724'
+            }}>
+              <p style={{ margin: 0 }}>✓ You'll receive our marketing communications with special offers and new features.</p>
+            </div>
+          )}
 
           {error && <div style={{ color: '#D92D20', marginBottom: '1rem' }}>{error}</div>}
           {success && <div style={{ color: '#3A8E3A', marginBottom: '1rem' }}>{success}</div>}
