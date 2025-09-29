@@ -388,7 +388,7 @@ function AdminDashboardPage() {
     }
   };
 
-  // Load admin messages function - enhanced to pull all user messages that might need admin attention
+  // Load admin messages function - only shows messages from help center or store preview help requests
   const loadAdminMessages = () => {
     console.log('Loading admin messages...');
     const messagesQuery = query(
@@ -403,16 +403,16 @@ function AdminDashboardPage() {
       for (const doc of snapshot.docs) {
         const message = { id: doc.id, ...doc.data() };
         
-        // Process both explicit admin conversations AND messages that might need admin attention
+        // Process only help center messages and store preview help requests
         let isAdminRelevant = false;
         let conversationId = message.conversationId;
         let userId, userName, userEmail;
         
-        // 1. Explicit admin conversations (existing logic)
-        if (message.conversationId?.startsWith('admin_') || 
-            message.senderId === 'admin' || 
-            message.receiverId === 'admin' ||
-            message.isAdminMessage) {
+        // 1. Check if this is a message from help center support system
+        // Help center messages have messageType 'support_request' or come from the help center form
+        if (message.messageType === 'support_request' || 
+            (message.supportData && message.supportData.subject) ||
+            (message.message && message.message.includes('Submitted from: Help Center'))) {
           isAdminRelevant = true;
           
           // Determine user info - the user is whoever is NOT admin
@@ -427,22 +427,19 @@ function AdminDashboardPage() {
           }
         }
         
-        // 2. Messages containing keywords that suggest need for admin attention
-        else if (message.message) {
-          const messageText = message.message.toLowerCase();
-          const adminKeywords = [
-            'report', 'complaint', 'issue', 'problem', 'help', 'support', 
-            'refund', 'dispute', 'cancel', 'error', 'wrong', 'fraud',
-            'scam', 'fake', 'inappropriate', 'abuse', 'harassment'
-          ];
+        // 2. Check if this is a message from store preview page help request
+        // These messages are sent through handleContactAdmin or handleSubmitReport
+        else if (message.conversationId?.startsWith('admin_') && 
+                (message.isAdminConversation || 
+                message.message?.includes('store preview'))) {
+          isAdminRelevant = true;
           
-          const containsKeyword = adminKeywords.some(keyword => 
-            messageText.includes(keyword)
-          );
-          
-          if (containsKeyword) {
-            isAdminRelevant = true;
-            conversationId = `admin_${message.conversationId || message.senderId}_flagged`;
+          // Determine user info - the user is whoever is NOT admin
+          if (message.senderId === 'admin') {
+            userId = message.receiverId;
+            userName = message.receiverName;
+            userEmail = message.receiverEmail;
+          } else {
             userId = message.senderId;
             userName = message.senderName;
             userEmail = message.senderEmail;
@@ -478,9 +475,10 @@ function AdminDashboardPage() {
             lastMessageSender: message.senderId === 'admin' ? 'admin' : 'user',
             unreadCount: 0,
             messages: [],
-            isAutoFlagged: !message.conversationId?.startsWith('admin_') && !message.isAdminMessage, // Mark auto-flagged messages
+            isAutoFlagged: false, // No longer auto-flagging messages
             originalConversationId: message.conversationId, // Keep track of original conversation
-            storeContext: null // Will be populated if message relates to a store
+            storeContext: null, // Will be populated if message relates to a store
+            source: message.message?.includes('Submitted from: Help Center') ? 'help_center' : 'store_preview'
           };
           
           // Try to get store context if this relates to a store transaction
@@ -497,6 +495,11 @@ function AdminDashboardPage() {
             } catch (error) {
               console.warn('Could not fetch store context:', error);
             }
+          }
+          
+          // If there's a supportData object, add relevant context
+          if (message.supportData) {
+            messagesData[conversationId].supportData = message.supportData;
           }
         }
         
@@ -1758,19 +1761,33 @@ function AdminDashboardPage() {
                         }}>
                           {conversation.otherUserEmail}
                         </p>
-                        {conversation.storeContext && (
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          {/* Source tag */}
                           <div style={{
-                            backgroundColor: '#FEF3C7',
-                            color: '#92400E',
+                            backgroundColor: conversation.source === 'help_center' ? '#DBEAFE' : '#E0F2FE',
+                            color: conversation.source === 'help_center' ? '#1E40AF' : '#0C4A6E',
                             padding: '0.25rem 0.5rem',
                             borderRadius: '4px',
                             fontSize: '0.75rem',
-                            marginBottom: '0.5rem',
                             display: 'inline-block'
                           }}>
-                            📍 Re: {conversation.storeContext.storeName}
+                            {conversation.source === 'help_center' ? '🆘 Help Center' : '❓ Store Help'}
                           </div>
-                        )}
+                          
+                          {/* Store context tag if available */}
+                          {conversation.storeContext && (
+                            <div style={{
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              display: 'inline-block'
+                            }}>
+                              📍 Re: {conversation.storeContext.storeName}
+                            </div>
+                          )}
+                        </div>
                         <p style={{ 
                           color: '#374151', 
                           fontSize: '0.875rem',

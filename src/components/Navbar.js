@@ -656,6 +656,41 @@ function Navbar() {
                 </button>
               )}
               
+              {/* Help Center - visible for all users */}
+              <a 
+                href="/help-center" 
+                onClick={() => setSidebarOpen(false)}
+                style={{ 
+                  color: '#1F2937', 
+                  textDecoration: 'none', 
+                  fontWeight: '600', 
+                  fontSize: '1rem',
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  marginBottom: '0.5rem',
+                  borderRadius: '12px',
+                  background: 'rgba(0, 123, 127, 0.05)',
+                  border: '1px solid rgba(0, 123, 127, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.1)';
+                  e.target.style.transform = 'translateX(4px)';
+                  e.target.style.boxShadow = '0 4px 15px rgba(0, 123, 127, 0.1)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.background = 'rgba(0, 123, 127, 0.05)';
+                  e.target.style.transform = 'translateX(0)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>📚</span>
+                Help Center
+              </a>
+
               {!user ? (
                 <>
                   <a 

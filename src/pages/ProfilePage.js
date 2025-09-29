@@ -312,10 +312,21 @@ function ProfilePage() {
     const fetchOrders = async () => {
       setOrdersLoading(true);
       try {
-        // Fetch all messages where the user was involved in payments or placed orders
+        // Fetch all messages where the user was involved in payments, placed orders, or refunds
         const paymentsQuery = query(
           collection(db, 'messages'),
-          where('messageType', 'in', ['payment_completed', 'payment_notification', 'order_request', 'pay_at_store_completed', 'collection_confirmation'])
+          where('messageType', 'in', [
+            'payment_completed', 
+            'payment_notification', 
+            'order_request', 
+            'pay_at_store_completed', 
+            'collection_confirmation',
+            'refund_approved',
+            'refund_denied',
+            'refund_request',
+            'manual_refund_notice',
+            'refund_transfer_confirmed'
+          ])
         );
         
         const paymentsSnapshot = await getDocs(paymentsQuery);
@@ -327,6 +338,55 @@ function ProfilePage() {
           // Skip collection_confirmation messages as they are just notifications, not orders
           if (message.messageType === 'collection_confirmation') {
             return;
+          }
+
+          // Handle refund-related messages to capture order details
+          if ((message.messageType === 'refund_approved' || 
+              message.messageType === 'refund_denied' || 
+              message.messageType === 'manual_refund_notice' || 
+              message.messageType === 'refund_transfer_confirmed') && 
+              (message.receiverId === authUser.uid || message.senderId === authUser.uid)) {
+            
+            const orderId = message.orderData?.orderId || message.refundData?.orderId;
+            if (!orderId) return;
+            
+            // Check if we already have this order
+            const existingOrderIndex = customerOrders.findIndex(o => o.orderId === orderId);
+            
+            const orderData = {
+              id: doc.id,
+              orderId: orderId,
+              items: message.orderData?.items || message.refundData?.items || [],
+              totalAmount: message.orderData?.totalAmount || message.refundData?.amount || message.orderData?.refundAmount || 0,
+              currency: message.orderData?.currency || message.refundData?.currency || 'GBP',
+              pickupCode: message.orderData?.pickupCode,
+              paymentMethod: message.orderData?.paymentMethod || message.refundData?.paymentMethod || 'Unknown',
+              deliveryType: message.orderData?.deliveryType,
+              timestamp: message.timestamp,
+              storeName: message.messageType === 'refund_approved' || message.messageType === 'refund_denied' ? 
+                        (message.senderId === authUser.uid ? message.receiverName : message.senderName) : 
+                        (message.senderName !== 'Refund System' ? message.senderName : message.receiverName),
+              storeId: message.messageType === 'refund_approved' || message.messageType === 'refund_denied' ? 
+                      (message.senderId === authUser.uid ? message.receiverId : message.senderId) : 
+                      (message.senderId !== 'system' ? message.senderId : message.receiverId),
+              status: message.messageType === 'refund_approved' || message.messageType === 'manual_refund_notice' || message.messageType === 'refund_transfer_confirmed' ? 
+                     'cancelled_and_refunded' : 'cancelled',
+              cancelledAt: message.timestamp,
+              refundedAt: message.messageType === 'refund_approved' || message.messageType === 'manual_refund_notice' || message.messageType === 'refund_transfer_confirmed' ? 
+                         message.timestamp : null
+            };
+            
+            if (existingOrderIndex >= 0) {
+              // Update existing order with refund information
+              customerOrders[existingOrderIndex] = {
+                ...customerOrders[existingOrderIndex],
+                status: orderData.status,
+                refundedAt: orderData.refundedAt || customerOrders[existingOrderIndex].refundedAt,
+                cancelledAt: orderData.cancelledAt || customerOrders[existingOrderIndex].cancelledAt
+              };
+            } else {
+              customerOrders.push(orderData);
+            }
           }
           
           // If this user was the customer who made the payment (senderId of payment_completed)
@@ -476,6 +536,32 @@ function ProfilePage() {
             if (order) {
               order.status = 'cancelled';
               order.cancelledAt = message.timestamp;
+            }
+          } else if (message.messageType === 'refund_approved' && (message.receiverId === authUser.uid || message.senderId === authUser.uid)) {
+            // Refund was approved - mark as cancelled and refunded
+            const orderId = message.orderData?.orderId || message.refundData?.orderId;
+            const order = customerOrders.find(o => o.orderId === orderId);
+            if (order) {
+              order.status = 'cancelled_and_refunded';
+              order.refundedAt = message.timestamp;
+              order.cancelledAt = order.cancelledAt || message.timestamp;
+            }
+          } else if (message.messageType === 'refund_denied' && (message.receiverId === authUser.uid || message.senderId === authUser.uid)) {
+            // Refund was denied - ensure it's marked as cancelled
+            const orderId = message.orderData?.orderId || message.refundData?.orderId;
+            const order = customerOrders.find(o => o.orderId === orderId);
+            if (order) {
+              order.status = 'cancelled';
+              order.cancelledAt = order.cancelledAt || message.timestamp;
+            }
+          } else if (message.messageType === 'manual_refund_notice' || message.messageType === 'refund_transfer_confirmed') {
+            // Manual refund was processed
+            const orderId = message.orderData?.orderId || message.refundData?.orderId;
+            const order = customerOrders.find(o => o.orderId === orderId);
+            if (order) {
+              order.status = 'cancelled_and_refunded';
+              order.refundedAt = message.timestamp;
+              order.cancelledAt = order.cancelledAt || message.timestamp;
             }
           }
         });
@@ -712,6 +798,7 @@ function ProfilePage() {
                         case 'ordered': return '#F59E0B';
                         case 'pending': return '#F59E0B';
                         case 'cancelled': return '#EF4444';
+                        case 'cancelled_and_refunded': return '#8B5CF6'; // Purple for refunded status
                         default: return '#6B7280';
                       }
                     };
@@ -726,6 +813,7 @@ function ProfilePage() {
                         case 'ordered': return '📝 Ordered';
                         case 'pending': return '⏳ Pending';
                         case 'cancelled': return '❌ Cancelled';
+                        case 'cancelled_and_refunded': return '💰 Cancelled & Refunded';
                         default: return '📦 Processing';
                       }
                     };

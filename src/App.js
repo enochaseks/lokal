@@ -3,6 +3,7 @@ import './App.css';
 import ExplorePage from './pages/ExplorePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import HelpCenterPage from './pages/HelpCenterPage';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import OnboardingPage from './pages/OnboardingPage';
 import OnboardingSellCategoryPage from './pages/OnboardingSellCategoryPage';
@@ -27,8 +28,8 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminSetupPage from './pages/AdminSetupPage';
 import ReceiptsPage from './pages/ReceiptsPage';
-import { useEffect } from 'react';
-import { getAuth, signOut } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import { getAuth, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db } from './firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -118,6 +119,39 @@ function OnboardingGuard({ children }) {
   return children;
 }
 
+// Routes that can be accessed without authentication
+function PublicRoute({ element }) {
+  return element;
+}
+
+// Routes that require authentication
+function ProtectedRoute({ element }) {
+  const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+        navigate('/login');
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [navigate]);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  return isAuthenticated ? element : null;
+}
+
 function App() {
   return (
     <MessageProvider>
@@ -167,6 +201,7 @@ function App() {
                 <Route path="/my-reviews" element={<StoreReviewsPage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/help-center" element={<PublicRoute element={<HelpCenterPage />} />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/onboarding-shop-type" element={<OnboardingShopTypePage />} />
                 <Route path="/create-profile" element={<CreateProfilePage />} />

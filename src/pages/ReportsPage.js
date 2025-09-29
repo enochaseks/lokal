@@ -26,7 +26,16 @@ function ReportsPage() {
   const [loadingRefunds, setLoadingRefunds] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [storeRefundsEnabled, setStoreRefundsEnabled] = useState(false);
-  const [regeneratedReceipts, setRegeneratedReceipts] = useState([]);
+  const [regeneratedReceipts, setRegeneratedReceipts] = useState(() => {
+    // Initialize from localStorage if available
+    try {
+      const savedReceipts = localStorage.getItem('regeneratedReceipts');
+      return savedReceipts ? JSON.parse(savedReceipts) : [];
+    } catch (error) {
+      console.error('Error loading receipts from localStorage:', error);
+      return [];
+    }
+  });
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [receiptType, setReceiptType] = useState('refund'); // 'refund' or 'order'
   const [previewData, setPreviewData] = useState(null);
@@ -364,6 +373,8 @@ function ReportsPage() {
       case 'pending_review': return '#F59E0B';
       case 'resolved': return '#10B981';
       case 'serious_complaint': return '#EF4444';
+      case 'cancelled': return '#EF4444';
+      case 'cancelled_and_refunded': return '#8B5CF6'; // Purple for refunded status
       default: return '#6B7280';
     }
   };
@@ -373,8 +384,24 @@ function ReportsPage() {
       case 'pending_review': return 'Pending Review';
       case 'resolved': return 'Resolved';
       case 'serious_complaint': return 'Serious Complaint';
+      case 'cancelled': return '❌ Cancelled';
+      case 'cancelled_and_refunded': return '💰 Cancelled & Refunded';
       default: return status;
     }
+  };
+  
+  // Function to determine transaction status
+  const getTransactionStatus = (transaction) => {
+    if (transaction.transactionType === 'refund') {
+      return 'cancelled_and_refunded';
+    }
+    
+    // For regular orders, check if there's a status field
+    if (transaction.status) {
+      return transaction.status;
+    }
+    
+    return transaction.orderStatus || 'unknown';
   };
   
   // Function to regenerate receipt for a transaction
@@ -1040,16 +1067,32 @@ For any questions regarding this order, please contact the seller.`,
         customerName: orderData.customerName || 'Unknown Customer',
         amount: orderData.totalAmount,
         currency: orderData.currency,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(), // Use ISO string for better serialization
         messageId: docRef.id,
         dataQuality: dataQuality,
         email: orderData.customerEmail,
         phone: orderData.customerPhone,
         itemCount: orderData.items ? orderData.items.length : 0,
-        receiptType: isRefund ? 'refund' : 'order'
+        receiptType: isRefund ? 'refund' : 'order',
+        sellerId: currentUser.uid // Associate receipt with current seller
       };
       
-      setRegeneratedReceipts(prevReceipts => [newRegenerated, ...prevReceipts]);
+      // Limit to most recent 50 receipts per seller to avoid localStorage getting too large
+      setRegeneratedReceipts(prevReceipts => {
+        // Filter out receipts older than 30 days
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        // Filter to keep only receipts for this seller that aren't too old
+        const sellerReceipts = prevReceipts
+          .filter(receipt => 
+            (receipt.sellerId === currentUser.uid || !receipt.sellerId) && 
+            (receipt.timestamp ? new Date(receipt.timestamp) > thirtyDaysAgo : true)
+          );
+        
+        // Add the new receipt to the beginning
+        return [newRegenerated, ...sellerReceipts].slice(0, 50);
+      });
       
       // Show success notification with more detailed info
       const notification = document.createElement('div');
@@ -1100,6 +1143,37 @@ For any questions regarding this order, please contact the seller.`,
     }
   };
 
+  // Save regenerated receipts to localStorage whenever they change
+  useEffect(() => {
+    try {
+      // Only save to localStorage if we have receipts to save
+      if (regeneratedReceipts && regeneratedReceipts.length > 0) {
+        localStorage.setItem('regeneratedReceipts', JSON.stringify(regeneratedReceipts));
+      }
+    } catch (error) {
+      console.error('Error saving receipts to localStorage:', error);
+    }
+  }, [regeneratedReceipts]);
+  
+  // Load user-specific receipts when user changes
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        const savedReceipts = localStorage.getItem('regeneratedReceipts');
+        if (savedReceipts) {
+          const parsedReceipts = JSON.parse(savedReceipts);
+          // Filter receipts to show only those belonging to the current user
+          const userReceipts = parsedReceipts.filter(
+            receipt => receipt.sellerId === currentUser.uid || !receipt.sellerId
+          );
+          setRegeneratedReceipts(userReceipts);
+        }
+      } catch (error) {
+        console.error('Error loading user receipts from localStorage:', error);
+      }
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     const auth = getAuth();
     let unsubscribeComplaints1 = null;
@@ -1132,10 +1206,11 @@ For any questions regarding this order, please contact the seller.`,
               orderBy('createdAt', 'desc')
             );
             
-            unsubscribeRefunds = onSnapshot(refundsQuery, (snapshot) => {
+            unsubscribeRefunds = onSnapshot(refundsQuery, async (snapshot) => {
               const refunds = snapshot.docs.map(doc => ({
                 id: doc.id,
                 transactionType: 'refund',
+                status: 'cancelled_and_refunded', // Mark all refunds with this status
                 ...doc.data()
               }));
               console.log('Loaded refund transactions:', refunds.length);
@@ -1155,14 +1230,42 @@ For any questions regarding this order, please contact the seller.`,
               limit(100) // Limit to reasonable amount for performance
             );
             
-            unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
+            unsubscribeOrders = onSnapshot(ordersQuery, async (snapshot) => {
+              // First get basic transaction data
               const orders = snapshot.docs.map(doc => ({
                 id: doc.id,
                 transactionType: 'order',
                 ...doc.data()
               }));
+              
               console.log('Loaded order transactions:', orders.length);
-              setAllOrders(orders);
+              
+              // Process in batches to avoid performance issues
+              const processedOrders = [...orders];
+              
+              // Update orders with status data from orders collection
+              for (let i = 0; i < processedOrders.length; i++) {
+                const transaction = processedOrders[i];
+                if (transaction.orderId) {
+                  try {
+                    const orderRef = doc(db, 'orders', transaction.orderId);
+                    const orderSnap = await getDoc(orderRef);
+                    
+                    if (orderSnap.exists()) {
+                      const orderData = orderSnap.data();
+                      // Update the status in our transaction data
+                      processedOrders[i] = {
+                        ...transaction,
+                        status: orderData.status || transaction.status || 'unknown'
+                      };
+                    }
+                  } catch (error) {
+                    console.error('Error fetching order status:', error);
+                  }
+                }
+              }
+              
+              setAllOrders(processedOrders);
               setLoadingOrders(false);
             }, (error) => {
               console.error('Error fetching order transactions:', error);
@@ -2099,6 +2202,7 @@ For any questions regarding this order, please contact the seller.`,
                       <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Date</th>
                       <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Customer</th>
                       <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Amount</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Status</th>
                       <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Payment Method</th>
                       {receiptType === 'refund' && (
                         <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Reason</th>
@@ -2145,6 +2249,19 @@ For any questions regarding this order, please contact the seller.`,
                         }}>
                           {getCurrencySymbol(transaction.currency || 'GBP')}
                           {formatPrice(Math.abs(transaction.amount || transaction.totalAmount || 0), transaction.currency || 'GBP')}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', fontSize: '0.875rem' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '4px',
+                            backgroundColor: getStatusColor(getTransactionStatus(transaction)),
+                            color: 'white',
+                            fontSize: '0.75rem',
+                            fontWeight: '600'
+                          }}>
+                            {getStatusText(getTransactionStatus(transaction))}
+                          </span>
                         </td>
                         <td style={{ padding: '0.75rem 1rem', color: '#1F2937', fontSize: '0.875rem' }}>
                           {transaction.paymentMethod ? transaction.paymentMethod.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'}

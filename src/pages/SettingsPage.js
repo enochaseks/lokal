@@ -53,7 +53,8 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [storeItems, setStoreItems] = useState([]);
   const [marketingConsent, setMarketingConsent] = useState(false);
-  const [view, setView] = useState('main'); // 'main', 'payment', 'discounts', 'account', 'about', 'terms', 'privacy', 'communications'
+  const [view, setView] = useState('main'); // 'main', 'payment', 'discounts', 'account', 'about', 'terms', 'privacy', 'communications', 'help'
+  const [helpTopic, setHelpTopic] = useState(''); // To track which help topic is being viewed
   const [showReauthModal, setShowReauthModal] = useState(false);
   const [reauthPassword, setReauthPassword] = useState('');
   const [reauthError, setReauthError] = useState('');
@@ -1378,6 +1379,870 @@ function SettingsPage() {
             </div>
           )}
           
+        </div>
+      </div>
+    );
+  }
+
+  // Help Topic view
+  if (view === 'help' && helpTopic) {
+    // Common styles for help topic pages
+    const topicStyles = {
+      h1: { fontSize: '1.8rem', fontWeight: 700, color: '#007B7F', marginBottom: '20px' },
+      h2: { fontSize: '1.4rem', fontWeight: 600, color: '#333', marginTop: '30px', marginBottom: '15px' },
+      p: { fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '15px', color: '#444' },
+      ul: { paddingLeft: '25px', marginBottom: '20px' },
+      li: { fontSize: '1.05rem', marginBottom: '10px', lineHeight: '1.5' },
+      infoBox: {
+        backgroundColor: '#f0f7f7',
+        border: '1px solid #d0e0e0',
+        borderRadius: '8px',
+        padding: '15px 20px',
+        marginBottom: '20px'
+      },
+      steps: {
+        counter: { 
+          backgroundColor: '#007B7F',
+          color: 'white',
+          width: '30px',
+          height: '30px',
+          borderRadius: '50%',
+          display: 'inline-flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginRight: '15px',
+          fontWeight: 'bold'
+        },
+        container: {
+          display: 'flex',
+          alignItems: 'flex-start',
+          marginBottom: '20px'
+        },
+        content: {
+          flex: 1
+        }
+      },
+      image: {
+        maxWidth: '100%',
+        height: 'auto',
+        border: '1px solid #ddd',
+        borderRadius: '8px',
+        marginBottom: '20px'
+      }
+    };
+
+    return (
+      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+        <Navbar />
+        <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem' }}>
+          <button onClick={() => setHelpTopic('')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back to Help Center'}</button>
+          
+          {/* Store Creation Guide Content */}
+          {helpTopic === 'store-creation' && (
+            <div>
+              <h1 style={topicStyles.h1}>Store Creation Guide</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Getting Started:</strong> Setting up your store on Lokal is a straightforward process that takes just a few minutes to complete. Follow this guide to create your store and start selling your products to customers worldwide.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Requirements Before You Begin</h2>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}>Valid email address and phone number</li>
+                <li style={topicStyles.li}>Business name and description</li>
+                <li style={topicStyles.li}>High-quality logo or store image (recommended size: 500x500px)</li>
+                <li style={topicStyles.li}>Basic information about your products</li>
+                <li style={topicStyles.li}>Bank account or payment details for receiving payments</li>
+              </ul>
+              
+              <h2 style={topicStyles.h2}>Step-by-Step Guide</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Create Your Account</h3>
+                  <p style={topicStyles.p}>If you don't already have a Lokal account, sign up using your email address. Verify your email and complete your personal profile.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Navigate to "Create Shop"</h3>
+                  <p style={topicStyles.p}>After logging in, click on your profile picture in the top right corner and select "Create Shop" from the dropdown menu.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Enter Business Information</h3>
+                  <p style={topicStyles.p}>Fill in your store name, description, business category, and location. Make sure your store description is clear and highlights what makes your business unique.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Upload Store Logo</h3>
+                  <p style={topicStyles.p}>Upload your store logo or a representative image. This will be displayed throughout Lokal and help customers recognize your brand.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Set Up Payment Information</h3>
+                  <p style={topicStyles.p}>Choose how you want to receive payments from customers and enter your banking details. This information is securely encrypted.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>6</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Review Terms and Conditions</h3>
+                  <p style={topicStyles.p}>Read and accept Lokal's seller terms and conditions to proceed.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>7</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Submit for Review</h3>
+                  <p style={topicStyles.p}>Submit your store for review. Our team will review your information and approve your store, typically within 24-48 hours.</p>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>After Your Store is Approved</h2>
+              <p style={topicStyles.p}>Once approved, you can start adding products to your inventory, customize your store page, set shipping options, and start promoting your products.</p>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Need more help?</strong> Check out our guides on <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('adding-products'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Adding Products to Your Inventory</a> and <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('payment-methods'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Setting up Payment Methods</a>.</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Adding Products to Inventory */}
+          {helpTopic === 'adding-products' && (
+            <div>
+              <h1 style={topicStyles.h1}>Adding Products to Your Inventory</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Showcase Your Products:</strong> A well-organized inventory with detailed product listings helps attract customers and drive sales on Lokal. Follow this guide to add products to your store.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Before Adding Products</h2>
+              <p style={topicStyles.p}>Make sure you have the following information ready for each product:</p>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}>Clear, high-quality product images (main image plus additional angles)</li>
+                <li style={topicStyles.li}>Accurate product title and detailed description</li>
+                <li style={topicStyles.li}>Product pricing and any discount information</li>
+                <li style={topicStyles.li}>Available quantity/stock level</li>
+                <li style={topicStyles.li}>Product variants (sizes, colors, etc.) if applicable</li>
+                <li style={topicStyles.li}>Shipping information and delivery times</li>
+              </ul>
+              
+              <h2 style={topicStyles.h2}>Step-by-Step Guide</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Access Your Store Dashboard</h3>
+                  <p style={topicStyles.p}>Login to your Lokal account and navigate to your store dashboard by clicking on "My Store" in the navigation menu.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Find the Products Section</h3>
+                  <p style={topicStyles.p}>In your store dashboard, look for the "Products" or "Inventory" section and click "Add New Product".</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Upload Product Images</h3>
+                  <p style={topicStyles.p}>Upload your main product image and additional images showing different angles or features. High-quality images increase conversion rates.</p>
+                  <p style={topicStyles.p}><strong>Pro tip:</strong> Use images with a clean, consistent background and good lighting.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Add Product Details</h3>
+                  <p style={topicStyles.p}>Enter a clear product title, detailed description, price, and quantity. Be specific about product features and benefits.</p>
+                  <p style={topicStyles.p}><strong>Best practice:</strong> Include dimensions, materials, care instructions, and other relevant details.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Set Product Categories</h3>
+                  <p style={topicStyles.p}>Select appropriate categories and tags for your product to help customers find it when browsing or searching.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>6</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Add Product Variants (Optional)</h3>
+                  <p style={topicStyles.p}>If your product comes in different options like sizes or colors, add these as variants with specific prices and quantities.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>7</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Configure Shipping Options</h3>
+                  <p style={topicStyles.p}>Set shipping costs, delivery times, and any shipping restrictions for the product.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>8</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Preview and Publish</h3>
+                  <p style={topicStyles.p}>Review all information for accuracy, preview how your product will appear to customers, and click "Publish" to make it live in your store.</p>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Managing Your Inventory</h2>
+              <p style={topicStyles.p}>Once products are added, you can:</p>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}>Edit product details at any time</li>
+                <li style={topicStyles.li}>Update inventory quantities</li>
+                <li style={topicStyles.li}>Create special offers or discounts</li>
+                <li style={topicStyles.li}>Track product performance</li>
+                <li style={topicStyles.li}>Mark products as featured to highlight them in your store</li>
+              </ul>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Need more help?</strong> Learn about creating effective product listings in our <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('seller-faqs'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Seller FAQs</a> or set up payment methods with our <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('payment-methods'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Payment Methods Guide</a>.</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Setting up payment methods */}
+          {helpTopic === 'payment-methods' && (
+            <div>
+              <h1 style={topicStyles.h1}>Setting Up Payment Methods</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Get Paid Easily:</strong> Setting up your payment information correctly ensures you receive payments promptly and securely from your customers.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Available Payment Options</h2>
+              <p style={topicStyles.p}>Lokal offers several ways to receive payments from your customers:</p>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}><strong>Direct Bank Transfer</strong> - Payments go directly to your bank account</li>
+                <li style={topicStyles.li}><strong>Mobile Money</strong> - For supported countries like Ghana and Kenya</li>
+                <li style={topicStyles.li}><strong>Credit/Debit Card</strong> - For your own merchant card processing</li>
+              </ul>
+              
+              <h2 style={topicStyles.h2}>Setting Up Your Payment Details</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Go to Payment Settings</h3>
+                  <p style={topicStyles.p}>From your store dashboard, navigate to "Settings" and then select "Payment Type".</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Select Your Preferred Payment Method</h3>
+                  <p style={topicStyles.p}>Choose your preferred payment method from the available options.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Enter Your Banking Details</h3>
+                  <p style={topicStyles.p}>Provide the requested information based on your country and chosen payment method:</p>
+                  <ul style={topicStyles.ul}>
+                    <li style={topicStyles.li}><strong>UK:</strong> Sort code, account number, bank name</li>
+                    <li style={topicStyles.li}><strong>USA:</strong> Routing number, account number, bank name</li>
+                    <li style={topicStyles.li}><strong>Nigeria:</strong> Account number, bank name</li>
+                    <li style={topicStyles.li}><strong>Ghana/Kenya:</strong> Account number, bank name, mobile money number</li>
+                    <li style={topicStyles.li}><strong>South Africa:</strong> Account number, bank name, branch code</li>
+                    <li style={topicStyles.li}><strong>Canada:</strong> Transit number, account number, bank name</li>
+                    <li style={topicStyles.li}><strong>Caribbean:</strong> Account number, bank name, branch code</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Select Card Type (If Applicable)</h3>
+                  <p style={topicStyles.p}>If you're setting up a card payment method, select the card type you'll be using for transactions.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '10px' }}>Save Your Payment Information</h3>
+                  <p style={topicStyles.p}>Review all entered details for accuracy and click "Save" to securely store your payment information.</p>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Security and Privacy</h2>
+              <p style={topicStyles.p}>Your banking information is encrypted and securely stored. Only masked versions of sensitive details are displayed in your account for security purposes.</p>
+              
+              <h2 style={topicStyles.h2}>Receiving Payments</h2>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}>When a customer makes a purchase, the payment will be processed according to your chosen method</li>
+                <li style={topicStyles.li}>Payment processing times vary by method and country</li>
+                <li style={topicStyles.li}>Transaction fees may apply depending on your payment method</li>
+              </ul>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Having issues?</strong> If you're experiencing problems with payments, please visit our <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('failed-transactions'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Failed Transactions</a> page or contact our <a href="#" onClick={(e) => { e.preventDefault(); setHelpTopic('support-ticket'); }} style={{ color: '#007B7F', textDecoration: 'none' }}>Support Team</a>.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Contact Support Form */}
+          {helpTopic === 'contact-support' && (
+            <div>
+              <h1 style={topicStyles.h1}>Contact Support</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>We're here to help!</strong> Our customer support team is ready to assist you with any questions or issues you may have.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Send Us a Message</h2>
+              <p style={topicStyles.p}>Please fill out the form below with details about your inquiry, and we'll get back to you as soon as possible.</p>
+              
+              <form style={{ marginTop: '20px' }}>
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Name</label>
+                  <input 
+                    type="text" 
+                    placeholder="Your full name"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem'
+                    }} 
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Email Address</label>
+                  <input 
+                    type="email" 
+                    placeholder="your.email@example.com"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem'
+                    }} 
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Subject</label>
+                  <select 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      backgroundColor: '#fff'
+                    }}
+                  >
+                    <option value="">Select a topic</option>
+                    <option value="account">Account Issues</option>
+                    <option value="payment">Payment Problems</option>
+                    <option value="store">Store Setup</option>
+                    <option value="products">Product Management</option>
+                    <option value="orders">Order Issues</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Message</label>
+                  <textarea 
+                    placeholder="Please describe your issue in detail"
+                    rows={6}
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      resize: 'vertical'
+                    }} 
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <input type="checkbox" id="attachLogs" />
+                  <label htmlFor="attachLogs" style={{ marginLeft: '8px' }}>Include account information to help us assist you faster</label>
+                </div>
+                
+                <button 
+                  type="button" 
+                  onClick={() => alert('Support request submitted! We will contact you soon.')}
+                  style={{ 
+                    backgroundColor: '#007B7F', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    padding: '12px 25px', 
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Submit Request
+                </button>
+              </form>
+              
+              <h2 style={topicStyles.h2}>Other Ways to Contact Us</h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
+                <div style={{ flex: '1 1 250px', padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', color: '#007B7F' }}>Email Support</h3>
+                  <p style={{ margin: '0 0 10px 0' }}>support@lokal.com</p>
+                  <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>Response within 24 hours</p>
+                </div>
+                
+                <div style={{ flex: '1 1 250px', padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', color: '#007B7F' }}>Phone Support</h3>
+                  <p style={{ margin: '0 0 10px 0' }}>+1 (555) 123-4567</p>
+                  <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>Monday - Friday, 9am - 5pm</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Support Ticket Form */}
+          {helpTopic === 'support-ticket' && (
+            <div>
+              <h1 style={topicStyles.h1}>Submit a Support Ticket</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Need assistance?</strong> Submit a support ticket and our team will get back to you as soon as possible.</p>
+              </div>
+              
+              <form style={{ marginTop: '20px' }}>
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Name</label>
+                  <input 
+                    type="text" 
+                    placeholder="Your full name"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem'
+                    }} 
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Email Address</label>
+                  <input 
+                    type="email" 
+                    placeholder="your.email@example.com"
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem'
+                    }} 
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Issue Type</label>
+                  <select 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      backgroundColor: '#fff'
+                    }}
+                  >
+                    <option value="">Select issue type</option>
+                    <option value="technical">Technical Problem</option>
+                    <option value="billing">Billing Issue</option>
+                    <option value="account">Account Access</option>
+                    <option value="product">Product Question</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Priority</label>
+                  <select 
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      backgroundColor: '#fff'
+                    }}
+                  >
+                    <option value="low">Low - General Question</option>
+                    <option value="medium">Medium - Need Assistance</option>
+                    <option value="high">High - Urgent Issue</option>
+                  </select>
+                </div>
+                
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>Description</label>
+                  <textarea 
+                    placeholder="Please describe your issue in detail"
+                    rows={6}
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      resize: 'vertical'
+                    }} 
+                  />
+                </div>
+                
+                <button 
+                  type="button" 
+                  onClick={() => alert('Support ticket submitted! Your ticket number is #' + Math.floor(100000 + Math.random() * 900000))}
+                  style={{ 
+                    backgroundColor: '#007B7F', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    padding: '12px 25px', 
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Submit Ticket
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Other help topics will go here */}
+
+        </div>
+      </div>
+    );
+  }
+
+  // Help Center main view
+  if (view === 'help' && !helpTopic) {
+    return (
+      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+        <Navbar />
+        <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem' }}>
+          <button onClick={() => setView('main')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
+          <h2 style={{ fontWeight: 700, fontSize: '1.8rem', marginBottom: 24, color: '#007B7F' }}>Help Center</h2>
+          
+          <p style={{ marginBottom: 20, fontSize: '1.1rem' }}>
+            Welcome to the Lokal Help Center! Find answers to common questions and learn how to make the most of your Lokal experience.
+          </p>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+            
+            {/* For Store Owners */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path d="M0 2.5A1.5 1.5 0 0 1 1.5 1h11A1.5 1.5 0 0 1 14 2.5v10.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 0 13V2.5zM3 3.5a.5.5 0 1 0-1 0 .5.5 0 0 0 1 0zm1.5.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zm1 0a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+                    <path d="M2 5.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Setting Up Your Store</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Learn how to create and configure your store, add products, and start selling on Lokal.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('store-creation'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Store creation guide
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('adding-products'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Adding products to your inventory
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('payment-methods'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Setting up payment methods
+                  </a>
+                </li>
+              </ul>
+            </div>
+            
+            {/* For Payment Issues */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7z"/>
+                    <path d="M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Payment Issues</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Solutions for common payment problems and how to resolve transaction issues.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('failed-transactions'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Failed transactions
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('refund-requests'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Refund requests
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('bank-details'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Setting up bank details
+                  </a>
+                </li>
+              </ul>
+            </div>
+            
+            {/* For Account Issues */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Account Management</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Help with account settings, profile updates, and security concerns.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('update-profile'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Updating profile information
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('password-reset'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Password reset
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('account-security'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Account security
+                  </a>
+                </li>
+              </ul>
+            </div>
+            
+            {/* For Buyer Support */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path fillRule="evenodd" d="M10.5 3.5a2.5 2.5 0 0 0-5 0V4h5v-.5zm1 0V4H15v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V4h3.5v-.5a3.5 3.5 0 1 1 7 0zm-.646 5.354a.5.5 0 0 0-.708-.708L7.5 10.793 6.354 9.646a.5.5 0 1 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0l3-3z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Shopping Guide</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Information for buyers on how to browse, purchase, and track orders.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); navigate('/help-center'); setView('help'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Making a purchase
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); navigate('/help-center'); setView('help'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Tracking your order
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); navigate('/help-center'); setView('help'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Leaving reviews
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* For Customer Service */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+                    <path d="m2.165 15.803.02-.004c1.83-.363 2.948-.842 3.468-1.105A9.06 9.06 0 0 0 8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6a10.437 10.437 0 0 1-.524 2.318l-.003.011a10.722 10.722 0 0 1-.244.637c-.079.186.074.394.273.362a21.673 21.673 0 0 0 .693-.125zm.8-3.108a1 1 0 0 0-.287-.801C1.618 10.83 1 9.468 1 8c0-3.192 3.004-6 7-6s7 2.808 7 6c0 3.193-3.004 6-7 6a8.06 8.06 0 0 1-2.088-.272 1 1 0 0 0-.711.074c-.387.196-1.24.57-2.634.893a10.97 10.97 0 0 0 .398-2z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Contact Support</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Get in touch with our customer service team for personalized assistance.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('support-ticket'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Submit a support ticket
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('live-chat'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Live chat support
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('contact-info'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Contact information
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* For FAQs */}
+            <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                    <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Frequently Asked Questions</h3>
+              </div>
+              <p style={{ margin: '0 0 15px 0', color: '#555' }}>Quick answers to common questions about using Lokal.</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('general-faqs'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    General FAQs
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('seller-faqs'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Seller FAQs
+                  </a>
+                </li>
+                <li style={{ marginBottom: '8px' }}>
+                  <a 
+                    href="#" 
+                    onClick={(e) => { e.preventDefault(); setHelpTopic('buyer-faqs'); }} 
+                    style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                  >
+                    Buyer FAQs
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#f6f6fa', borderRadius: '8px', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, color: '#007B7F', fontWeight: 600 }}>Can't find what you're looking for?</h3>
+            <p style={{ marginBottom: '20px' }}>Our support team is here to help you with any questions or issues.</p>
+            <button 
+              onClick={() => user ? setHelpTopic('contact-support') : navigate('/help-center')}
+              style={{ 
+                backgroundColor: '#007B7F', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                padding: '10px 20px', 
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Contact Support
+            </button>
+          </div>
         </div>
       </div>
     );

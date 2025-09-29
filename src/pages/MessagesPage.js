@@ -5659,60 +5659,45 @@ Bring your pickup code when you collect.`,
 
       await addDoc(collection(db, 'messages'), refundMessage);
       
-      // Automatically process the refund based on payment method
+      // Now all refunds require seller approval - no automatic processing
       try {
         const conversationId = selectedConversation.id || 
           [currentUser.uid, selectedConversation.otherUserId].sort().join('_');
         
         if (refundMessage.refundData.requiresStripeRefund && refundMessage.refundData.paymentIntentId) {
-          // Automatic Stripe refund for card/digital payments
-          console.log('🚀 Starting automatic Stripe refund process');
+          // Stripe/card payment refunds - now wait for seller approval
+          console.log('� Card refund request - awaiting seller approval');
           
-          const refundResult = await processRefundSafely(refundMessage.refundData);
-          
-          if (refundResult.success) {
-            const result = refundResult.data;
-            
-            // Update seller wallet for refund deduction
-            await updateSellerWalletForRefund({
+          // Notify customer that refund request has been sent to seller
+          const cardRefundRequestNotice = {
+            conversationId: conversationId,
+            senderId: 'system',
+            senderName: 'Refund System',
+            receiverId: currentUser.uid,
+            receiverName: currentUser.displayName || currentUser.email,
+            message: `🔄 REFUND REQUEST SUBMITTED\n\nOrder ID: ${refundMessage.refundData.orderId}\nAmount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n⏳ Your refund request has been sent to the seller for approval.\n\nOnce approved, your refund will be processed to your original payment method within 2-5 business days.`,
+            messageType: 'refund_request_notice',
+            timestamp: serverTimestamp(),
+            isRead: false,
+            orderData: {
               ...refundMessage.refundData,
-              stripeRefundId: result.refundId
-            }, refundMessage.refundData.amount);
-            
-            // Send automatic approval message to customer
-            const autoApprovalMessage = {
-              conversationId: conversationId,
-              senderId: 'system',
-              senderName: 'Refund System',
-              receiverId: currentUser.uid,
-              receiverName: currentUser.displayName || currentUser.email,
-              message: `✅ REFUND PROCESSED AUTOMATICALLY\n\nOrder ID: ${refundMessage.refundData.orderId}\nRefund Amount: ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)}\n\n💳 Your money has been refunded to your original payment method!\n\n⏱️ You will receive your refund within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}\n\nThank you for using our service!`,
-              messageType: 'refund_approved',
-              timestamp: serverTimestamp(),
-              isRead: false,
-              orderData: {
-                ...refundMessage.refundData,
-                refundApproved: true,
-                refundAmount: refundMessage.refundData.amount,
-                refundProcessedAt: new Date().toISOString(),
-                stripeRefundId: result.refundId,
-                customerName: refundMessage.refundData.customerName
-              }
-            };
-
-            if (selectedConversation.otherUserEmail) {
-              autoApprovalMessage.receiverEmail = selectedConversation.otherUserEmail;
+              refundRequested: true,
+              refundAmount: refundMessage.refundData.amount,
+              refundRequestedAt: new Date().toISOString(),
+              awaitingSellerApproval: true,
+              customerName: refundMessage.refundData.customerName
             }
+          };
 
-            await addDoc(collection(db, 'messages'), autoApprovalMessage);
-            
-            console.log('✅ Automatic Stripe refund processed successfully');
-            alert(`✅ Refund Processed!\n\nYour refund of ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)} has been processed automatically.\n\nRefund ID: ${result.refundId}\n\nYou will receive your money within 2-5 business days.`);
-          } else {
-            console.error('❌ Automatic Stripe refund failed:', refundResult.error);
-            alert(`⚠️ Automatic refund failed: ${refundResult.error}\n\nPlease contact customer support for manual processing.`);
-            // Fall back to manual notification if auto-refund fails
+          if (currentUser.email) {
+            cardRefundRequestNotice.receiverEmail = currentUser.email;
           }
+
+          await addDoc(collection(db, 'messages'), cardRefundRequestNotice);
+          
+          console.log('✅ Card refund request sent to seller for approval');
+          alert(`✅ Refund Request Sent!\n\nYour refund request has been sent to the seller for approval.\n\nOnce approved, your refund of ${getCurrencySymbol(refundMessage.refundData.currency)}${formatPrice(refundMessage.refundData.amount, refundMessage.refundData.currency)} will be processed to your original payment method.`);
+          
         } else {
           // Bank transfer - send notification to seller about manual refund
           const manualRefundNotice = {
@@ -5783,7 +5768,7 @@ Bring your pickup code when you collect.`,
 
       const notification = document.createElement('div');
       notification.innerHTML = refundMessage.refundData.requiresStripeRefund 
-        ? `✅ Order cancelled and refund processing automatically!`
+        ? `✅ Order cancelled! Refund request sent to seller for approval.`
         : `✅ Order cancelled and seller notified to process manual refund!`;
       notification.style.cssText = `
         position: fixed;
@@ -5854,7 +5839,7 @@ Bring your pickup code when you collect.`,
             senderEmail: currentUser.email,
             receiverId: selectedConversation.otherUserId,
             receiverName: selectedConversation.otherUserName,
-                message: `✅ REFUND APPROVED & PROCESSED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}${refundReason}\n\n💳 Your refund has been processed by Stripe and will appear in your bank account within 2-5 business days depending on your bank.\n\nRefund ID: ${result.refundId}`,
+                message: `✅ REFUND APPROVED & PROCESSED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}${refundReason}\n\n💳 Your refund has been processed and sent to your original payment method.\n\n⏱️ NEXT STEPS:\n• Your refund will appear in your account within 2-5 business days\n• You can check your account statements for the refund transaction\n• If not received after 5 business days, please contact your bank\n• Reference this Refund ID when contacting support: ${result.refundId}`,
             messageType: 'refund_approved',
             timestamp: serverTimestamp(),
             isRead: false,
@@ -5864,7 +5849,9 @@ Bring your pickup code when you collect.`,
               refundAmount: refundAmount,
               refundProcessedAt: new Date().toISOString(),
               stripeRefundId: result.refundId,
-              refundReason: refundOrderData.refundReason
+              refundReason: refundOrderData.refundReason || 'Not specified',
+              status: 'cancelled_and_refunded',
+              cancelledAt: new Date().toISOString()
             }
           };
 
@@ -5876,7 +5863,7 @@ Bring your pickup code when you collect.`,
           await addDoc(collection(db, 'messages'), approvalMessage);
           
           console.log('✅ Seller-approved Stripe refund processed successfully');
-          alert(`✅ Refund Approved & Processed!\n\nRefund of ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)} has been processed through Stripe.\n\nRefund ID: ${result.refundId}\n\nThe customer will receive their money within 2-5 business days.`);
+          alert(`✅ Refund Approved & Processed!\n\nRefund of ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)} has been processed through Stripe.\n\nRefund ID: ${result.refundId}\n\nThe customer has been notified and will receive their money within 2-5 business days depending on their bank. They've been instructed to check their account and contact their bank if the refund doesn't appear within that timeframe.`);
 
         } else {
           console.error('❌ Error processing Stripe refund:', refundResult.error);
@@ -5893,7 +5880,7 @@ Bring your pickup code when you collect.`,
           senderEmail: currentUser.email,
           receiverId: selectedConversation.otherUserId,
           receiverName: selectedConversation.otherUserName,
-            message: `✅ REFUND APPROVED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}\n\n🏦 Since this was paid by bank transfer, please handle the refund directly. You can transfer the money back to the customer's account or arrange an alternative refund method.`,
+            message: `✅ REFUND APPROVED\n\nOrder ID: ${refundOrderData.orderId}\nRefund Amount: ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)}\n\n🏦 Since this was paid by bank transfer, the seller will process this refund manually back to your account.\n\n⏱️ NEXT STEPS:\n• Your refund will be processed within 1-3 business days\n• The seller will send confirmation once the transfer is complete\n• You'll receive a notification with transfer details\n• Please check your bank account for the incoming payment`,
           messageType: 'refund_approved',
           timestamp: serverTimestamp(),
           isRead: false,
@@ -5901,7 +5888,10 @@ Bring your pickup code when you collect.`,
             ...refundOrderData,
             refundApproved: true,
             refundAmount: refundAmount,
-            refundApprovedAt: new Date().toISOString()
+            refundApprovedAt: new Date().toISOString(),
+            refundReason: refundOrderData.refundReason || 'Not specified',
+            status: 'cancelled_and_refunded',
+            cancelledAt: new Date().toISOString()
           }
         };
 
@@ -5911,10 +5901,13 @@ Bring your pickup code when you collect.`,
         }
 
         await addDoc(collection(db, 'messages'), approvalMessage);
+        
+        // Show alert to seller for bank transfer refunds
+        alert(`✅ Refund Approved!\n\nYou've approved a refund of ${getCurrencySymbol(refundOrderData.currency)}${formatPrice(refundAmount, refundOrderData.currency)} for order ${refundOrderData.orderId}.\n\nNEXT STEPS:\n• Process this refund manually through your bank\n• The customer has been notified that you'll handle this refund\n• Once completed, please send them confirmation of the transfer`);
       }
 
       const notification = document.createElement('div');
-      notification.innerHTML = `✅ Refund approved and ${isStripePayment ? 'processed automatically' : 'awaiting manual processing'}.`;
+      notification.innerHTML = `✅ Refund approved and ${isStripePayment ? 'processed automatically via Stripe' : 'awaiting your manual bank transfer'}. Customer has been notified.`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -5959,7 +5952,7 @@ Bring your pickup code when you collect.`,
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
-        message: `❌ REFUND DENIED\n\nOrder ID: ${refundOrderData.orderId}\nReason: ${reason}\n\nYour refund request has been denied by the seller. If you disagree with this decision, please contact customer support.`,
+        message: `❌ REFUND DENIED\n\nOrder ID: ${refundOrderData.orderId}\nReason: ${reason}\n\nYour refund request has been denied by the seller.\n\n📢 HOW TO APPEAL THIS DECISION:\nIf you disagree with this decision, you can appeal by:\n• Messaging admin support directly\n• Include your order ID and this denial message\n• Provide any additional evidence to support your case\n• Our support team will review your appeal within 48 hours`,
         messageType: 'refund_denied',
         timestamp: serverTimestamp(),
         isRead: false,
@@ -5967,7 +5960,9 @@ Bring your pickup code when you collect.`,
           ...refundOrderData,
           refundDenied: true,
           refundDenialReason: reason,
-          refundDeniedAt: new Date().toISOString()
+          refundDeniedAt: new Date().toISOString(),
+          status: 'cancelled',
+          cancelledAt: new Date().toISOString()
         }
       };
 
@@ -5978,8 +5973,11 @@ Bring your pickup code when you collect.`,
 
       await addDoc(collection(db, 'messages'), denialMessage);
 
+      // Alert to confirm denial details
+      alert(`❌ Refund Denied\n\nYou have denied the refund request for Order ID: ${refundOrderData.orderId}\n\nReason provided: ${reason}\n\nThe customer has been notified and informed about the appeal process with admin support.`);
+
       const notification = document.createElement('div');
-      notification.innerHTML = `❌ Refund request denied.`;
+      notification.innerHTML = `❌ Refund request denied. Customer notified with appeal options.`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -7621,6 +7619,154 @@ Your pickup code is: ${pickupCode}
                                           <p><strong>🏦 Manual Refund Required:</strong> This was paid by bank transfer. You will need to send the refund manually from your bank account to the customer.</p>
                                         </div>
                                       )}
+                                    </div>
+                                    <div className="refund-actions" style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                                      <button 
+                                        onClick={() => {
+                                          const refundData = message.refundData || message.orderData || {};
+                                          // Ensure we have a valid refund object with required fields
+                                          const safeRefundData = {
+                                            ...refundData,
+                                            refundReason: refundData.refundReason || refundData.reason || 'Not specified',
+                                            orderId: refundData.orderId || 'Unknown',
+                                            currency: refundData.currency || 'GBP'
+                                          };
+                                          const amount = message.refundData?.amount || message.orderData?.totalAmount || 0;
+                                          approveRefund(safeRefundData, amount);
+                                        }}
+                                        style={{
+                                          backgroundColor: '#22C55E',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          padding: '8px 16px',
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '5px'
+                                        }}
+                                      >
+                                        <span>{'\u2713'}</span> Approve Refund
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          // Create a custom dialog for detailed denial reason
+                                          const dialogOverlay = document.createElement('div');
+                                          dialogOverlay.className = 'custom-dialog-overlay';
+                                          dialogOverlay.style.cssText = `
+                                            position: fixed;
+                                            top: 0;
+                                            left: 0;
+                                            right: 0;
+                                            bottom: 0;
+                                            background-color: rgba(0, 0, 0, 0.5);
+                                            display: flex;
+                                            justify-content: center;
+                                            align-items: center;
+                                            z-index: 1000;
+                                          `;
+                                          
+                                          const dialogContent = document.createElement('div');
+                                          dialogContent.className = 'custom-dialog';
+                                          dialogContent.style.cssText = `
+                                            background-color: white;
+                                            border-radius: 8px;
+                                            padding: 24px;
+                                            width: 500px;
+                                            max-width: 90%;
+                                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                                          `;
+                                          
+                                          dialogContent.innerHTML = `
+                                            <h2 style="margin-top: 0; color: #EF4444; font-size: 18px;">Deny Refund Request</h2>
+                                            <p style="margin-bottom: 20px;">Please provide a detailed reason for denying this refund request. This explanation will be sent to the customer.</p>
+                                            
+                                            <div style="margin-bottom: 15px;">
+                                              <label style="display: block; margin-bottom: 8px; font-weight: bold;">Denial Reason Category:</label>
+                                              <select id="denialReasonCategory" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #d1d5db;">
+                                                <option value="">Select a category...</option>
+                                                <option value="Outside return window">Outside return window</option>
+                                                <option value="Product was used/damaged">Product was used/damaged</option>
+                                                <option value="No valid reason provided">No valid reason provided</option>
+                                                <option value="Against store policy">Against store policy</option>
+                                                <option value="Customer error">Customer error</option>
+                                                <option value="Duplicate request">Duplicate request</option>
+                                                <option value="Other">Other</option>
+                                              </select>
+                                            </div>
+                                            
+                                            <div style="margin-bottom: 20px;">
+                                              <label style="display: block; margin-bottom: 8px; font-weight: bold;">Detailed Explanation:</label>
+                                              <textarea id="denialReasonDetails" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #d1d5db; min-height: 100px;" placeholder="Please provide specific details about why this refund is being denied..."></textarea>
+                                            </div>
+                                            
+                                            <div style="margin-bottom: 15px; padding: 10px; background-color: #FEF2F2; border-radius: 4px; border: 1px solid #FECACA;">
+                                              <p style="margin: 0; color: #B91C1C;"><strong>Note:</strong> The customer will be able to appeal this decision with admin support.</p>
+                                            </div>
+                                            
+                                            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                                              <button id="cancelDenial" style="padding: 8px 16px; border-radius: 4px; border: 1px solid #d1d5db; background-color: white; cursor: pointer;">Cancel</button>
+                                              <button id="confirmDenial" style="padding: 8px 16px; border-radius: 4px; border: none; background-color: #EF4444; color: white; cursor: pointer; font-weight: bold;">Deny Refund</button>
+                                            </div>
+                                          `;
+                                          
+                                          dialogOverlay.appendChild(dialogContent);
+                                          document.body.appendChild(dialogOverlay);
+                                          
+                                          // Handle dialog interactions
+                                          document.getElementById('cancelDenial').addEventListener('click', () => {
+                                            document.body.removeChild(dialogOverlay);
+                                          });
+                                          
+                                          document.getElementById('confirmDenial').addEventListener('click', () => {
+                                            const category = document.getElementById('denialReasonCategory').value;
+                                            const details = document.getElementById('denialReasonDetails').value;
+                                            
+                                            if (!category) {
+                                              alert('Please select a reason category.');
+                                              return;
+                                            }
+                                            
+                                            if (!details.trim()) {
+                                              alert('Please provide detailed explanation for the denial.');
+                                              return;
+                                            }
+                                            
+                                            // Format the full denial reason
+                                            const fullReason = `${category}: ${details}`;
+                                            
+                                            const refundData = message.refundData || message.orderData || {};
+                                            // Ensure we have a valid refund object with required fields
+                                            const safeRefundData = {
+                                              ...refundData,
+                                              refundReason: refundData.refundReason || refundData.reason || 'Not specified',
+                                              orderId: refundData.orderId || 'Unknown',
+                                              currency: refundData.currency || 'GBP'
+                                            };
+                                            
+                                            // Remove the dialog
+                                            document.body.removeChild(dialogOverlay);
+                                            
+                                            // Process the refund denial
+                                            denyRefund(safeRefundData, fullReason);
+                                          });
+                                        }}
+                                        style={{
+                                          backgroundColor: '#EF4444',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          padding: '8px 16px',
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '5px'
+                                        }}
+                                      >
+                                        <span>{'\u2717'}</span> Deny Refund
+                                      </button>
                                     </div>
                                   </div>
                                 </div>
@@ -10080,7 +10226,14 @@ I hereby confirm this is a formal report and all information provided is accurat
                 </div>
 
                 <div className="refund-warning">
-                  <p>⚠️ <strong>Warning:</strong> This will cancel your order and send a refund request to the seller. This action cannot be undone.</p>
+                  <p>⚠️ <strong>Warning:</strong> This will cancel your order and send a refund request to the seller for approval. Refunds are subject to seller review before processing. This action cannot be undone.</p>
+                </div>
+                <div className="refund-info" style={{ backgroundColor: '#f0f9ff', padding: '10px', borderRadius: '4px', marginBottom: '15px', border: '1px solid #bae6fd' }}>
+                  <p style={{ margin: '0' }}><strong>ℹ️ Note:</strong> All refund requests must be approved by the seller. Once approved:</p>
+                  <ul style={{ marginTop: '5px', paddingLeft: '25px' }}>
+                    <li>Card/digital payments will be refunded to your original payment method</li>
+                    <li>Bank transfers will be refunded manually by the seller</li>
+                  </ul>
                 </div>
 
                 <div className="modal-actions">
