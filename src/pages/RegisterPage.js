@@ -389,7 +389,17 @@ function RegisterPage() {
                 id="termsCheckbox"
                 checked={agreedToTerms}
                 onChange={() => setAgreedToTerms(!agreedToTerms)}
-                style={{ marginRight: '8px', marginTop: '4px' }}
+                style={{ 
+                  marginRight: '8px', 
+                  marginTop: '4px',
+                  minWidth: '20px', 
+                  minHeight: '20px',
+                  width: '20px',
+                  height: '20px',
+                  accentColor: '#D92D20',
+                  boxSizing: 'border-box',
+                  border: '2px solid #1C1C1C'
+                }}
                 required
               />
               <label htmlFor="termsCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
@@ -398,8 +408,7 @@ function RegisterPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     window.localStorage.setItem('redirectToTerms', 'true');
-                    window.localStorage.setItem('fromRegister', 'true');
-                    navigate('/settings');
+                    navigate('/settings', { state: { fromRegister: true } });
                   }}
                   style={{ color: '#007B7F', textDecoration: 'underline' }}
                 >Terms of Service</a>
@@ -412,7 +421,17 @@ function RegisterPage() {
                 id="privacyCheckbox"
                 checked={agreedToPrivacy}
                 onChange={() => setAgreedToPrivacy(!agreedToPrivacy)}
-                style={{ marginRight: '8px', marginTop: '4px' }}
+                style={{ 
+                  marginRight: '8px', 
+                  marginTop: '4px',
+                  minWidth: '20px', 
+                  minHeight: '20px',
+                  width: '20px',
+                  height: '20px',
+                  accentColor: '#D92D20',
+                  boxSizing: 'border-box',
+                  border: '2px solid #1C1C1C'
+                }}
                 required
               />
               <label htmlFor="privacyCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
@@ -421,8 +440,7 @@ function RegisterPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     window.localStorage.setItem('redirectToPrivacy', 'true');
-                    window.localStorage.setItem('fromRegister', 'true');
-                    navigate('/settings');
+                    navigate('/settings', { state: { fromRegister: true } });
                   }}
                   style={{ color: '#007B7F', textDecoration: 'underline' }}
                 >Privacy Policy</a>
@@ -436,7 +454,17 @@ function RegisterPage() {
                 id="marketingCheckbox"
                 checked={marketingConsent}
                 onChange={() => setMarketingConsent(!marketingConsent)}
-                style={{ marginRight: '8px', marginTop: '4px' }}
+                style={{ 
+                  marginRight: '8px', 
+                  marginTop: '4px',
+                  minWidth: '20px', 
+                  minHeight: '20px',
+                  width: '20px',
+                  height: '20px',
+                  accentColor: '#D92D20',
+                  boxSizing: 'border-box',
+                  border: '2px solid #1C1C1C'
+                }}
               />
               <label htmlFor="marketingCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
                 I consent to receive marketing communications about special offers, new features, and personalized recommendations. You can unsubscribe at any time.

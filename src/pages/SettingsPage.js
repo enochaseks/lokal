@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, collection, addDoc, onSnapshot, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { updateMarketingConsent } from '../utils/hubspotClient';
 
 // Helper function to mask sensitive values
@@ -14,8 +14,12 @@ function maskValue(value) {
 }
 
 function SettingsPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [userType, setUserType] = useState('');
+  const [fromRegister, setFromRegister] = useState(false);
+  const [isUserLoaded, setIsUserLoaded] = useState(false);
   const [paymentType, setPaymentType] = useState('');
   const [paymentInfo, setPaymentInfo] = useState({});
   const [editPayment, setEditPayment] = useState(false);
@@ -65,13 +69,20 @@ function SettingsPage() {
   const [marketingModalType, setMarketingModalType] = useState('success'); // 'success' or 'error'
   const [paymentError, setPaymentError] = useState('');
   const [storeData, setStoreData] = useState(null);
-  const navigate = useNavigate();
+  
+  // Check if we came from the register page
+  useEffect(() => {
+    if (location.state && location.state.fromRegister) {
+      setFromRegister(true);
+    }
+  }, [location]);
 
   // Use onAuthStateChanged to reliably get the user
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setIsUserLoaded(true);
     });
     return () => unsubscribe();
   }, []);
@@ -555,6 +566,77 @@ function SettingsPage() {
     }
   };
 
+  // Special handling for unauthenticated users who want to see Terms or Privacy
+  if (isUserLoaded && !user) {
+    // Get redirect flags from localStorage
+    const redirectToTerms = window.localStorage.getItem('redirectToTerms');
+    const redirectToPrivacy = window.localStorage.getItem('redirectToPrivacy');
+    
+    // Clear the flags
+    if (redirectToTerms) window.localStorage.removeItem('redirectToTerms');
+    if (redirectToPrivacy) window.localStorage.removeItem('redirectToPrivacy');
+    
+    // Render standalone Terms of Service
+    if (redirectToTerms || view === 'terms') {
+      return (
+        <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+          <Navbar />
+          <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
+            <button 
+              onClick={() => navigate('/register')}
+              style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}
+            >
+              {'< Back to Register'}
+            </button>
+            <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Terms of Service</h2>
+            {/* Terms of Service content */}
+            <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6 }}>
+              {/* Terms content - copy from the terms section below */}
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>1. Introduction</h3>
+              <p>Welcome to Lokal, the dedicated marketplace for African & Caribbean stores and products. These Terms of Service ("Terms") govern your use of the Lokal platform, including our website, mobile application, and related services (collectively, the "Platform"). By accessing or using Lokal, you agree to be bound by these Terms.</p>
+              
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>2. Platform Description</h3>
+              <p>Lokal is an e-commerce platform that connects buyers with African & Caribbean sellers. We provide tools for sellers to create virtual stores, showcase products, manage inventory, and process payments. For buyers, we offer a marketplace to discover local stores, browse products, communicate with sellers, and make purchases.</p>
+              
+              {/* Add the rest of your terms content here */}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Render standalone Privacy Policy
+    if (redirectToPrivacy || view === 'privacy') {
+      return (
+        <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+          <Navbar />
+          <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
+            <button 
+              onClick={() => navigate('/register')}
+              style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}
+            >
+              {'< Back to Register'}
+            </button>
+            <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Privacy Policy</h2>
+            {/* Privacy Policy content */}
+            <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6 }}>
+              <p>Effective Date: September 28, 2025</p>
+
+              <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>1. Introduction</h3>
+              <p>Welcome to Lokal's Privacy Policy. At Lokal, we respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our marketplace platform for African & Caribbean stores and products.</p>
+              
+              {/* Add the rest of your privacy content here */}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // For all other views, redirect to register page
+    navigate('/register');
+    return <div style={{ padding: 40, textAlign: 'center' }}>Redirecting...</div>;
+  }
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
 
   // Main menu view
@@ -940,15 +1022,11 @@ function SettingsPage() {
         <Navbar />
         <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
           <button onClick={() => {
-            // Check if user came from register page
-            const fromRegister = window.localStorage.getItem('fromRegister');
-            if (fromRegister) {
-              window.localStorage.removeItem('fromRegister');
+            // If came from register page or not authenticated, go back to register
+            if (fromRegister || !user) {
               navigate('/register');
-            } else if (user) {
-              setView('main');
             } else {
-              navigate('/register');
+              setView('main');
             }
           }} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
           <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Terms of Service</h2>
@@ -1072,15 +1150,11 @@ function SettingsPage() {
         <Navbar />
         <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
           <button onClick={() => {
-            // Check if user came from register page
-            const fromRegister = window.localStorage.getItem('fromRegister');
-            if (fromRegister) {
-              window.localStorage.removeItem('fromRegister');
+            // If came from register page or not authenticated, go back to register
+            if (fromRegister || !user) {
               navigate('/register');
-            } else if (user) {
-              setView('main');
             } else {
-              navigate('/register');
+              setView('main');
             }
           }} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
           <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Privacy Policy</h2>
