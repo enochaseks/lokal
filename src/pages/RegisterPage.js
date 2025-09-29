@@ -398,6 +398,7 @@ function RegisterPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     window.localStorage.setItem('redirectToTerms', 'true');
+                    window.localStorage.setItem('fromRegister', 'true');
                     navigate('/settings');
                   }}
                   style={{ color: '#007B7F', textDecoration: 'underline' }}
@@ -420,6 +421,7 @@ function RegisterPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     window.localStorage.setItem('redirectToPrivacy', 'true');
+                    window.localStorage.setItem('fromRegister', 'true');
                     navigate('/settings');
                   }}
                   style={{ color: '#007B7F', textDecoration: 'underline' }}

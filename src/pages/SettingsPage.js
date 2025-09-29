@@ -939,7 +939,18 @@ function SettingsPage() {
       <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
         <Navbar />
         <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
-          <button onClick={() => user ? setView('main') : navigate('/register')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
+          <button onClick={() => {
+            // Check if user came from register page
+            const fromRegister = window.localStorage.getItem('fromRegister');
+            if (fromRegister) {
+              window.localStorage.removeItem('fromRegister');
+              navigate('/register');
+            } else if (user) {
+              setView('main');
+            } else {
+              navigate('/register');
+            }
+          }} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
           <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Terms of Service</h2>
           <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6 }}>
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>1. Introduction</h3>
@@ -1060,7 +1071,18 @@ function SettingsPage() {
       <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
         <Navbar />
         <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
-          <button onClick={() => user ? setView('main') : navigate('/register')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
+          <button onClick={() => {
+            // Check if user came from register page
+            const fromRegister = window.localStorage.getItem('fromRegister');
+            if (fromRegister) {
+              window.localStorage.removeItem('fromRegister');
+              navigate('/register');
+            } else if (user) {
+              setView('main');
+            } else {
+              navigate('/register');
+            }
+          }} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
           <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Privacy Policy</h2>
           <div style={{ color: '#222', fontSize: '1rem', lineHeight: 1.6 }}>
             <p>Effective Date: September 28, 2025</p>
