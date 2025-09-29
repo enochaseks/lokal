@@ -901,7 +901,8 @@ function ProfilePage() {
                               Cancelled: {formatDate(order.cancelledAt)}
                             </div>
                           )}
-                          {order.pickupCode && (
+                          {/* Only show pickup code to the buyer (not the seller) */}
+                          {order.pickupCode && order.customerId === authUser?.uid && (
                             <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
                               Pickup Code: <span style={{ fontWeight: '600', color: '#007B7F' }}>{order.pickupCode}</span>
                             </div>

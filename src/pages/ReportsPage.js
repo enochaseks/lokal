@@ -248,14 +248,14 @@ function ReportsPage() {
         const storeDoc = await getDoc(doc(db, 'stores', currentUser.uid));
         if (storeDoc.exists()) {
           const storeData = storeDoc.data();
-          preview.storeName = storeData.name || storeData.displayName || storeData.storeName || currentUser.displayName || "Your Store";
+          preview.storeName = storeData.name || storeData.displayName || storeData.storeName || currentUser.displayName || storeData.businessName || "";
           preview.storePhone = storeData.phone || storeData.phoneNumber || storeData.contactNumber || "";
         } else {
-          preview.storeName = currentUser.displayName || "Your Store";
+          preview.storeName = currentUser.displayName || "";
         }
       } catch (error) {
         console.error('Error fetching store details:', error);
-        preview.storeName = currentUser.displayName || "Your Store";
+        preview.storeName = currentUser.displayName || "";
       }
       
       // Update the preview data
@@ -280,7 +280,7 @@ function ReportsPage() {
       const basicData = {
         ...transaction,
         customerName: transaction.customerName || 'Unknown Customer',
-        storeName: currentUser.displayName || "Your Store",
+        storeName: currentUser.displayName || "",
         storePhone: "",
         deliveryMethod: "Not specified"
       };
@@ -421,6 +421,9 @@ function ReportsPage() {
     // If we're using editable data, use that instead of fetching from Firestore
     const useCustomData = useEditableData && editableReceiptData;
     
+    // Initialize orderData object to store receipt information
+    let orderData = {};
+    
     try {
       // Set loading indicator
       const loadingNotification = document.createElement('div');
@@ -443,16 +446,24 @@ function ReportsPage() {
       const isRefund = transaction.type === 'refund_deduction' || transaction.transactionType === 'refund';
       
       // Initialize variables for store information and delivery method
-      let storeName = "Your Store"; // Default fallback
+      // Initialize without a default store name to ensure we fetch from proper source
+      let storeName = null; // Using null ensures we'll use proper fallbacks later
       let storePhone = "";
       let deliveryMethod = "Not specified"; // Default fallback
       
       if (useCustomData) {
         // Use the edited data provided by the user
         console.log("Using custom edited receipt data");
-        storeName = editableReceiptData.storeName || "Your Store";
+        storeName = editableReceiptData.storeName || currentUser.displayName || "";
         storePhone = editableReceiptData.storePhone || "";
         deliveryMethod = editableReceiptData.deliveryMethod || "Not specified";
+        
+        // Log store name from custom data for debugging
+        console.log("Store name from custom data:", storeName);
+        
+        // Add to orderData when using custom data
+        orderData.storeName = storeName;
+        orderData.storePhone = storePhone;
         
         console.log("Using custom store name:", storeName);
         console.log("Using custom delivery method:", deliveryMethod);
@@ -462,10 +473,55 @@ function ReportsPage() {
           const storeDoc = await getDoc(doc(db, 'stores', currentUser.uid));
           if (storeDoc.exists()) {
             const storeData = storeDoc.data();
-            // Get store name from Firestore
-            storeName = storeData.name || storeData.displayName || storeData.storeName || currentUser.displayName || "Your Store";
-            storePhone = storeData.phone || storeData.phoneNumber || storeData.contactNumber || "";
+            // Get store name from Firestore with comprehensive fallbacks
+            storeName = storeData.name || storeData.displayName || storeData.storeName || storeData.businessName || currentUser.displayName || "";
+            
+            // Log fetched store name for debugging
+            console.log("Fetched store name from Firestore:", storeName);
+            
+            // Get store phone with comprehensive fallbacks
+            storePhone = storeData.phone || 
+                        storeData.phoneNumber || 
+                        storeData.contactNumber || 
+                        storeData.businessPhone || 
+                        "";
+            
             console.log("Successfully fetched store name from Firestore:", storeName);
+            
+            // Extract business identification information
+            let storeBusinessId = storeData.businessId || '';
+            let storeRegistrationNumber = '';
+            let storeVatNumber = '';
+            
+            // Enhanced address detection with multiple field paths
+            let storeAddress = storeData.storeLocation || 
+                             storeData.address || 
+                             storeData.businessAddress || 
+                             (storeData.location?.address) || 
+                             (typeof storeData.location === 'string' ? storeData.location : '') ||
+                             '';
+                             
+            let storeEmail = storeData.email || storeData.businessEmail || '';
+            
+            // Extract registration/VAT numbers if they exist in the business ID format
+            if (storeBusinessId) {
+              const businessIdParts = storeBusinessId.split('/');
+              if (businessIdParts.length > 1) {
+                storeRegistrationNumber = businessIdParts[0] || '';
+                storeVatNumber = businessIdParts[1] || '';
+              } else {
+                storeRegistrationNumber = storeBusinessId;
+              }
+            }
+            
+            // Add these to orderData for receipt generation
+            orderData.storeName = storeName; // Add storeName to orderData
+            orderData.storePhone = storePhone; // Add storePhone to orderData
+            orderData.storeBusinessId = storeBusinessId;
+            orderData.storeRegistrationNumber = storeRegistrationNumber;
+            orderData.storeVatNumber = storeVatNumber;
+            orderData.storeAddress = storeAddress;
+            orderData.storeEmail = storeEmail;
             
             // Try to get store's default delivery methods from Firestore settings
             if (storeData.deliverySettings) {
@@ -487,12 +543,12 @@ function ReportsPage() {
             }
           } else {
             console.warn("Store document doesn't exist in Firestore, using display name");
-            storeName = currentUser.displayName || "Your Store";
+            storeName = currentUser.displayName || "";
           }
         } catch (storeError) {
           console.error("Error fetching store from Firestore:", storeError);
           // Fallback to display name if Firestore fetch fails
-          storeName = currentUser.displayName || "Your Store";
+          storeName = currentUser.displayName || "";
         }
         
         // PRIORITY 1: Try to get specific delivery method from the transaction since this is most accurate
@@ -577,10 +633,10 @@ function ReportsPage() {
           tax: editableReceiptData.tax || transaction.tax || null,
           deliveryFee: editableReceiptData.deliveryFee || transaction.deliveryFee || null,
           
-          // Store information - use edited values
+          // Store information - use edited values with proper fallbacks
           storeId: currentUser.uid,
-          storeName: editableReceiptData.storeName,
-          storePhone: editableReceiptData.storePhone || ""
+          storeName: editableReceiptData.storeName || storeName || currentUser.displayName || "Store",
+          storePhone: editableReceiptData.storePhone || storePhone || ""
         };
       } else {
         // Use transaction data with Firestore enrichment
@@ -612,9 +668,12 @@ function ReportsPage() {
           
           // Store information - using the values we dynamically fetched from Firestore
           storeId: currentUser.uid,
-          storeName: storeName, // Dynamically fetched from Firestore
+          storeName: storeName || currentUser.displayName || "Store", // Dynamically fetched from Firestore
           storePhone: storePhone // Dynamically fetched from Firestore
         };
+        
+        // Log the store name being used in the non-custom data case
+        console.log("Using store name in non-custom data case:", storeName || currentUser.displayName || "Store");
       }
       
       // Check if we have a valid customerId to send the receipt to
@@ -932,11 +991,39 @@ ${orderData.deliveryAddress}`
       });
       
       // Format store information for receipt
-      let storeInfo = `STORE INFORMATION:
-Store: ${storeName}`;
+      // Force log storeName to debug the issue
+      console.log("DEBUG - Final store name values:", { 
+        orderDataStoreName: orderData.storeName, 
+        storeNameVar: storeName
+      });
       
-      if (storePhone) {
-        storeInfo += `\nStore Phone: ${storePhone}`;
+      // Final store name to use in receipt - extensive fallback chain
+      const finalStoreName = orderData.storeName || storeName || currentUser.displayName || "Store";
+      
+      // Log final store name decision for debugging
+      console.log("FINAL STORE NAME SELECTED:", finalStoreName);
+      
+      let storeInfo = `STORE INFORMATION:
+Store: ${finalStoreName}`;
+      
+      if (orderData.storePhone || storePhone) {
+        storeInfo += `\nStore Phone: ${orderData.storePhone || storePhone}`;
+      }
+      
+      if (orderData.storeEmail) {
+        storeInfo += `\nStore Email: ${orderData.storeEmail}`;
+      }
+      
+      if (orderData.storeAddress) {
+        storeInfo += `\nStore Address: ${orderData.storeAddress}`;
+      }
+      
+      if (orderData.storeRegistrationNumber) {
+        storeInfo += `\nBusiness Registration: ${orderData.storeRegistrationNumber}`;
+      }
+      
+      if (orderData.storeVatNumber) {
+        storeInfo += `\nVAT Number: ${orderData.storeVatNumber}`;
       }
       
       // Generate receipt message with all available information - send to the customer (not the seller)
@@ -1038,6 +1125,8 @@ For any questions regarding this order, please contact the seller.`,
         conversationId: receiptMessage.conversationId,
         from: currentUser.uid + ' (Seller)',
         to: orderData.customerId + ' (Customer)',
+        storeName: orderData.storeName, // Log the store name for debugging
+        storePhone: orderData.storePhone, // Log the store phone for debugging
         messageType: receiptMessage.messageType
       });
       
@@ -1051,6 +1140,76 @@ For any questions regarding this order, please contact the seller.`,
       
       // Send the receipt message
       const docRef = await addDoc(collection(db, 'messages'), receiptMessage);
+      
+      // Create receipt for the receipts collection that will be used by both seller and buyer
+      const baseReceiptData = {
+        receiptId: `REC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        orderId: orderData.orderId,
+        sellerName: currentUser.displayName || 'Seller',
+        sellerId: currentUser.uid,
+        customerName: orderData.customerName || 'Customer',
+        customerId: orderData.customerId,
+        items: orderData.items || [],
+        currency: orderData.currency || 'GBP',
+        subtotal: orderData.subtotal || null,
+        deliveryFee: orderData.deliveryFee || null,
+        serviceFee: orderData.serviceFee || null,
+        totalAmount: orderData.totalAmount || 0,
+        paymentMethod: orderData.paymentMethod || 'Online Payment',
+        deliveryMethod: orderData.deliveryMethod || 'Not specified',
+        dateCreated: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        timestamp: serverTimestamp(),
+        type: isRefund ? 'refund' : 'order',
+        status: 'generated',
+        regenerated: true,
+        messageRef: docRef.id,
+        // Store information with comprehensive data
+        storeName: orderData.storeName || storeName || currentUser.displayName || "",
+        // Ensure address is included by checking all possible fields
+        storeAddress: orderData.storeAddress || 
+                     orderData.sellerAddress || 
+                     orderData.businessAddress || 
+                     (orderData.storeData?.address) || 
+                     (orderData.storeData?.storeLocation) || 
+                     null,
+        // Ensure phone number is included by checking all possible fields
+        storePhone: orderData.storePhone || 
+                   orderData.sellerPhone || 
+                   orderData.businessPhone || 
+                   orderData.contactNumber || 
+                   (orderData.storeData?.phone) || 
+                   (orderData.storeData?.phoneNumber) || 
+                   null,
+        storeEmail: orderData.storeEmail || 
+                   orderData.sellerEmail || 
+                   (orderData.storeData?.email) || 
+                   null,
+        storeRegistrationNumber: orderData.storeRegistrationNumber || null,
+        storeVatNumber: orderData.storeVatNumber || null,
+        storeBusinessId: orderData.storeBusinessId || null,
+      };
+      
+      // Create a copy for the seller's receipts collection
+      const sellerReceiptData = {
+        ...baseReceiptData,
+        userId: currentUser.uid, // For the seller's receipt
+        forSeller: true,
+      };
+      
+      // Create a copy for the buyer's receipts collection
+      const buyerReceiptData = {
+        ...baseReceiptData,
+        userId: orderData.customerId, // For the buyer's receipt
+        forBuyer: true,
+      };
+      
+      // Save to receipts collection for both seller and buyer
+      const sellerReceiptRef = await addDoc(collection(db, 'receipts'), sellerReceiptData);
+      const buyerReceiptRef = await addDoc(collection(db, 'receipts'), buyerReceiptData);
+      
+      console.log('Receipt saved for seller with ID:', sellerReceiptRef.id);
+      console.log('Receipt saved for buyer with ID:', buyerReceiptRef.id);
       
       // Add to regenerated receipts list with timestamp and data quality indicators
       const dataQuality = {
@@ -1069,6 +1228,8 @@ For any questions regarding this order, please contact the seller.`,
         currency: orderData.currency,
         timestamp: new Date().toISOString(), // Use ISO string for better serialization
         messageId: docRef.id,
+        sellerReceiptId: sellerReceiptRef.id, // Reference to seller's receipt document
+        buyerReceiptId: buyerReceiptRef.id,   // Reference to buyer's receipt document 
         dataQuality: dataQuality,
         email: orderData.customerEmail,
         phone: orderData.customerPhone,
@@ -1102,6 +1263,7 @@ For any questions regarding this order, please contact the seller.`,
           <div>
             <div style="font-weight: 600">${isRefund ? 'Refund' : 'Order'} receipt sent successfully!</div>
             <div style="font-size: 0.85rem; opacity: 0.9">Sent to: ${orderData.customerName}${orderData.customerEmail ? ` (${orderData.customerEmail})` : ''}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9">Receipt saved to both seller and buyer accounts</div>
           </div>
         </div>
       `;
@@ -1221,56 +1383,161 @@ For any questions regarding this order, please contact the seller.`,
               setLoadingRefunds(false);
             });
             
-            // Fetch all payment transactions (orders)
-            const ordersQuery = query(
+            // ENHANCED ORDER FETCHING - Check multiple collections
+            console.log('🔍 Enhanced order fetching started for seller:', user.uid);
+            setLoadingOrders(true);
+            
+            // Create array to hold all collected orders
+            let allCollectedOrders = [];
+            
+            // 1. First check the transactions collection for payment records
+            const transactionsQuery = query(
               collection(db, 'transactions'),
               where('sellerId', '==', user.uid),
-              where('type', '==', 'payment'),
+              where('type', 'in', ['payment', 'sale']), // Include both payment and sale types
               orderBy('createdAt', 'desc'),
-              limit(100) // Limit to reasonable amount for performance
+              limit(100)
             );
             
-            unsubscribeOrders = onSnapshot(ordersQuery, async (snapshot) => {
-              // First get basic transaction data
-              const orders = snapshot.docs.map(doc => ({
+            // 2. Check the payments collection for all payment records
+            const paymentsQuery = query(
+              collection(db, 'payments'),
+              where('sellerId', '==', user.uid),
+              orderBy('createdAt', 'desc'),
+              limit(100)
+            );
+            
+            // 3. Check the reports collection for completed orders
+            const reportsQuery = query(
+              collection(db, 'reports'),
+              where('sellerId', '==', user.uid),
+              where('type', '==', 'order'),
+              orderBy('createdAt', 'desc'),
+              limit(100)
+            );
+            
+            // 4. Check the receipts collection
+            const receiptsQuery = query(
+              collection(db, 'receipts'),
+              where('sellerId', '==', user.uid),
+              where('receiptType', '==', 'order_receipt'),
+              orderBy('createdAt', 'desc'),
+              limit(100)
+            );
+            
+            try {
+              // Execute all queries in parallel
+              const [transactionsSnapshot, paymentsSnapshot, reportsSnapshot, receiptsSnapshot] = 
+                await Promise.all([
+                  getDocs(transactionsQuery),
+                  getDocs(paymentsQuery),
+                  getDocs(reportsQuery),
+                  getDocs(receiptsQuery)
+                ]);
+              
+              console.log('📊 Order source counts:', {
+                transactions: transactionsSnapshot.size,
+                payments: paymentsSnapshot.size,
+                reports: reportsSnapshot.size,
+                receipts: receiptsSnapshot.size
+              });
+              
+              // Process transactions
+              const transactionOrders = transactionsSnapshot.docs.map(doc => ({
                 id: doc.id,
+                source: 'transactions',
                 transactionType: 'order',
                 ...doc.data()
               }));
               
-              console.log('Loaded order transactions:', orders.length);
+              // Process payments
+              const paymentOrders = paymentsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                source: 'payments',
+                transactionType: 'order',
+                ...doc.data()
+              }));
               
-              // Process in batches to avoid performance issues
-              const processedOrders = [...orders];
+              // Process reports
+              const reportOrders = reportsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                source: 'reports',
+                transactionType: 'order',
+                ...doc.data()
+              }));
               
-              // Update orders with status data from orders collection
-              for (let i = 0; i < processedOrders.length; i++) {
-                const transaction = processedOrders[i];
-                if (transaction.orderId) {
+              // Process receipts
+              const receiptOrders = receiptsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                source: 'receipts',
+                transactionType: 'order',
+                ...doc.data()
+              }));
+              
+              // Combine all orders
+              const allFetchedOrders = [
+                ...transactionOrders, 
+                ...paymentOrders,
+                ...reportOrders,
+                ...receiptOrders
+              ];
+              
+              // Deduplicate orders by orderId
+              const orderMap = new Map();
+              allFetchedOrders.forEach(order => {
+                const orderId = order.orderId || order.id;
+                
+                // Only replace if this order has more information
+                if (!orderMap.has(orderId) || 
+                    (orderMap.has(orderId) && 
+                     (!orderMap.get(orderId).items || orderMap.get(orderId).items.length === 0) && 
+                     order.items && order.items.length > 0)) {
+                  orderMap.set(orderId, order);
+                }
+              });
+              
+              // Convert map back to array
+              allCollectedOrders = Array.from(orderMap.values());
+              
+              console.log('🛍️ Total unique orders after deduplication:', allCollectedOrders.length);
+              
+              // Ensure all orders have status information
+              const processedOrders = await Promise.all(allCollectedOrders.map(async (order) => {
+                // If we don't have a status, try to find it in the orders collection
+                if (!order.status && order.orderId) {
                   try {
-                    const orderRef = doc(db, 'orders', transaction.orderId);
+                    const orderRef = doc(db, 'orders', order.orderId);
                     const orderSnap = await getDoc(orderRef);
                     
                     if (orderSnap.exists()) {
                       const orderData = orderSnap.data();
-                      // Update the status in our transaction data
-                      processedOrders[i] = {
-                        ...transaction,
-                        status: orderData.status || transaction.status || 'unknown'
+                      return {
+                        ...order,
+                        status: orderData.status || 'unknown'
                       };
                     }
                   } catch (error) {
                     console.error('Error fetching order status:', error);
                   }
                 }
-              }
+                return order;
+              }));
               
+              // Sort by date (most recent first)
+              processedOrders.sort((a, b) => {
+                const dateA = a.createdAt?.toDate?.() || a.timestamp?.toDate?.() || new Date(a.createdAt || a.timestamp || 0);
+                const dateB = b.createdAt?.toDate?.() || b.timestamp?.toDate?.() || new Date(b.createdAt || b.timestamp || 0);
+                return dateB - dateA;
+              });
+              
+              console.log('✅ Order processing complete - displaying', processedOrders.length, 'orders');
               setAllOrders(processedOrders);
+            } catch (error) {
+              console.error('❌ Error fetching orders:', error);
+              setAllOrders([]); // Set empty array on error
+            } finally {
               setLoadingOrders(false);
-            }, (error) => {
-              console.error('Error fetching order transactions:', error);
-              setLoadingOrders(false);
-            });
+            }
             
             // Use Promise.all to handle both queries simultaneously
             try {
@@ -1692,7 +1959,7 @@ For any questions regarding this order, please contact the seller.`,
                             }}
                           />
                         ) : (
-                          ' ' + (editableReceiptData.storeName || 'Your Store')
+                          ' ' + (editableReceiptData.storeName || '')
                         )}
                       </div>
                       

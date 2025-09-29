@@ -12,6 +12,53 @@ import StripeGooglePayButton from '../components/StripeGooglePayButton';
 import BankTransferForm from '../components/BankTransferForm';
 import { useMessage } from '../MessageContext';
 
+// Function to save store info to localStorage
+const saveStoreInfoToLocalStorage = (conversationId, storeData) => {
+  try {
+    const storeInfoKey = `store_info_${conversationId}`;
+    localStorage.setItem(storeInfoKey, JSON.stringify({
+      ...storeData,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (error) {
+    console.error('Error saving store info to localStorage:', error);
+  }
+};
+
+// Function to load store info from localStorage
+const loadStoreInfoFromLocalStorage = (conversationId) => {
+  try {
+    const storeInfoKey = `store_info_${conversationId}`;
+    const savedData = localStorage.getItem(storeInfoKey);
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      // Check if data is less than 24 hours old
+      const savedAt = new Date(parsedData.savedAt);
+      const now = new Date();
+      if ((now - savedAt) < (24 * 60 * 60 * 1000)) {
+        return parsedData;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error loading store info from localStorage:', error);
+    return null;
+  }
+};
+
+// Function to get store name consistently
+const getStoreName = (storeInfo, conversation) => {
+  // Make sure we always return a valid string for storeName
+  const name = storeInfo?.businessName || 
+               storeInfo?.storeName || 
+               storeInfo?.displayName || 
+               conversation?.otherUserName || 
+               'Unknown Store';
+  
+  // Ensure it's properly initialized as a string to prevent reference errors
+  return String(name);
+};
+
 function MessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -178,6 +225,20 @@ function MessagesPage() {
   
   // Refund complaint states
   const [showComplaintModal, setShowComplaintModal] = useState(false);
+  
+  // Orders marked as ready for collection
+  const [ordersMarkedReady, setOrdersMarkedReady] = useState([]);
+  
+  // State to track collection completions that should be permanently faded out
+  const [completedCollections, setCompletedCollections] = useState(() => {
+    try {
+      const saved = localStorage.getItem('completedCollectionOrders');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Error loading completed collections from localStorage:', e);
+      return [];
+    }
+  });
   const [complaintData, setComplaintData] = useState({
     email: '',
     explanation: '',
@@ -1180,9 +1241,21 @@ function MessagesPage() {
         // For buyers, fetch store info from the other user (seller)
         // For sellers, we still need store info for refunds policy
         const storeUserId = isSeller ? currentUser.uid : selectedConversation.otherUserId;
+        
+        // First try to get the store document
         const storeDoc = await getDoc(doc(db, 'stores', storeUserId));
         if (storeDoc.exists()) {
           const storeData = storeDoc.data();
+          
+          // If store name isn't in store data, try to get it from the user's profile
+          if (!storeData.businessName && !storeData.storeName) {
+            const userDoc = await getDoc(doc(db, 'users', storeUserId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              storeData.businessName = userData.businessName || userData.storeName || userData.displayName;
+            }
+          }
+          
           setStoreInfo(storeData);
           
           // Check refunds policy
@@ -1519,9 +1592,9 @@ function MessagesPage() {
         if ((message.messageType === 'payment_completed' || message.messageType === 'pay_at_store_completed' || message.messageType === 'order_request') && message.senderId === currentUser.uid) {
           const orderId = message.paymentData?.orderId || message.orderData?.orderId;
           const storeId = message.receiverId;
-          const storeName = message.receiverName;
+          const orderStoreName = message.receiverName;
           
-          if (storeId && storeName && orderId) {
+          if (storeId && orderStoreName && orderId) {
             // Check if we already have this store
             const existingStoreIndex = storeHistory.findIndex(store => store.storeId === storeId);
             
@@ -1540,7 +1613,7 @@ function MessagesPage() {
               
               storeHistory.push({
                 storeId: storeId,
-                storeName: storeName,
+                storeName: orderStoreName,
                 storeEmail: storeEmail,
                 lastInteraction: message.timestamp?.toDate?.()?.toLocaleDateString() || 'Recent order',
                 interactionType: 'ordered'
@@ -2022,6 +2095,26 @@ function MessagesPage() {
     setPaymentProcessing(true);
     
     try {
+      // Fetch fresh store information from Firestore
+      let currentStoreInfo = storeInfo;
+      let actualStoreName = selectedConversation.otherUserName;
+      
+      try {
+        const storeDoc = await getDoc(doc(db, 'stores', selectedConversation.otherUserId));
+        if (storeDoc.exists()) {
+          currentStoreInfo = storeDoc.data();
+          actualStoreName = currentStoreInfo.storeName || currentStoreInfo.businessName || selectedConversation.otherUserName;
+        }
+      } catch (error) {
+        console.log('Could not fetch store info, using conversation name:', error);
+      }
+      
+      // Save current store info to localStorage in case of page refresh
+      saveStoreInfoToLocalStorage(selectedConversation.id, {
+        ...currentStoreInfo,
+        storeName: actualStoreName
+      });
+
       // Fetch buyer's complete information from Firestore at the start
       const buyerInfo = await fetchUserInfo(currentUser.uid);
       const buyerName = buyerInfo.name;
@@ -2186,7 +2279,14 @@ function MessagesPage() {
         createdAt: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'payments'), paymentRecord);
+      // Save the payment and get the document reference which contains the ID
+      const paymentDocRef = await addDoc(collection(db, 'payments'), paymentRecord);
+      
+      // Add the ID to the payment record
+      paymentRecord.id = paymentDocRef.id;
+
+      // Use the fresh store name we fetched from Firestore
+      const displayedStoreName = actualStoreName;
 
       // Send payment confirmation message to conversation
       const paymentMessage = {
@@ -2197,8 +2297,8 @@ function MessagesPage() {
         receiverId: selectedConversation?.otherUserId,
         receiverName: selectedConversation?.otherUserName,
         message: selectedPaymentMethod === 'bank_transfer' 
-          ? `🏦 Bank Transfer Submitted!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: Bank Transfer\n\n🎫 PICKUP CODE: ${pickupCode}\n\n${paymentData.deliveryType === 'Collection' ? 'Please provide this code when collecting your order from the store.' : 'Please provide this code to the seller when they deliver your order.'}\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.`
-          : `✅ Payment Completed!\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
+          ? `🏦 Bank Transfer Submitted!\n\n🏪 Store: ${displayedStoreName}\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: Bank Transfer\n\n🎫 PICKUP CODE: ${pickupCode}\n\n${paymentData.deliveryType === 'Collection' ? `Please provide this code when collecting your order from ${displayedStoreName}.` : `Please provide this code to ${displayedStoreName} when they deliver your order.`}\n\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) has been transferred directly to the seller's bank account.`
+          : `✅ Payment Completed!\n\n🏪 Store: ${displayedStoreName}\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nAmount: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nMethod: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}${
               selectedPaymentMethod === 'card' && paymentDetails.cardInfo ? ` (****${paymentDetails.cardInfo.last4})` : 
               selectedPaymentMethod === 'google_pay' && paymentDetails.googlePayInfo ? ` (${paymentDetails.googlePayInfo.deviceAccount})` : ''
             }\n\n🎫 PICKUP CODE: ${pickupCode}\n\n${paymentData.deliveryType === 'Collection' ? 'Please provide this code when collecting your order from the store.' : 'Please provide this code to the seller when they deliver your order.'}\n\nSeller has been credited ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)} to their wallet.`,
@@ -2234,9 +2334,9 @@ function MessagesPage() {
         receiverId: sellerId,
         receiverName: selectedConversation?.otherUserName,
         message: selectedPaymentMethod === 'bank_transfer'
-          ? `🏦 Bank Transfer Submitted!\n\nA customer has submitted a bank transfer payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPickup Code: ${pickupCode}\nPayment Method: Bank Transfer\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\n⚠️ VERIFICATION REQUIRED:\nPlease check your bank account to confirm the transfer was received.\nThe full amount (${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}) should be in your bank account.\nNo platform fees are deducted for bank transfers.\n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and enter the pickup code when the customer arrives to collect their order.`
-          : `💰 Payment Received!\n\nYou've received a payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPickup Code: ${pickupCode}\nPayment Method: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\nTotal Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nYour Earnings: ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\nPlatform Fee: ${getCurrencySymbol(paymentData.currency)}${formatPrice(platformFee, paymentData.currency)}\n\nFunds have been added to your wallet. \n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and enter the pickup code when the customer arrives to collect their order.`,
-        messageType: 'payment_notification',
+          ? `🏦 Bank Transfer Submitted!\n\nA customer has submitted a bank transfer payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\n\nStore: ${actualStoreName}\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPayment Method: Bank Transfer\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\n⚠️ VERIFICATION REQUIRED:\n• Please check your bank account for transfer\n• Click 'Verify Bank Transfer' when received\n• Amount to verify: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\n• Bank: ${paymentData.bankTransferInfo?.fromBank}\n• Reference: ${paymentData.bankTransferInfo?.referenceNumber}\n\n⏱️ Note: Order will be held until you verify payment.\nNo platform fees for bank transfers.\n\n📱 After verification, you can validate pickup code when customer arrives.`
+          : `💰 Payment Received!\n\nYou've received a payment of ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\n\nOrder: ${paymentData.orderId?.slice(-8) || 'N/A'}\nCustomer: ${buyerName}\nPayment Method: ${getPaymentMethods(paymentData.currency).find(m => m.id === selectedPaymentMethod)?.name}\nPayment ID: ${paymentIntentId}\n\n📦 ITEMS ORDERED:\n${orderDetails}\n\nTotal Paid: ${getCurrencySymbol(paymentData.currency)}${formatPrice(paymentData.total, paymentData.currency)}\nYour Earnings: ${getCurrencySymbol(paymentData.currency)}${formatPrice(sellerEarnings, paymentData.currency)}\nPlatform Fee: ${getCurrencySymbol(paymentData.currency)}${formatPrice(platformFee, paymentData.currency)}\n\nFunds have been added to your wallet. \n\n📱 TO VALIDATE PICKUP:\nGo to your Wallet tab and ask the customer for their pickup code when they arrive to collect their order.`,
+        messageType: selectedPaymentMethod === 'bank_transfer' ? 'bank_transfer_submitted' : 'payment_notification',
         timestamp: serverTimestamp(),
         isRead: false,
         orderData: {
@@ -2258,6 +2358,48 @@ function MessagesPage() {
       };
 
       await addDoc(collection(db, 'messages'), sellerNotificationMessage);
+
+      // Generate receipt using the displayedStoreName variable defined earlier
+      const receiptData = {
+        orderId: paymentData.orderId,
+        items: paymentData.items,
+        total: paymentData.total,
+        subtotal: paymentData.subtotal,
+        serviceFee: paymentData.serviceFee,
+        deliveryFee: paymentData.deliveryFee,
+        buyerId: currentUser.uid,
+        buyerName: buyerName,
+        buyerEmail: buyerEmail,
+        sellerId: selectedConversation.otherUserId,
+        sellerName: selectedConversation.otherUserName,
+        storeName: displayedStoreName,
+        storeData: {
+          ...storeInfo,
+          storeName: displayedStoreName
+        },
+        storeId: selectedConversation.otherUserId, // Add store ID for future reference
+        receiptType: 'order_receipt', // Add receipt type for proper display
+        createdAt: serverTimestamp(),
+        paymentMethod: selectedPaymentMethod,
+        paymentId: paymentIntentId,
+        status: 'completed',
+        currency: paymentData.currency,
+        deliveryType: paymentData.deliveryType,
+        pickupCode
+      };
+
+      // Add to receipts collection
+      const receiptRef = await addDoc(collection(db, 'receipts'), receiptData);
+
+      // Add to reports collection
+      const reportData = {
+        ...receiptData,
+        type: 'order',
+        receiptId: receiptRef.id,
+        sellerEarnings,
+        platformFee
+      };
+      await addDoc(collection(db, 'reports'), reportData);
 
       // Update order status
       setOrderStatus('paid');
@@ -2547,6 +2689,13 @@ Please arrive at your scheduled time and bring this code for verification.`;
     }
 
     try {
+      // Show explanation dialog to guide sellers
+      if (!inputCode.trim()) {
+        const codeInput = prompt('📱 Ask the customer for their pickup code\n\nPlease ask the customer to show you their pickup code from their messages, then enter it below:');
+        if (!codeInput) return; // User canceled
+        inputCode = codeInput;
+      }
+
       // Search for transaction with matching pickup code
       const transactionsQuery = query(
         collection(db, 'transactions'),
@@ -2588,6 +2737,8 @@ Please arrive at your scheduled time and bring this code for verification.`;
       await updateDoc(doc(db, 'transactions', transactionDoc.id), updateData);
 
       // Update payment record
+
+      // Update payment record
       const paymentsQuery = query(
         collection(db, 'payments'),
         where('orderId', '==', transactionData.orderId),
@@ -2596,10 +2747,28 @@ Please arrive at your scheduled time and bring this code for verification.`;
 
       const paymentSnap = await getDocs(paymentsQuery);
       if (!paymentSnap.empty) {
+        const paymentData = paymentSnap.docs[0].data();
         await updateDoc(doc(db, 'payments', paymentSnap.docs[0].id), {
           pickupStatus: 'collected',
-          collectedAt: serverTimestamp()
+          collectedAt: serverTimestamp(),
+          status: 'completed'
         });
+
+        // Add to reports collection for tracking
+        const reportData = {
+          ...paymentData,
+          type: 'order',
+          status: 'completed',
+          pickupStatus: 'collected',
+          collectedAt: serverTimestamp(),
+          collectedBy: currentUser.uid,
+          reportType: 'order_completion',
+          receiptId: paymentSnap.docs[0].id,
+          updatedAt: serverTimestamp()
+        };
+
+        // Add report entry
+        await addDoc(collection(db, 'reports'), reportData);
       }
 
       // Update order status in orders collection
@@ -2662,9 +2831,112 @@ Please arrive at your scheduled time and bring this code for verification.`;
         };
 
         await addDoc(collection(db, 'messages'), completionMessage);
+        
+        // Send receipt offer message to customer
+        const receiptOfferMessage = {
+          conversationId: existingData.conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: transactionData.customerId,
+          receiverName: transactionData.customerName,
+          receiverEmail: transactionData.customerEmail || '',
+          message: `Would you like a receipt for your order?\n\nClick 'Yes' to generate a receipt with your order details.`,
+          messageType: 'receipt_offer',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          orderData: {
+            ...existingData.orderData,
+            status: 'collected',
+            collectedAt: serverTimestamp(),
+            orderId: transactionData.orderId,
+            pickupCode: inputCode.toUpperCase(),
+            items: transactionData.items || existingData.orderData?.items || [],
+            totalAmount: transactionData.amount || transactionData.grossAmount,
+            currency: transactionData.currency,
+            sellerName: currentUser.displayName,
+            sellerId: currentUser.uid, // Add seller ID for receipt generation
+            storeId: currentUser.uid, // Add store ID for receipt generation
+            storeAddress: 'Store address', // We'll fetch this during receipt generation
+            storePhone: '', // We'll fetch this during receipt generation
+            deliveryMethod: existingData.orderData?.deliveryType || 'Collection',
+            // Add payment information for complete receipt generation
+            paymentMethod: transactionData.paymentMethod || existingData.orderData?.paymentMethod || 'Online Payment'
+          },
+          actions: [
+            {
+              label: 'Yes, generate receipt',
+              action: 'generate_receipt',
+              orderId: transactionData.orderId
+            },
+            {
+              label: 'No, thanks',
+              action: 'decline_receipt',
+              orderId: transactionData.orderId
+            }
+          ]
+        };
+
+        await addDoc(collection(db, 'messages'), receiptOfferMessage);
       }
 
-      alert(`✅ Order successfully collected and delivery completed!\n\nOrder ID: ${transactionData.orderId}\nCustomer: ${transactionData.customerName}\nAmount: ${getCurrencySymbol(transactionData.currency)}${formatPrice(transactionData.amount, transactionData.currency)}\nPickup Code: ${inputCode.toUpperCase()}\n\nThe order has been marked as delivered in all systems.`);
+      // Add or update this transaction in the reports collection
+      try {
+        const reportData = {
+          orderId: transactionData.orderId,
+          sellerId: currentUser.uid,
+          sellerName: currentUser.displayName || currentUser.email,
+          buyerId: transactionData.customerId,
+          buyerName: transactionData.customerName,
+          totalAmount: transactionData.amount || transactionData.grossAmount,
+          currency: transactionData.currency,
+          items: transactionData.items || [],
+          status: 'completed',
+          paymentMethod: transactionData.paymentMethod || 'unknown',
+          deliveryType: transactionData.deliveryType || 'Collection',
+          completedAt: serverTimestamp(),
+          pickupCode: inputCode.toUpperCase(),
+          reported: true,
+          transactionType: 'order',
+          reportingTimestamp: serverTimestamp()
+        };
+
+        // Check if this order is already in reports
+        const reportsQuery = query(
+          collection(db, 'reports'),
+          where('orderId', '==', transactionData.orderId)
+        );
+        
+        const reportSnap = await getDocs(reportsQuery);
+        if (reportSnap.empty) {
+          // Create a new report entry
+          await addDoc(collection(db, 'reports'), reportData);
+        } else {
+          // Update existing report entry
+          const reportDoc = reportSnap.docs[0];
+          await updateDoc(doc(db, 'reports', reportDoc.id), {
+            status: 'completed',
+            completedAt: serverTimestamp(),
+            reported: true
+          });
+        }
+      } catch (reportError) {
+        console.error('Error updating reports:', reportError);
+        // Don't block the main flow if reports update fails
+      }
+
+      // Store this order ID in our completed collections state
+      try {
+        if (transactionData.orderId && !completedCollections.includes(transactionData.orderId)) {
+          const updatedCompletions = [...completedCollections, transactionData.orderId];
+          setCompletedCollections(updatedCompletions);
+          localStorage.setItem('completedCollectionOrders', JSON.stringify(updatedCompletions));
+        }
+      } catch (stateError) {
+        console.error('Error updating completion state:', stateError);
+      }
+
+      alert(`✅ Order successfully collected and delivery completed!\n\nOrder ID: ${transactionData.orderId}\nCustomer: ${transactionData.customerName}\nAmount: ${getCurrencySymbol(transactionData.currency)}${formatPrice(transactionData.amount, transactionData.currency)}\nPickup Code: ${inputCode.toUpperCase()}\n\nThe order has been marked as completed in all systems including Reports.`);
 
     } catch (error) {
       console.error('Error validating pickup code:', error);
@@ -3519,6 +3791,12 @@ Customer is done adding items. Please prepare and bag these items.`;
       msg.messageType === 'refund_requested' && 
       msg.orderData?.orderId === orderId
     );
+  };
+  
+  // Helper function to check if order has been marked as ready for collection
+  const isOrderMarkedReady = (orderId) => {
+    if (!orderId) return false;
+    return ordersMarkedReady.includes(orderId);
   };
 
   // Helper function to check if an order is a Pay At Store order
@@ -4855,6 +5133,9 @@ Please arrive at your scheduled time with this code and payment method.`;
         messageData.receiverEmail = selectedConversation.otherUserEmail;
       }
 
+      // Add order to marked ready list to disable reschedule buttons
+      setOrdersMarkedReady(prev => [...prev, orderData.orderId]);
+
       await addDoc(collection(db, 'messages'), messageData);
 
       // Show success notification
@@ -4939,6 +5220,21 @@ Please arrive at your scheduled time with this code and payment method.`;
         isRead: false,
         orderData: orderData
       };
+      
+      // Also send a receipt offer to the customer
+      const receiptOfferData = {
+        conversationId: conversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: selectedConversation.otherUserId,
+        receiverName: selectedConversation.otherUserName,
+        message: `Would you like a receipt for your order?\n\nClick 'Yes' to generate a receipt with your order details.`,
+        messageType: 'receipt_offer',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        orderData: orderData
+      };
 
       // Only add receiverEmail if it exists
       if (selectedConversation.otherUserEmail) {
@@ -4946,6 +5242,13 @@ Please arrive at your scheduled time with this code and payment method.`;
       }
 
       await addDoc(collection(db, 'messages'), messageData);
+      
+      // Send the receipt offer message right after
+      if (selectedConversation.otherUserEmail) {
+        receiptOfferData.receiverEmail = selectedConversation.otherUserEmail;
+      }
+      
+      await addDoc(collection(db, 'messages'), receiptOfferData);
 
       // Show success notification
       const notification = document.createElement('div');
@@ -5533,6 +5836,182 @@ Bring your pickup code when you collect.`,
     } catch (error) {
       console.error('Error confirming collection order:', error);
       alert('Failed to confirm order. Please try again.');
+    }
+  };
+
+  // Generate receipt for customer
+  const generateReceipt = async (orderData) => {
+    if (!orderData || !orderData.orderId) {
+      alert('Invalid order data for receipt generation.');
+      return false;
+    }
+    
+    try {
+      // Get store information
+      const storeId = orderData.sellerId || selectedConversation?.otherUserId;
+      const storeDoc = await getDoc(doc(db, 'stores', storeId));
+      const storeData = storeDoc.exists() ? storeDoc.data() : {};
+      
+      // Get buyer information
+      const buyerInfo = await fetchUserInfo(currentUser.uid);
+      
+      // Format receipt items
+      const itemsList = orderData.items?.map(item => ({
+        name: item.name || item.itemName,
+        quantity: item.quantity || 1,
+        price: item.price || (item.subtotal / (item.quantity || 1))
+      })) || [];
+      
+      // Get comprehensive store information
+      let storeBusinessId = storeData.businessId || '';
+      let storeRegistrationNumber = '';
+      let storeVatNumber = '';
+      
+      // Extract registration/VAT numbers if they exist in the business ID format
+      if (storeBusinessId) {
+        const businessIdParts = storeBusinessId.split('/');
+        if (businessIdParts.length > 1) {
+          storeRegistrationNumber = businessIdParts[0] || '';
+          storeVatNumber = businessIdParts[1] || '';
+        } else {
+          storeRegistrationNumber = storeBusinessId;
+        }
+      }
+      
+      // Generate receipt
+      const receiptData = {
+        receiptId: `REC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        orderId: orderData.orderId,
+        userId: currentUser.uid, // Add the userId field that the ReceiptsPage uses
+        buyerId: currentUser.uid, // For compatibility with both queries
+        customerId: currentUser.uid,
+        customerName: buyerInfo.name || currentUser.displayName || currentUser.email,
+        customerEmail: buyerInfo.email || currentUser.email,
+        sellerId: storeId,
+        sellerName: storeData.businessName || storeData.name || orderData.sellerName || 'Store',
+        storeName: storeData.storeName || storeData.businessName || storeData.name || orderData.storeName || 'Store',
+        storeAddress: storeData.storeLocation || storeData.address || storeData.location?.address || orderData.storeAddress || 'Store address',
+        storePhone: storeData.phoneNumber || storeData.phone || orderData.storePhone || '',
+        storeEmail: storeData.email || '',
+        storeRegistrationNumber: storeRegistrationNumber || '',
+        storeVatNumber: storeVatNumber || '',
+        storeBusinessId: storeBusinessId || '',
+        items: itemsList,
+        currency: orderData.currency || 'GBP',
+        subtotal: orderData.subtotal || itemsList.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        deliveryFee: orderData.deliveryFee || 0,
+        serviceFee: orderData.serviceFee || 0,
+        totalAmount: orderData.totalAmount || orderData.amount || 0,
+        paymentMethod: orderData.paymentMethod || 'Online Payment',
+        deliveryMethod: orderData.deliveryMethod || orderData.deliveryType || 'Collection',
+        dateCreated: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        timestamp: serverTimestamp(), // Add timestamp field for proper ordering
+        type: 'order',
+        status: 'generated',
+        regenerated: false
+      };
+      
+      // Save receipt to receipts collection
+      const receiptRef = await addDoc(collection(db, 'receipts'), receiptData);
+      
+      // Add or update this transaction in the reports collection
+      try {
+        const reportData = {
+          orderId: orderData.orderId,
+          receiptId: receiptData.receiptId,
+          receiptRef: receiptRef.id, // Reference to the actual receipt document
+          sellerId: storeId,
+          sellerName: storeData.businessName || storeData.name || 'Store',
+          buyerId: currentUser.uid,
+          buyerName: buyerInfo.name || currentUser.displayName || currentUser.email,
+          totalAmount: receiptData.totalAmount,
+          currency: receiptData.currency,
+          items: receiptData.items,
+          status: 'completed',
+          paymentMethod: receiptData.paymentMethod,
+          deliveryType: receiptData.deliveryMethod,
+          receiptGenerated: true,
+          receiptGeneratedAt: serverTimestamp(),
+          transactionType: 'order',
+          reportingTimestamp: serverTimestamp()
+        };
+        
+        // Check if this order is already in reports
+        const reportsQuery = query(
+          collection(db, 'reports'),
+          where('orderId', '==', orderData.orderId)
+        );
+        
+        const reportSnap = await getDocs(reportsQuery);
+        if (reportSnap.empty) {
+          // Create a new report entry
+          await addDoc(collection(db, 'reports'), reportData);
+        } else {
+          // Update existing report entry
+          const reportDoc = reportSnap.docs[0];
+          await updateDoc(doc(db, 'reports', reportDoc.id), {
+            receiptId: receiptData.receiptId,
+            receiptRef: receiptRef.id,
+            receiptGenerated: true,
+            receiptGeneratedAt: serverTimestamp()
+          });
+        }
+      } catch (reportError) {
+        console.error('Error updating reports with receipt info:', reportError);
+        // Don't block the main flow if reports update fails
+      }
+      
+      // Send receipt confirmation message
+      const receiptMessage = {
+        conversationId: selectedConversation.id,
+        senderId: storeId,
+        senderName: storeData.businessName || storeData.name || orderData.sellerName || 'Store',
+        receiverId: currentUser.uid,
+        receiverName: buyerInfo.name || currentUser.displayName || currentUser.email,
+        receiverEmail: buyerInfo.email || currentUser.email,
+        message: `🧾 Your Receipt\n\nThank you for your order!\n\nStore: ${receiptData.storeName}\n${receiptData.storeAddress ? `Address: ${receiptData.storeAddress}\n` : ''}${receiptData.storePhone ? `Phone: ${receiptData.storePhone}\n` : ''}${receiptData.storeBusinessId ? `Business ID: ${receiptData.storeBusinessId}\n` : ''}${receiptData.storeRegistrationNumber ? `Reg. No: ${receiptData.storeRegistrationNumber}\n` : ''}${receiptData.storeVatNumber ? `VAT No: ${receiptData.storeVatNumber}\n` : ''}\nOrder ID: ${orderData.orderId}\nDate: ${new Date().toLocaleDateString()}\n\nItems:\n${itemsList.map(item => `• ${item.name} x${item.quantity} - ${getCurrencySymbol(receiptData.currency)}${formatPrice(item.price * item.quantity, receiptData.currency)}`).join('\n')}\n\nSubtotal: ${getCurrencySymbol(receiptData.currency)}${formatPrice(receiptData.subtotal, receiptData.currency)}\nDelivery Fee: ${getCurrencySymbol(receiptData.currency)}${formatPrice(receiptData.deliveryFee, receiptData.currency)}\nService Fee: ${getCurrencySymbol(receiptData.currency)}${formatPrice(receiptData.serviceFee, receiptData.currency)}\nTotal: ${getCurrencySymbol(receiptData.currency)}${formatPrice(receiptData.totalAmount, receiptData.currency)}\n\nPayment Method: ${receiptData.paymentMethod}\nDelivery Method: ${receiptData.deliveryMethod}\n\nYour receipt has been saved to your Receipts page for future reference.\n\nThank you for shopping with ${receiptData.storeName}!`,
+        messageType: 'receipt_generated',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        receiptData: receiptData
+      };
+      
+      await addDoc(collection(db, 'messages'), receiptMessage);
+      
+      return true;
+    } catch (error) {
+      console.error('Error generating receipt:', error);
+      alert('Failed to generate receipt. Please try again.');
+      return false;
+    }
+  };
+
+  // Handle receipt offer actions
+  const handleReceiptAction = async (action, orderData) => {
+    if (action === 'generate_receipt') {
+      const success = await generateReceipt(orderData);
+      if (success) {
+        alert('✅ Receipt generated successfully! You can find it in your Receipts page.');
+      }
+    } else if (action === 'decline_receipt') {
+      // Send a simple acknowledgment message
+      try {
+        await addDoc(collection(db, 'messages'), {
+          conversationId: selectedConversation.id,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: selectedConversation.otherUserId,
+          receiverName: selectedConversation.otherUserName,
+          message: 'No receipt needed, thank you.',
+          messageType: 'receipt_declined',
+          timestamp: serverTimestamp(),
+          isRead: false
+        });
+      } catch (error) {
+        console.error('Error declining receipt:', error);
+      }
     }
   };
 
@@ -6799,14 +7278,26 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                               {message.messageType === 'order_request' && message.senderId === currentUser.uid && !isSeller && !isOrderLockedForever && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => signalDoneAddingFromMessage(message.orderData)}
+                                    onClick={(event) => {
+                                      // Add temporary visual feedback by fading the button
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.5';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✅ Processing...';
+                                      
+                                      // Process the action
+                                      signalDoneAddingFromMessage(message.orderData);
+                                    }}
                                     className={`action-btn done-message-btn ${isOrderLockedForever ? 'disabled' : ''}`}
                                     disabled={isOrderLockedForever}
                                     style={{
                                       backgroundColor: isOrderLockedForever ? '#d1d5db' : '#10B981',
                                       color: isOrderLockedForever ? '#6B7280' : 'white',
                                       cursor: isOrderLockedForever ? 'not-allowed' : 'pointer',
-                                      opacity: isOrderLockedForever ? 0.7 : 1
+                                      opacity: isOrderLockedForever ? 0.7 : 1,
+                                      transition: 'all 0.2s ease'
                                     }}
                                   >
                                     {isOrderLockedForever ? '✅ Order Finalized' : '✅ Done Adding Items'}
@@ -6818,12 +7309,24 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                               {message.messageType === 'order_request' && message.receiverId === currentUser.uid && isSeller && message.orderData?.deliveryType === 'Collection' && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => confirmOrderForCollection(message.orderData)}
+                                    onClick={(event) => {
+                                      // Apply permanent fade-out effect
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.3';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✓ Confirmed';
+                                      
+                                      // Process the action
+                                      confirmOrderForCollection(message.orderData);
+                                    }}
                                     className="action-btn confirm-collection-btn"
                                     style={{
                                       backgroundColor: '#10B981',
                                       color: 'white',
-                                      marginRight: '8px'
+                                      marginRight: '8px',
+                                      transition: 'all 0.3s ease'
                                     }}
                                   >
                                     ✅ Confirm Order (Collection)
@@ -6878,11 +7381,23 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                               {message.messageType === 'pay_at_store_confirmed' && message.senderId === currentUser.uid && isSeller && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => markPayAtStoreReady(message.orderData)}
+                                    onClick={(event) => {
+                                      // Add temporary visual feedback by fading the button
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.3';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✓ Order Ready';
+                                      
+                                      // Process the action
+                                      markPayAtStoreReady(message.orderData);
+                                    }}
                                     className="action-btn ready-pay-at-store-btn"
                                     style={{
                                       backgroundColor: '#0891b2',
-                                      color: 'white'
+                                      color: 'white',
+                                      transition: 'all 0.3s ease'
                                     }}
                                   >
                                     📦 Mark Ready for Collection
@@ -6947,8 +7462,14 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                                           setSelectedOrderForDelivery(message.orderData);
                                           setShowCollectionModal(true);
                                         }}
+                                        disabled={isOrderMarkedReady(message.orderData?.orderId)}
+                                        style={{
+                                          opacity: isOrderMarkedReady(message.orderData?.orderId) ? '0.3' : '1',
+                                          cursor: isOrderMarkedReady(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
+                                          backgroundColor: isOrderMarkedReady(message.orderData?.orderId) ? '#d1d5db' : ''
+                                        }}
                                       >
-                                        📋 Reschedule Collection
+                                        {isOrderMarkedReady(message.orderData?.orderId) ? '✓ Order Ready' : '📋 Reschedule Collection'}
                                       </button>
                                     </div>
                                   )}
@@ -7140,6 +7661,95 @@ Your pickup code is: ${pickupCode}
                                 </div>
                               )}
 
+                              {/* Bank Transfer Verification Button */}
+                              {message.messageType === 'bank_transfer_submitted' && message.receiverId === currentUser?.uid && isSeller && (
+                                <div className="message-actions">
+                                  <button
+                                    onClick={async () => {
+                                      const verified = window.confirm(
+                                        `🏦 VERIFY BANK TRANSFER\n\n` +
+                                        `Have you received the payment of ${getCurrencySymbol(message.paymentData.currency)}${formatPrice(message.paymentData.amount, message.paymentData.currency)} ` +
+                                        `from ${message.senderName}?\n\n` +
+                                        `Reference: ${message.paymentData.bankTransferInfo.referenceNumber}\n` +
+                                        `Bank: ${message.paymentData.bankTransferInfo.fromBank}\n\n` +
+                                        `Click OK only if you have confirmed the payment in your bank account.`
+                                      );
+
+                                      if (verified) {
+                                        try {
+                                          // Handle payments without ID by using custom reference
+                                          let paymentId = message.paymentData.id;
+                                          
+                                          // If no ID exists, try to use the stripePaymentIntentId or another reference
+                                          if (!paymentId) {
+                                            if (message.paymentData.stripePaymentIntentId) {
+                                              // Try to find the payment document using stripePaymentIntentId as a query
+                                              const paymentsRef = collection(db, 'payments');
+                                              const q = query(paymentsRef, where('stripePaymentIntentId', '==', message.paymentData.stripePaymentIntentId));
+                                              const querySnapshot = await getDocs(q);
+                                              
+                                              if (!querySnapshot.empty) {
+                                                // Use the first matching document
+                                                paymentId = querySnapshot.docs[0].id;
+                                                console.log('Found payment using stripePaymentIntentId reference:', paymentId);
+                                              }
+                                            }
+                                          }
+                                          
+                                          // If we still don't have an ID, create a new payment record
+                                          if (!paymentId) {
+                                            console.log('Creating new payment record for verification', message.paymentData);
+                                            // Create a new payment document with the message payment data
+                                            const newPaymentRef = await addDoc(collection(db, 'payments'), {
+                                              ...message.paymentData,
+                                              status: 'completed',
+                                              verifiedAt: serverTimestamp(),
+                                              verifiedBy: currentUser.uid,
+                                              createdFromMessage: true
+                                            });
+                                            paymentId = newPaymentRef.id;
+                                          }
+                                          
+                                          // Update payment status
+                                          const paymentDoc = doc(db, 'payments', paymentId);
+                                          await updateDoc(paymentDoc, {
+                                            status: 'completed',
+                                            verifiedAt: serverTimestamp(),
+                                            verifiedBy: currentUser.uid
+                                          });
+
+                                          // Send verification message
+                                          const verificationMessage = {
+                                            conversationId: message.conversationId,
+                                            senderId: currentUser.uid,
+                                            senderName: currentUser.displayName || currentUser.email,
+                                            receiverId: message.senderId,
+                                            receiverName: message.senderName,
+                                            message: `✅ BANK TRANSFER VERIFIED\n\nYour payment has been verified by the seller.\n\nAmount: ${getCurrencySymbol(message.paymentData.currency)}${formatPrice(message.paymentData.amount, message.paymentData.currency)}\nReference: ${message.paymentData.bankTransferInfo.referenceNumber}\n\n🎫 PICKUP CODE: ${message.paymentData.pickupCode}\n\nPlease provide this code when collecting your order.`,
+                                            messageType: 'bank_transfer_verified',
+                                            timestamp: serverTimestamp(),
+                                            paymentData: message.paymentData
+                                          };
+
+                                          await addDoc(collection(db, 'messages'), verificationMessage);
+                                          alert('Payment verified successfully! The customer has been notified.');
+                                        } catch (error) {
+                                          console.error('Error verifying payment:', error);
+                                          alert('Failed to verify payment. Please try again.');
+                                        }
+                                      }
+                                    }}
+                                    className="action-btn verify-payment-btn"
+                                    style={{
+                                      backgroundColor: '#059669',
+                                      color: 'white'
+                                    }}
+                                  >
+                                    ✅ Verify Bank Transfer
+                                  </button>
+                                </div>
+                              )}
+
                               {/* Delivery buttons for sellers after payment notification - DELIVERY ONLY */}
                               {message.messageType === 'payment_notification' && message.receiverId === currentUser?.uid && isSeller && 
                                message.paymentData?.deliveryType === 'Delivery' && (
@@ -7170,7 +7780,16 @@ Your pickup code is: ${pickupCode}
                                message.paymentData?.deliveryType === 'Collection' && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => {
+                                    onClick={(event) => {
+                                      // Add temporary visual feedback by fading the button
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.3';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✓ Order Ready';
+                                      
+                                      // Process the action
                                       const orderDataForCollection = {
                                         orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
                                         items: message.paymentData?.items || [],
@@ -7184,7 +7803,8 @@ Your pickup code is: ${pickupCode}
                                     className="action-btn ready-collection-btn"
                                     style={{
                                       backgroundColor: '#10B981',
-                                      color: 'white'
+                                      color: 'white',
+                                      transition: 'all 0.3s ease'
                                     }}
                                   >
                                     📦 Mark Ready for Collection
@@ -7197,7 +7817,16 @@ Your pickup code is: ${pickupCode}
                                message.paymentData?.deliveryType === 'Collection' && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => {
+                                    onClick={(event) => {
+                                      // Add temporary visual feedback by fading the button
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.3';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✓ Order Ready';
+                                      
+                                      // Process the action
                                       const orderDataForCollection = {
                                         orderId: message.paymentData?.displayInfo?.orderId || message.paymentData?.orderId,
                                         items: message.paymentData?.items || [],
@@ -7211,7 +7840,8 @@ Your pickup code is: ${pickupCode}
                                     className="action-btn ready-collection-btn"
                                     style={{
                                       backgroundColor: '#10B981',
-                                      color: 'white'
+                                      color: 'white',
+                                      transition: 'all 0.3s ease'
                                     }}
                                   >
                                     📦 Mark Ready for Collection
@@ -7254,8 +7884,14 @@ Your pickup code is: ${pickupCode}
                                     <button 
                                       className="action-btn schedule-collection-btn"
                                       onClick={() => openCollectionModal(message.paymentData)}
+                                      disabled={isOrderMarkedReady(message.paymentData?.orderId)}
+                                      style={{
+                                        opacity: isOrderMarkedReady(message.paymentData?.orderId) ? '0.3' : '1',
+                                        cursor: isOrderMarkedReady(message.paymentData?.orderId) ? 'not-allowed' : 'pointer',
+                                        backgroundColor: isOrderMarkedReady(message.paymentData?.orderId) ? '#d1d5db' : ''
+                                      }}
                                     >
-                                      📋 Reschedule Collection
+                                      {isOrderMarkedReady(message.paymentData?.orderId) ? '✓ Order Ready' : '📋 Reschedule Collection'}
                                     </button>
                                     {storeRefundsEnabled && (
                                       <button 
@@ -7301,8 +7937,14 @@ Your pickup code is: ${pickupCode}
                                     <button 
                                       className="action-btn schedule-delivery-btn"
                                       onClick={() => openDeliveryModal(message.paymentData)}
+                                      disabled={isOrderMarkedReady(message.paymentData?.orderId)}
+                                      style={{
+                                        opacity: isOrderMarkedReady(message.paymentData?.orderId) ? '0.3' : '1',
+                                        cursor: isOrderMarkedReady(message.paymentData?.orderId) ? 'not-allowed' : 'pointer',
+                                        backgroundColor: isOrderMarkedReady(message.paymentData?.orderId) ? '#d1d5db' : ''
+                                      }}
                                     >
-                                      📋 Reschedule Delivery
+                                      {isOrderMarkedReady(message.paymentData?.orderId) ? '✓ Order Ready' : '📋 Reschedule Delivery'}
                                     </button>
                                     {storeRefundsEnabled && (
                                       <button 
@@ -7318,6 +7960,65 @@ Your pickup code is: ${pickupCode}
                                         ℹ️ This store does not offer refunds
                                       </div>
                                     )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Receipt offer message - for customers to generate receipt */}
+                              {message.messageType === 'receipt_offer' && message.receiverId === currentUser.uid && !isSeller && (
+                                <div className="message-actions">
+                                  <div style={{ marginBottom: '12px', fontSize: '15px', fontWeight: '500' }}>
+                                    Would you like a receipt for this order?
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button
+                                      onClick={() => handleReceiptAction('generate_receipt', message.orderData)}
+                                      style={{
+                                        backgroundColor: '#059669',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '8px 16px',
+                                        fontWeight: '500',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      ✅ Yes, generate receipt
+                                    </button>
+                                    <button
+                                      onClick={() => handleReceiptAction('decline_receipt', message.orderData)}
+                                      style={{
+                                        backgroundColor: '#6B7280',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '8px 16px',
+                                        fontWeight: '500',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      ❌ No, thanks
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Receipt generated message - confirmation for customers */}
+                              {message.messageType === 'receipt_generated' && (
+                                <div className="message-actions">
+                                  <div style={{ 
+                                    padding: '10px 15px',
+                                    backgroundColor: '#f0fdf4',
+                                    border: '1px solid #86efac',
+                                    borderRadius: '6px',
+                                    marginTop: '8px' 
+                                  }}>
+                                    <p style={{ margin: '0', fontWeight: '500', color: '#15803d' }}>
+                                      ✅ Receipt generated successfully!
+                                    </p>
+                                    <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#166534' }}>
+                                      You can find this receipt in your Receipts page for future reference.
+                                    </p>
                                   </div>
                                 </div>
                               )}
@@ -7532,9 +8233,15 @@ Your pickup code is: ${pickupCode}
                                       <button 
                                         className="action-btn schedule-collection-btn"
                                         onClick={() => openCollectionModal(message.orderData)}
-                                        style={{ marginRight: '8px' }}
+                                        style={{ 
+                                          marginRight: '8px',
+                                          opacity: isOrderMarkedReady(message.orderData?.orderId) ? '0.3' : '1',
+                                          cursor: isOrderMarkedReady(message.orderData?.orderId) ? 'not-allowed' : 'pointer',
+                                          backgroundColor: isOrderMarkedReady(message.orderData?.orderId) ? '#d1d5db' : ''
+                                        }}
+                                        disabled={isOrderMarkedReady(message.orderData?.orderId)}
                                       >
-                                        📋 Reschedule Collection
+                                        {isOrderMarkedReady(message.orderData?.orderId) ? '✓ Order Ready' : '📋 Reschedule Collection'}
                                       </button>
                                       {storeRefundsEnabled && (
                                         <button 
@@ -7568,16 +8275,45 @@ Your pickup code is: ${pickupCode}
                               {message.messageType === 'ready_for_collection' && message.senderId === currentUser.uid && isSeller && (
                                 <div className="message-actions">
                                   <button
-                                    onClick={() => {
-                                      setActiveTab('wallet');
+                                    onClick={(event) => {
+                                      // Add permanent visual feedback by fading the button
+                                      const btn = event.currentTarget;
+                                      btn.style.opacity = '0.3';
+                                      btn.style.backgroundColor = '#d1d5db';
+                                      btn.style.cursor = 'not-allowed';
+                                      btn.disabled = true;
+                                      btn.textContent = '✓ Collection Completed';
+                                      
+                                      // Store this order ID in our completed collections state
+                                      if (message.orderData?.orderId && !completedCollections.includes(message.orderData.orderId)) {
+                                        const updatedCompletions = [...completedCollections, message.orderData.orderId];
+                                        setCompletedCollections(updatedCompletions);
+                                        localStorage.setItem('completedCollectionOrders', JSON.stringify(updatedCompletions));
+                                      }
+                                      
+                                      // Prompt for pickup code and validate
+                                      const pickupCode = prompt('Please enter the pickup code provided by the customer:');
+                                      if (pickupCode) {
+                                        validatePickupCode(pickupCode);
+                                      }
+                                      // Don't reset the button even if canceled - keep it faded out
                                     }}
+                                    // Check if this order has been completed before
+                                    disabled={message.orderData?.orderId && completedCollections.includes(message.orderData.orderId)}
                                     className="action-btn validate-pickup-btn"
                                     style={{
-                                      backgroundColor: '#059669',
-                                      color: 'white'
+                                      backgroundColor: message.orderData?.orderId && completedCollections.includes(message.orderData.orderId)
+                                        ? '#d1d5db' : '#059669',
+                                      color: 'white',
+                                      transition: 'all 0.3s ease',
+                                      opacity: message.orderData?.orderId && completedCollections.includes(message.orderData.orderId)
+                                        ? '0.3' : '1',
+                                      cursor: message.orderData?.orderId && completedCollections.includes(message.orderData.orderId)
+                                        ? 'not-allowed' : 'pointer'
                                     }}
                                   >
-                                    ✅ Complete Collection
+                                    {message.orderData?.orderId && completedCollections.includes(message.orderData.orderId)
+                                      ? '✓ Collection Completed' : '✅ Complete Collection'}
                                   </button>
                                 </div>
                               )}

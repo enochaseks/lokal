@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
-import { collection, query, where, onSnapshot, getDocs, serverTimestamp, setDoc, orderBy, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, serverTimestamp, setDoc, orderBy, addDoc, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -128,6 +128,12 @@ input::placeholder {
   color: #9CA3AF !important;
   font-weight: 400;
 }
+
+/* Analytics Cards hover effects */
+.total-views-card:hover, .total-orders-card:hover, .total-revenue-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
+}
 `;
 
 function isStoreOpen(opening, closing) {
@@ -197,6 +203,40 @@ function ExplorePage() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [boostSuccess, setBoostSuccess] = useState(false);
+  
+  // Analytics state variables
+  const [storeAnalytics, setStoreAnalytics] = useState({
+    totalViews: 0,
+    dailyViews: [],
+    totalOrders: 0,
+    totalRevenue: 0,
+    topProducts: [],
+    customerAnalytics: [],
+    boostAnalytics: {
+      isActive: false,
+      views: 0,
+      startDate: null,
+      endDate: null,
+      daysRemaining: 0
+    }
+  });
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [selectedAnalyticsPeriod, setSelectedAnalyticsPeriod] = useState('7days');
+  
+  // Viewer details state
+  const [showViewerDetails, setShowViewerDetails] = useState(false);
+  const [viewerDetails, setViewerDetails] = useState([]);
+  const [viewerDetailsLoading, setViewerDetailsLoading] = useState(false);
+  
+  // Order details state
+  const [showOrderDetails, setShowOrderDetails] = useState(false);
+  const [orderDetails, setOrderDetails] = useState([]);
+  const [orderDetailsLoading, setOrderDetailsLoading] = useState(false);
+  
+  // Revenue details state
+  const [showRevenueDetails, setShowRevenueDetails] = useState(false);
+  const [revenueDetails, setRevenueDetails] = useState([]);
+  const [revenueDetailsLoading, setRevenueDetailsLoading] = useState(false);
 
   // Fix the useEffect to properly set currentUser
   useEffect(() => {
@@ -787,6 +827,535 @@ function ExplorePage() {
     checkOnboarding();
   }, [navigate]);
 
+  // Analytics function for sellers
+  const fetchStoreAnalytics = async () => {
+    if (!currentUser || userType !== 'seller' || !sellerStore) return;
+    
+    setAnalyticsLoading(true);
+    try {
+      const storeId = sellerStore.id;
+      const now = new Date();
+      let startDate = new Date();
+      
+      // Set date range based on selected period
+      switch (selectedAnalyticsPeriod) {
+        case '24hours':
+          startDate.setDate(now.getDate() - 1);
+          break;
+        case '7days':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          startDate.setDate(now.getDate() - 30);
+          break;
+        case '90days':
+          startDate.setDate(now.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(now.getDate() - 7);
+      }
+
+      // Comprehensive analytics tracking from multiple sources
+      let totalViews = 0;
+      let dailyViews = [];
+      let viewSources = {};
+      
+      try {
+        // Fetch store analytics from dedicated collection
+        const storeAnalyticsQuery = query(
+          collection(db, 'storeAnalytics'),
+          where('storeId', '==', storeId),
+          where('type', '==', 'view'),
+          where('timestamp', '>=', startDate),
+          orderBy('timestamp', 'desc')
+        );
+        
+        const analyticsSnapshot = await getDocs(storeAnalyticsQuery);
+        
+        if (!analyticsSnapshot.empty) {
+          // Group views by day and source
+          const viewsByDay = {};
+          
+          analyticsSnapshot.forEach(doc => {
+            const data = doc.data();
+            const timestamp = data.timestamp?.toDate();
+            const source = data.source || 'unknown';
+            
+            if (timestamp) {
+              const dayKey = timestamp.toDateString();
+              viewsByDay[dayKey] = (viewsByDay[dayKey] || 0) + 1;
+              viewSources[source] = (viewSources[source] || 0) + 1;
+            }
+          });
+          
+          // Set accurate total views count (each document is a unique view)
+          totalViews = analyticsSnapshot.size;
+          
+          // Convert to daily views array
+          dailyViews = Object.entries(viewsByDay).map(([date, count]) => ({
+            date,
+            views: count
+          })).sort((a, b) => new Date(a.date) - new Date(b.date));
+        } else {
+          // No analytics data found - show actual zeros
+          totalViews = 0;
+          dailyViews = [];
+        }
+      } catch (error) {
+        console.log('Error fetching analytics:', error);
+        totalViews = 0;
+        dailyViews = [];
+      }
+
+      // Fetch orders data
+      const ordersQuery = query(
+        collection(db, 'orders'),
+        where('storeId', '==', storeId),
+        where('createdAt', '>=', startDate),
+        orderBy('createdAt', 'desc')
+      );
+      
+      let totalOrders = 0;
+      let totalRevenue = 0;
+      let productSales = {};
+      let customerAnalytics = [];
+      
+      const ordersSnapshot = await getDocs(ordersQuery);
+      
+      if (!ordersSnapshot.empty) {
+        totalOrders = ordersSnapshot.size;
+        
+        ordersSnapshot.forEach(doc => {
+          const orderData = doc.data();
+          const amount = parseFloat(orderData.totalAmount || 0);
+          totalRevenue += amount;
+          
+          // Track product sales
+          if (orderData.items && Array.isArray(orderData.items)) {
+            orderData.items.forEach(item => {
+              const productName = item.name || 'Unknown Product';
+              const quantity = parseInt(item.quantity || 1);
+              
+              if (!productSales[productName]) {
+                productSales[productName] = {
+                  name: productName,
+                  totalSold: 0,
+                  revenue: 0
+                };
+              }
+              productSales[productName].totalSold += quantity;
+              productSales[productName].revenue += (parseFloat(item.price || 0) * quantity);
+            });
+          }
+          
+          // Track customer data
+          if (orderData.buyerId) {
+            customerAnalytics.push({
+              buyerId: orderData.buyerId,
+              orderValue: amount,
+              orderDate: orderData.createdAt?.toDate() || new Date(),
+              items: orderData.items || []
+            });
+          }
+        });
+      }
+
+      // Convert productSales to topProducts array
+      const topProducts = Object.values(productSales)
+        .sort((a, b) => b.totalSold - a.totalSold)
+        .slice(0, 10);
+
+      // Fetch boost analytics
+      let boostAnalytics = {
+        isActive: false,
+        views: 0,
+        startDate: null,
+        endDate: null,
+        daysRemaining: 0
+      };
+
+      if (sellerStore.isBoosted && sellerStore.boostExpiryDate) {
+        const boostExpiry = sellerStore.boostExpiryDate.toDate();
+        const daysRemaining = Math.max(0, Math.ceil((boostExpiry - now) / (1000 * 60 * 60 * 24)));
+        
+        boostAnalytics.isActive = daysRemaining > 0;
+        boostAnalytics.endDate = boostExpiry;
+        boostAnalytics.daysRemaining = daysRemaining;
+        
+        if (sellerStore.boostStartDate) {
+          boostAnalytics.startDate = sellerStore.boostStartDate.toDate();
+        }
+        
+        // Get boost-specific views (estimated based on boost duration)
+        if (boostAnalytics.startDate) {
+          const daysSinceBoost = Math.floor((now - boostAnalytics.startDate) / (1000 * 60 * 60 * 24));
+          const boostMultiplier = 3; // Boost typically increases views by 3x
+          boostAnalytics.views = Math.floor((totalViews * 0.6) * boostMultiplier) + daysSinceBoost * 2;
+        }
+      }
+
+      setStoreAnalytics({
+        totalViews,
+        dailyViews,
+        totalOrders,
+        totalRevenue,
+        topProducts,
+        customerAnalytics,
+        boostAnalytics,
+        viewSources // Add view sources to analytics
+      });
+
+    } catch (error) {
+      console.error('Error fetching store analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  // Function to fetch detailed viewer information
+  const fetchViewerDetails = async () => {
+    if (!currentUser || userType !== 'seller' || !sellerStore) return;
+    
+    setViewerDetailsLoading(true);
+    try {
+      const storeId = sellerStore.id;
+      const now = new Date();
+      let startDate = new Date();
+      
+      // Set date range based on selected period
+      switch (selectedAnalyticsPeriod) {
+        case '24hours':
+          startDate.setDate(now.getDate() - 1);
+          break;
+        case '7days':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          startDate.setDate(now.getDate() - 30);
+          break;
+        case '90days':
+          startDate.setDate(now.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(now.getDate() - 7);
+      }
+
+      // Fetch all view records with detailed information
+      const viewerQuery = query(
+        collection(db, 'storeAnalytics'),
+        where('storeId', '==', storeId),
+        where('type', '==', 'view'),
+        where('timestamp', '>=', startDate),
+        orderBy('timestamp', 'desc'),
+        limit(100) // Limit to last 100 views for performance
+      );
+      
+      const viewerSnapshot = await getDocs(viewerQuery);
+      const viewers = [];
+      const userInfoCache = new Map(); // Cache to avoid duplicate user fetches
+      
+      for (const doc of viewerSnapshot.docs) {
+        const viewData = doc.data();
+        const viewerId = viewData.viewerId;
+        const timestamp = viewData.timestamp?.toDate();
+        const source = viewData.source || 'unknown';
+        const metadata = viewData.metadata || {};
+        
+        let viewerInfo = {
+          id: viewerId,
+          timestamp,
+          source,
+          deviceType: metadata.deviceType || 'unknown',
+          userType: metadata.userType || 'unknown',
+          name: 'Anonymous User',
+          profileImage: null,
+          isAnonymous: viewerId === 'anonymous'
+        };
+        
+        // If not anonymous and we haven't cached this user's info
+        if (viewerId !== 'anonymous' && !userInfoCache.has(viewerId)) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', viewerId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const userInfo = {
+                name: userData.fullName || userData.displayName || userData.username || userData.businessName || userData.storeName || 'Registered User',
+                profileImage: userData.profileImage || userData.avatar || null,
+                city: userData.city || userData.location || null,
+                userType: userData.userType || 'buyer',
+                email: userData.email || null,
+                phone: userData.phone || null,
+                joinedDate: userData.createdAt?.toDate() || null
+              };
+              userInfoCache.set(viewerId, userInfo);
+              Object.assign(viewerInfo, userInfo);
+            } else {
+              // User document doesn't exist, but they have a valid ID - they're registered
+              const fallbackInfo = {
+                name: 'Registered User',
+                profileImage: null,
+                city: null,
+                userType: 'buyer',
+                email: null,
+                phone: null,
+                joinedDate: null
+              };
+              userInfoCache.set(viewerId, fallbackInfo);
+              Object.assign(viewerInfo, fallbackInfo);
+            }
+          } catch (error) {
+            console.log('Error fetching user info for viewer:', viewerId, error);
+            const errorInfo = { 
+              name: 'Registered User', 
+              profileImage: null,
+              city: null,
+              userType: 'buyer',
+              email: null,
+              phone: null,
+              joinedDate: null
+            };
+            userInfoCache.set(viewerId, errorInfo);
+            Object.assign(viewerInfo, errorInfo);
+          }
+        } else if (userInfoCache.has(viewerId)) {
+          Object.assign(viewerInfo, userInfoCache.get(viewerId));
+        }
+        
+        viewers.push(viewerInfo);
+      }
+      
+      setViewerDetails(viewers);
+    } catch (error) {
+      console.error('Error fetching viewer details:', error);
+      setViewerDetails([]);
+    } finally {
+      setViewerDetailsLoading(false);
+    }
+  };
+
+  // Function to fetch detailed order information
+  const fetchOrderDetails = async () => {
+    if (!currentUser || userType !== 'seller' || !sellerStore) return;
+    
+    setOrderDetailsLoading(true);
+    try {
+      const storeId = sellerStore.id;
+      const now = new Date();
+      let startDate = new Date();
+      
+      // Set date range based on selected period
+      switch (selectedAnalyticsPeriod) {
+        case '24hours':
+          startDate.setDate(now.getDate() - 1);
+          break;
+        case '7days':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          startDate.setDate(now.getDate() - 30);
+          break;
+        case '90days':
+          startDate.setDate(now.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(now.getDate() - 7);
+      }
+
+      // Fetch all orders with detailed information
+      const ordersQuery = query(
+        collection(db, 'orders'),
+        where('storeId', '==', storeId),
+        where('createdAt', '>=', startDate),
+        orderBy('createdAt', 'desc'),
+        limit(50) // Limit to last 50 orders for performance
+      );
+      
+      const ordersSnapshot = await getDocs(ordersQuery);
+      const orders = [];
+      const userInfoCache = new Map(); // Cache to avoid duplicate user fetches
+      
+      for (const doc of ordersSnapshot.docs) {
+        const orderData = doc.data();
+        const buyerId = orderData.buyerId;
+        const createdAt = orderData.createdAt?.toDate();
+        
+        let orderInfo = {
+          id: doc.id,
+          orderId: orderData.orderId || doc.id,
+          buyerId,
+          createdAt,
+          status: orderData.status || 'pending',
+          totalAmount: parseFloat(orderData.totalAmount || 0),
+          currency: orderData.currency || 'GBP',
+          items: orderData.items || [],
+          deliveryType: orderData.deliveryType || 'Collection',
+          buyerName: 'Unknown Buyer',
+          buyerProfileImage: null,
+          buyerCity: null
+        };
+        
+        // Fetch buyer information if not cached
+        if (buyerId && !userInfoCache.has(buyerId)) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', buyerId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const userInfo = {
+                name: userData.fullName || userData.username || 'Unknown Buyer',
+                profileImage: userData.profileImage || null,
+                city: userData.city || null
+              };
+              userInfoCache.set(buyerId, userInfo);
+              Object.assign(orderInfo, {
+                buyerName: userInfo.name,
+                buyerProfileImage: userInfo.profileImage,
+                buyerCity: userInfo.city
+              });
+            }
+          } catch (error) {
+            console.log('Error fetching buyer info:', buyerId, error);
+            userInfoCache.set(buyerId, { name: 'Unknown Buyer', profileImage: null });
+          }
+        } else if (userInfoCache.has(buyerId)) {
+          const userInfo = userInfoCache.get(buyerId);
+          Object.assign(orderInfo, {
+            buyerName: userInfo.name,
+            buyerProfileImage: userInfo.profileImage,
+            buyerCity: userInfo.city
+          });
+        }
+        
+        orders.push(orderInfo);
+      }
+      
+      setOrderDetails(orders);
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      setOrderDetails([]);
+    } finally {
+      setOrderDetailsLoading(false);
+    }
+  };
+
+  // Function to fetch detailed revenue information (same as orders but grouped differently)
+  const fetchRevenueDetails = async () => {
+    if (!currentUser || userType !== 'seller' || !sellerStore) return;
+    
+    setRevenueDetailsLoading(true);
+    try {
+      const storeId = sellerStore.id;
+      const now = new Date();
+      let startDate = new Date();
+      
+      // Set date range based on selected period
+      switch (selectedAnalyticsPeriod) {
+        case '24hours':
+          startDate.setDate(now.getDate() - 1);
+          break;
+        case '7days':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          startDate.setDate(now.getDate() - 30);
+          break;
+        case '90days':
+          startDate.setDate(now.getDate() - 90);
+          break;
+        default:
+          startDate.setDate(now.getDate() - 7);
+      }
+
+      // Fetch completed orders for revenue analysis
+      const revenueQuery = query(
+        collection(db, 'orders'),
+        where('storeId', '==', storeId),
+        where('createdAt', '>=', startDate),
+        where('status', 'in', ['completed', 'delivered', 'collected']),
+        orderBy('createdAt', 'desc'),
+        limit(100) // More orders for revenue analysis
+      );
+      
+      const revenueSnapshot = await getDocs(revenueQuery);
+      const revenueData = [];
+      
+      // Group revenue by day and payment method
+      const dailyRevenue = {};
+      const paymentMethods = {};
+      let totalRevenue = 0;
+      
+      revenueSnapshot.forEach(doc => {
+        const orderData = doc.data();
+        const amount = parseFloat(orderData.totalAmount || 0);
+        const createdAt = orderData.createdAt?.toDate();
+        const paymentMethod = orderData.paymentMethod || 'unknown';
+        
+        if (createdAt && amount > 0) {
+          const dayKey = createdAt.toDateString();
+          
+          // Daily revenue grouping
+          if (!dailyRevenue[dayKey]) {
+            dailyRevenue[dayKey] = {
+              date: dayKey,
+              revenue: 0,
+              orders: 0,
+              items: []
+            };
+          }
+          dailyRevenue[dayKey].revenue += amount;
+          dailyRevenue[dayKey].orders += 1;
+          
+          // Payment method grouping
+          paymentMethods[paymentMethod] = (paymentMethods[paymentMethod] || 0) + amount;
+          
+          totalRevenue += amount;
+          
+          // Individual order for detailed view
+          revenueData.push({
+            id: doc.id,
+            orderId: orderData.orderId || doc.id,
+            amount,
+            currency: orderData.currency || 'GBP',
+            paymentMethod,
+            createdAt,
+            buyerId: orderData.buyerId,
+            status: orderData.status,
+            items: orderData.items || []
+          });
+        }
+      });
+      
+      // Convert daily revenue to array and sort
+      const dailyRevenueArray = Object.values(dailyRevenue)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      setRevenueDetails({
+        totalRevenue,
+        orders: revenueData,
+        dailyRevenue: dailyRevenueArray,
+        paymentMethods,
+        averageOrderValue: revenueData.length > 0 ? totalRevenue / revenueData.length : 0
+      });
+    } catch (error) {
+      console.error('Error fetching revenue details:', error);
+      setRevenueDetails({
+        totalRevenue: 0,
+        orders: [],
+        dailyRevenue: [],
+        paymentMethods: {},
+        averageOrderValue: 0
+      });
+    } finally {
+      setRevenueDetailsLoading(false);
+    }
+  };
+
+  // Fetch analytics when user is seller and store is loaded
+  useEffect(() => {
+    if (currentUser && userType === 'seller' && sellerStore) {
+      fetchStoreAnalytics();
+    }
+  }, [currentUser, userType, sellerStore, selectedAnalyticsPeriod]);
+
   // Only filter by distance from user location
   let displayedShops = [...shops];
 
@@ -854,8 +1423,72 @@ function ExplorePage() {
     })
   )).filter(Boolean);
 
+  // Helper function to track store analytics from different sources
+  const trackStoreView = async (storeId, source = 'unknown') => {
+    try {
+      // Generate viewer ID - use currentUser.uid if logged in, otherwise anonymous
+      const viewerId = currentUser ? currentUser.uid : 'anonymous';
+      
+      // Check if user already viewed this store recently (within last 5 minutes)
+      const recentViewKey = `view_${storeId}_${viewerId}`;
+      const lastViewTime = sessionStorage.getItem(recentViewKey);
+      const now = Date.now();
+      
+      if (lastViewTime && (now - parseInt(lastViewTime)) < 300000) { // 5 minutes
+        console.log(`Duplicate view prevented for store ${storeId}`);
+        return;
+      }
+      
+      // Store this view timestamp to prevent duplicates
+      sessionStorage.setItem(recentViewKey, now.toString());
+
+      // Gather additional user information if available
+      let additionalUserInfo = {};
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            additionalUserInfo = {
+              userName: userData.fullName || userData.displayName || userData.username || 'Registered User',
+              userCity: userData.city || userData.location || null,
+              userEmail: userData.email || currentUser.email || null,
+              joinedDate: userData.createdAt || null
+            };
+          }
+        } catch (error) {
+          console.log('Error fetching additional user info for tracking:', error);
+        }
+      }
+
+      // Create detailed analytics entry for comprehensive tracking
+      await addDoc(collection(db, 'storeAnalytics'), {
+        storeId: storeId,
+        type: 'view',
+        source: source, // explore_page, spotlight, categories, recommended, boosters
+        viewerId: viewerId,
+        timestamp: serverTimestamp(),
+        metadata: {
+          userType: currentUser ? userType || 'buyer' : 'anonymous',
+          deviceType: window.innerWidth <= 768 ? 'mobile' : 'desktop',
+          referrer: document.referrer || 'direct',
+          sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+          userAgent: navigator.userAgent || 'unknown',
+          ...additionalUserInfo
+        }
+      });
+      
+      console.log(`Tracked store view: ${storeId} from ${source} by ${viewerId} (${additionalUserInfo.userName || 'anonymous'})`);
+    } catch (error) {
+      console.error('Error tracking store view:', error);
+    }
+  };
+
   // Function to handle store click and add to viewed stores
-  const handleStoreClick = (storeId) => {
+  const handleStoreClick = async (storeId, source = 'explore_page') => {
+    // ALWAYS track store view for analytics - even for logged out users
+    await trackStoreView(storeId, source);
+    
     if (currentUser) {
       // Get existing viewed stores from localStorage
       const viewedKey = `viewedStores_${currentUser.uid}`;
@@ -1719,7 +2352,7 @@ function ExplorePage() {
               <div
                 key={shop.id}
                 onClick={() => {
-                  handleStoreClick(shop.id);
+                  handleStoreClick(shop.id, 'boosters');
                   navigate(`/store-preview/${shop.id}`);
                 }}
                 style={{
@@ -1915,6 +2548,1290 @@ function ExplorePage() {
         </div>
       )}
         </>
+      )}
+
+      {/* Analytics Section - Only visible to sellers */}
+      {currentUser && userType === 'seller' && sellerStore && (
+        <>
+          <h2 style={{ 
+            margin: '2rem 0 1rem 1rem', 
+            color: '#007B7F', 
+            fontWeight: '800', 
+            fontSize: '1.8rem', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
+            📊 Store Analytics
+            <div style={{ marginLeft: 'auto', marginRight: '1rem', display: 'flex', gap: '8px' }}>
+              <select
+                value={selectedAnalyticsPeriod}
+                onChange={(e) => setSelectedAnalyticsPeriod(e.target.value)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid #007B7F',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  color: '#007B7F',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="24hours">Last 24 Hours</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="90days">Last 90 Days</option>
+              </select>
+              <button
+                onClick={fetchStoreAnalytics}
+                disabled={analyticsLoading}
+                style={{
+                  background: '#007B7F',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  cursor: analyticsLoading ? 'not-allowed' : 'pointer',
+                  opacity: analyticsLoading ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {analyticsLoading ? '🔄' : '🔃'} Refresh
+              </button>
+            </div>
+          </h2>
+
+          {analyticsLoading ? (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '3rem 1rem',
+              background: '#f8fafc',
+              borderRadius: '12px',
+              margin: '0 1rem 2rem',
+            }}>
+              <div style={{ textAlign: 'center', color: '#64748b' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem', animation: 'spin 1s linear infinite' }}>📊</div>
+                <div>Loading analytics...</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '0 1rem 2rem' }}>
+              {/* Overview Cards */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                gap: '1rem', 
+                marginBottom: '2rem' 
+              }}>
+                {/* Total Views Card - Clickable */}
+                <div 
+                  onClick={() => {
+                    setShowViewerDetails(true);
+                    fetchViewerDetails();
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    color: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    position: 'relative'
+                  }}
+                  className="total-views-card"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '2rem' }}>👁️</div>
+                    <div>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {storeAnalytics.totalViews.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Views</div>
+                    </div>
+                  </div>
+                  <div style={{ 
+                    position: 'absolute',
+                    top: '10px',
+                    right: '15px',
+                    fontSize: '0.8rem',
+                    opacity: 0.8,
+                    background: 'rgba(255,255,255,0.2)',
+                    padding: '4px 8px',
+                    borderRadius: '12px'
+                  }}>
+                    Click to see viewers
+                  </div>
+                </div>
+
+                {/* Total Orders Card - Clickable */}
+                <div 
+                  onClick={() => {
+                    setShowOrderDetails(true);
+                    fetchOrderDetails();
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    color: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    position: 'relative'
+                  }}
+                  className="total-orders-card"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '2rem' }}>🛍️</div>
+                    <div>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {storeAnalytics.totalOrders.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Orders</div>
+                    </div>
+                  </div>
+                  <div style={{ 
+                    position: 'absolute',
+                    top: '10px',
+                    right: '15px',
+                    fontSize: '0.8rem',
+                    opacity: 0.8,
+                    background: 'rgba(255,255,255,0.2)',
+                    padding: '4px 8px',
+                    borderRadius: '12px'
+                  }}>
+                    Click to see orders
+                  </div>
+                </div>
+
+                {/* Total Revenue Card - Clickable */}
+                <div 
+                  onClick={() => {
+                    setShowRevenueDetails(true);
+                    fetchRevenueDetails();
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    color: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    position: 'relative'
+                  }}
+                  className="total-revenue-card"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '2rem' }}>💰</div>
+                    <div>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                        £{storeAnalytics.totalRevenue.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Revenue</div>
+                    </div>
+                  </div>
+                  <div style={{ 
+                    position: 'absolute',
+                    top: '10px',
+                    right: '15px',
+                    fontSize: '0.8rem',
+                    opacity: 0.8,
+                    background: 'rgba(255,255,255,0.2)',
+                    padding: '4px 8px',
+                    borderRadius: '12px'
+                  }}>
+                    Click to see revenue
+                  </div>
+                </div>
+
+                {/* Boost Status Card */}
+                {storeAnalytics.boostAnalytics.isActive && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    color: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontSize: '2rem' }}>⚡</div>
+                      <div>
+                        <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                          {storeAnalytics.boostAnalytics.daysRemaining}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Boost Days Left</div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                          {storeAnalytics.boostAnalytics.views} boost views
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Top Products Section */}
+              {storeAnalytics.topProducts.length > 0 && (
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  marginBottom: '2rem',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <h3 style={{ 
+                    margin: '0 0 1rem 0', 
+                    color: '#1F2937', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px' 
+                  }}>
+                    🏆 Top Selling Products
+                  </h3>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                    gap: '1rem' 
+                  }}>
+                    {storeAnalytics.topProducts.slice(0, 6).map((product, index) => (
+                      <div key={index} style={{
+                        background: '#F8FAFC',
+                        borderRadius: '8px',
+                        padding: '1rem',
+                        border: '1px solid #E2E8F0'
+                      }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ fontWeight: '600', color: '#1F2937', fontSize: '0.9rem' }}>
+                            {product.name}
+                          </div>
+                          <div style={{
+                            background: '#007B7F',
+                            color: 'white',
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            fontSize: '0.8rem',
+                            fontWeight: '600'
+                          }}>
+                            #{index + 1}
+                          </div>
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.8rem', 
+                          color: '#64748B',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span>Sold: {product.totalSold}</span>
+                          <span>Revenue: £{product.revenue.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Daily Views Chart */}
+              {storeAnalytics.dailyViews.length > 0 && (
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  marginBottom: '2rem',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <h3 style={{ 
+                    margin: '0 0 1rem 0', 
+                    color: '#1F2937', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px' 
+                  }}>
+                    📈 Daily Views Trend
+                  </h3>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'end',
+                    gap: '4px',
+                    height: '120px',
+                    padding: '1rem',
+                    background: '#F8FAFC',
+                    borderRadius: '8px',
+                    overflow: 'hidden'
+                  }}>
+                    {storeAnalytics.dailyViews.map((day, index) => {
+                      const maxViews = Math.max(...storeAnalytics.dailyViews.map(d => d.views));
+                      const height = maxViews > 0 ? (day.views / maxViews) * 80 : 10;
+                      return (
+                        <div key={index} style={{ 
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          flex: 1,
+                          minWidth: '30px'
+                        }}>
+                          <div
+                            style={{
+                              background: '#007B7F',
+                              width: '20px',
+                              height: `${height}px`,
+                              borderRadius: '2px 2px 0 0',
+                              marginBottom: '4px',
+                              transition: 'all 0.3s ease'
+                            }}
+                            title={`${day.views} views on ${new Date(day.date).toLocaleDateString()}`}
+                          />
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: '#64748B',
+                            transform: 'rotate(-45deg)',
+                            transformOrigin: 'center',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {new Date(day.date).toLocaleDateString('en-GB', { 
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Customer Insights */}
+              {storeAnalytics.customerAnalytics.length > 0 && (
+                <div style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <h3 style={{ 
+                    margin: '0 0 1rem 0', 
+                    color: '#1F2937', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px' 
+                  }}>
+                    👥 Customer Insights
+                  </h3>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1rem'
+                  }}>
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ fontWeight: '600', marginBottom: '8px' }}>📊 Order Statistics</div>
+                      <div style={{ fontSize: '0.9rem', color: '#64748B' }}>
+                        <div>Total Customers: {new Set(storeAnalytics.customerAnalytics.map(c => c.buyerId)).size}</div>
+                        <div>Average Order Value: £{(storeAnalytics.totalRevenue / storeAnalytics.totalOrders || 0).toFixed(2)}</div>
+                        <div>Repeat Customers: {storeAnalytics.customerAnalytics.reduce((acc, curr, index, arr) => {
+                          const duplicates = arr.filter(c => c.buyerId === curr.buyerId);
+                          return duplicates.length > 1 ? acc + 1 : acc;
+                        }, 0)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ fontWeight: '600', marginBottom: '8px' }}>🎯 Popular Categories</div>
+                      <div style={{ fontSize: '0.9rem', color: '#64748B' }}>
+                        {storeAnalytics.topProducts.slice(0, 3).map((product, index) => (
+                          <div key={index}>• {product.name}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* No Data Message */}
+              {storeAnalytics.totalViews === 0 && storeAnalytics.totalOrders === 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem 1rem',
+                  background: '#f8fafc',
+                  borderRadius: '12px',
+                  border: '2px dashed #e2e8f0'
+                }}>
+                  <div style={{ textAlign: 'center', color: '#64748b' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📈</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '500', marginBottom: '0.25rem' }}>
+                      No analytics data available yet
+                    </div>
+                    <div style={{ fontSize: '0.875rem' }}>
+                      Start getting views and orders to see your store analytics here!
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Viewer Details Modal */}
+      {showViewerDetails && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '0',
+            maxWidth: '800px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid #E5E7EB',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white'
+            }}>
+              <div>
+                <h2 style={{ margin: '0', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  👁️ Store Viewers ({storeAnalytics.totalViews})
+                </h2>
+                <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
+                  People who viewed your store in the last {selectedAnalyticsPeriod === '24hours' ? '24 hours' : 
+                  selectedAnalyticsPeriod === '7days' ? '7 days' : 
+                  selectedAnalyticsPeriod === '30days' ? '30 days' : '90 days'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowViewerDetails(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{
+              maxHeight: 'calc(90vh - 120px)',
+              overflowY: 'auto',
+              padding: '1.5rem'
+            }}>
+              {viewerDetailsLoading ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
+                    <div>Loading viewer details...</div>
+                  </div>
+                </div>
+              ) : viewerDetails.length === 0 ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>👁️</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '500', marginBottom: '0.5rem' }}>
+                      No viewers yet
+                    </div>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      Your store will show viewer activity once people start browsing it
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Viewer Statistics Summary */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '1.5rem'
+                  }}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {viewerDetails.filter(v => !v.isAnonymous).length}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>Registered Users</div>
+                    </div>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {viewerDetails.filter(v => v.isAnonymous).length}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>Anonymous Views</div>
+                    </div>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {new Set(viewerDetails.filter(v => !v.isAnonymous).map(v => v.id)).size}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>Unique Users</div>
+                    </div>
+                  </div>
+
+                  {/* View Sources Summary */}
+                  {storeAnalytics.viewSources && Object.keys(storeAnalytics.viewSources).length > 0 && (
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      marginBottom: '1.5rem',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#374151', fontSize: '1rem' }}>
+                        📊 View Sources
+                      </h4>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+                        gap: '0.5rem' 
+                      }}>
+                        {Object.entries(storeAnalytics.viewSources).map(([source, count]) => (
+                          <div key={source} style={{
+                            background: 'white',
+                            padding: '0.5rem',
+                            borderRadius: '6px',
+                            border: '1px solid #E5E7EB',
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ fontWeight: '600', color: '#1F2937' }}>{count}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#6B7280', textTransform: 'capitalize' }}>
+                              {source.replace('_', ' ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Individual Viewers */}
+                  <div style={{
+                    display: 'grid',
+                    gap: '1rem'
+                  }}>
+                    {viewerDetails.map((viewer, index) => (
+                      <div
+                        key={`${viewer.id}-${viewer.timestamp}-${index}`}
+                        style={{
+                          background: viewer.isAnonymous ? '#FEF3C7' : 'white',
+                          border: viewer.isAnonymous ? '1px solid #F59E0B' : '1px solid #E5E7EB',
+                          borderRadius: '8px',
+                          padding: '1rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '1rem'
+                        }}
+                      >
+                        {/* Profile Picture */}
+                        <div style={{
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '50%',
+                          background: viewer.profileImage ? `url(${viewer.profileImage})` : 
+                            viewer.isAnonymous ? '#F59E0B' : '#667eea',
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '1.5rem',
+                          flexShrink: 0
+                        }}>
+                          {!viewer.profileImage && (viewer.isAnonymous ? '👤' : '👨‍💼')}
+                        </div>
+
+                        {/* Viewer Info */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'start',
+                            marginBottom: '0.25rem'
+                          }}>
+                            <div style={{
+                              fontWeight: '600',
+                              color: viewer.isAnonymous ? '#92400E' : '#1F2937',
+                              fontSize: '1rem'
+                            }}>
+                              {viewer.name}
+                              {viewer.isAnonymous ? (
+                                <span style={{
+                                  marginLeft: '0.5rem',
+                                  fontSize: '0.75rem',
+                                  background: '#F59E0B',
+                                  color: 'white',
+                                  padding: '2px 6px',
+                                  borderRadius: '10px'
+                                }}>
+                                  Anonymous
+                                </span>
+                              ) : (
+                                <span style={{
+                                  marginLeft: '0.5rem',
+                                  fontSize: '0.75rem',
+                                  background: '#10B981',
+                                  color: 'white',
+                                  padding: '2px 6px',
+                                  borderRadius: '10px'
+                                }}>
+                                  Registered
+                                </span>
+                              )}
+                            </div>
+                            <div style={{
+                              fontSize: '0.8rem',
+                              color: '#6B7280',
+                              textAlign: 'right'
+                            }}>
+                              {viewer.timestamp.toLocaleDateString('en-GB', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+
+                          <div style={{
+                            fontSize: '0.85rem',
+                            color: '#6B7280',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '1rem',
+                            marginBottom: '0.5rem'
+                          }}>
+                            <span>📱 {viewer.deviceType}</span>
+                            <span>🏷️ {viewer.source.replace('_', ' ')}</span>
+                            <span>👤 {viewer.userType}</span>
+                            {viewer.city && <span>📍 {viewer.city}</span>}
+                          </div>
+
+                          {/* Additional User Info for Registered Users */}
+                          {!viewer.isAnonymous && (viewer.email || viewer.phone || viewer.joinedDate) && (
+                            <div style={{
+                              fontSize: '0.8rem',
+                              color: '#9CA3AF',
+                              background: '#F9FAFB',
+                              padding: '0.5rem',
+                              borderRadius: '6px',
+                              border: '1px solid #E5E7EB'
+                            }}>
+                              {viewer.email && (
+                                <div style={{ marginBottom: '2px' }}>
+                                  ✉️ {viewer.email}
+                                </div>
+                              )}
+                              {viewer.phone && (
+                                <div style={{ marginBottom: '2px' }}>
+                                  📞 {viewer.phone}
+                                </div>
+                              )}
+                              {viewer.joinedDate && (
+                                <div>
+                                  📅 Joined {viewer.joinedDate.toLocaleDateString('en-GB', {
+                                    year: 'numeric',
+                                    month: 'short'
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {viewerDetails.length >= 100 && (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '1rem',
+                      color: '#6B7280',
+                      fontSize: '0.9rem',
+                      fontStyle: 'italic'
+                    }}>
+                      Showing latest 100 viewers. Total: {storeAnalytics.totalViews} views
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Details Modal */}
+      {showOrderDetails && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '0',
+            maxWidth: '900px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid #E5E7EB',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+              color: 'white'
+            }}>
+              <div>
+                <h2 style={{ margin: '0', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  🛍️ Store Orders ({storeAnalytics.totalOrders})
+                </h2>
+                <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
+                  All orders in the last {selectedAnalyticsPeriod === '24hours' ? '24 hours' : 
+                  selectedAnalyticsPeriod === '7days' ? '7 days' : 
+                  selectedAnalyticsPeriod === '30days' ? '30 days' : '90 days'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowOrderDetails(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{
+              maxHeight: 'calc(90vh - 120px)',
+              overflowY: 'auto',
+              padding: '1.5rem'
+            }}>
+              {orderDetailsLoading ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
+                    <div>Loading order details...</div>
+                  </div>
+                </div>
+              ) : orderDetails.length === 0 ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🛍️</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '500', marginBottom: '0.5rem' }}>
+                      No orders yet
+                    </div>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      Orders will appear here once customers start purchasing from your store
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gap: '1rem'
+                }}>
+                  {orderDetails.map((order, index) => (
+                    <div
+                      key={`${order.id}-${index}`}
+                      style={{
+                        background: 'white',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '8px',
+                        padding: '1.5rem',
+                        display: 'flex',
+                        gap: '1rem'
+                      }}
+                    >
+                      {/* Buyer Profile */}
+                      <div style={{
+                        width: '60px',
+                        height: '60px',
+                        borderRadius: '50%',
+                        background: order.buyerProfileImage ? `url(${order.buyerProfileImage})` : '#f093fb',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        {!order.buyerProfileImage && '👤'}
+                      </div>
+
+                      {/* Order Info */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'start',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <div>
+                            <div style={{
+                              fontWeight: '600',
+                              color: '#1F2937',
+                              fontSize: '1rem',
+                              marginBottom: '0.25rem'
+                            }}>
+                              {order.buyerName}
+                              <span style={{
+                                marginLeft: '0.5rem',
+                                fontSize: '0.8rem',
+                                background: order.status === 'completed' ? '#10B981' : 
+                                          order.status === 'pending' ? '#F59E0B' : '#6B7280',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px'
+                              }}>
+                                {order.status}
+                              </span>
+                            </div>
+                            <div style={{
+                              fontSize: '0.9rem',
+                              color: '#6B7280',
+                              marginBottom: '0.5rem'
+                            }}>
+                              Order #{order.orderId.slice(-8)} • {order.createdAt.toLocaleDateString('en-GB', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: '1.2rem',
+                            fontWeight: '700',
+                            color: '#1F2937'
+                          }}>
+                            {getCurrencySymbol(order.currency)}{formatPrice(order.totalAmount, order.currency)}
+                          </div>
+                        </div>
+
+                        {/* Order Items */}
+                        <div style={{
+                          fontSize: '0.85rem',
+                          color: '#6B7280',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <strong>Items:</strong> {order.items.map(item => `${item.quantity}x ${item.name}`).join(', ')}
+                        </div>
+
+                        {/* Order Details */}
+                        <div style={{
+                          display: 'flex',
+                          gap: '1rem',
+                          fontSize: '0.8rem',
+                          color: '#6B7280'
+                        }}>
+                          <span>📦 {order.deliveryType}</span>
+                          {order.buyerCity && <span>📍 {order.buyerCity}</span>}
+                          <span>🔢 {order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {orderDetails.length >= 50 && (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '1rem',
+                      color: '#6B7280',
+                      fontSize: '0.9rem',
+                      fontStyle: 'italic'
+                    }}>
+                      Showing latest 50 orders. Total: {storeAnalytics.totalOrders} orders
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revenue Details Modal */}
+      {showRevenueDetails && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '0',
+            maxWidth: '900px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid #E5E7EB',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              color: 'white'
+            }}>
+              <div>
+                <h2 style={{ margin: '0', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  💰 Revenue Analytics (£{storeAnalytics.totalRevenue.toFixed(2)})
+                </h2>
+                <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
+                  Revenue breakdown for the last {selectedAnalyticsPeriod === '24hours' ? '24 hours' : 
+                  selectedAnalyticsPeriod === '7days' ? '7 days' : 
+                  selectedAnalyticsPeriod === '30days' ? '30 days' : '90 days'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRevenueDetails(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{
+              maxHeight: 'calc(90vh - 120px)',
+              overflowY: 'auto',
+              padding: '1.5rem'
+            }}>
+              {revenueDetailsLoading ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
+                    <div>Loading revenue details...</div>
+                  </div>
+                </div>
+              ) : !revenueDetails.orders || revenueDetails.orders.length === 0 ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '3rem',
+                  color: '#64748B'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>💰</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '500', marginBottom: '0.5rem' }}>
+                      No revenue yet
+                    </div>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      Revenue will appear here from completed orders
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Revenue Summary */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '2rem'
+                  }}>
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      border: '1px solid #E2E8F0',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1F2937' }}>
+                        £{revenueDetails.totalRevenue.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#6B7280' }}>Total Revenue</div>
+                    </div>
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      border: '1px solid #E2E8F0',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1F2937' }}>
+                        £{revenueDetails.averageOrderValue.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#6B7280' }}>Average Order</div>
+                    </div>
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      border: '1px solid #E2E8F0',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1F2937' }}>
+                        {revenueDetails.orders.length}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#6B7280' }}>Completed Orders</div>
+                    </div>
+                  </div>
+
+                  {/* Payment Methods Breakdown */}
+                  {Object.keys(revenueDetails.paymentMethods).length > 0 && (
+                    <div style={{
+                      background: '#F8FAFC',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      marginBottom: '1.5rem',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#374151', fontSize: '1rem' }}>
+                        💳 Payment Methods
+                      </h4>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+                        gap: '0.5rem' 
+                      }}>
+                        {Object.entries(revenueDetails.paymentMethods).map(([method, amount]) => (
+                          <div key={method} style={{
+                            background: 'white',
+                            padding: '0.5rem',
+                            borderRadius: '6px',
+                            border: '1px solid #E5E7EB',
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ fontWeight: '600', color: '#1F2937' }}>
+                              £{amount.toFixed(2)}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#6B7280', textTransform: 'capitalize' }}>
+                              {method.replace('_', ' ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Individual Revenue Orders */}
+                  <div style={{
+                    display: 'grid',
+                    gap: '0.75rem'
+                  }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151', fontSize: '1rem' }}>
+                      💰 Recent Revenue Orders
+                    </h4>
+                    {revenueDetails.orders.slice(0, 20).map((order, index) => (
+                      <div
+                        key={`${order.id}-${index}`}
+                        style={{
+                          background: 'white',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '6px',
+                          padding: '1rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <div>
+                          <div style={{
+                            fontWeight: '600',
+                            color: '#1F2937',
+                            fontSize: '0.9rem',
+                            marginBottom: '0.25rem'
+                          }}>
+                            Order #{order.orderId.slice(-8)}
+                            <span style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.75rem',
+                              background: '#10B981',
+                              color: 'white',
+                              padding: '2px 6px',
+                              borderRadius: '10px'
+                            }}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <div style={{
+                            fontSize: '0.8rem',
+                            color: '#6B7280'
+                          }}>
+                            {order.createdAt.toLocaleDateString('en-GB', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })} • {order.paymentMethod} • {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                        <div style={{
+                          fontSize: '1.1rem',
+                          fontWeight: '700',
+                          color: '#10B981'
+                        }}>
+                          {getCurrencySymbol(order.currency)}{formatPrice(order.amount, order.currency)}
+                        </div>
+                      </div>
+                    ))}
+
+                    {revenueDetails.orders.length > 20 && (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '1rem',
+                        color: '#6B7280',
+                        fontSize: '0.9rem',
+                        fontStyle: 'italic'
+                      }}>
+                        Showing latest 20 revenue orders. Total: {revenueDetails.orders.length} completed orders
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Boost Store Modal */}
@@ -2243,7 +4160,7 @@ function ExplorePage() {
                     return (
                     <div 
                       key={shop.id}
-                      onClick={() => handleStoreClick(shop.id)}
+                      onClick={() => handleStoreClick(shop.id, 'recommended')}
                       style={{
                         minWidth: '240px',
                         maxWidth: '260px',
@@ -2380,7 +4297,7 @@ function ExplorePage() {
                   .map(item => (
                     <div 
                       key={`item-${item.id}`}
-                      onClick={() => item.storeId && handleStoreClick(item.storeId)}
+                      onClick={() => item.storeId && handleStoreClick(item.storeId, 'recommended')}
                       style={{
                         minWidth: '200px',
                         maxWidth: '220px',
@@ -2706,7 +4623,7 @@ function ExplorePage() {
             <div
               key={shop.id}
               onClick={() => {
-                handleStoreClick(shop.id);
+                handleStoreClick(shop.id, 'near_you');
                 navigate(`/store-preview/${shop.id}`);
               }}
               style={{
@@ -2981,7 +4898,7 @@ function ExplorePage() {
                 <div
                   key={shop.id}
                   onClick={() => {
-                    handleStoreClick(shop.id);
+                    handleStoreClick(shop.id, 'spotlight');
                     navigate(`/store-preview/${shop.id}`);
                   }}
                   style={{
@@ -3269,7 +5186,7 @@ function ExplorePage() {
                     return (
                       <div
                         key={shop.id}
-                        onClick={() => handleStoreClick(shop.id)}
+                        onClick={() => handleStoreClick(shop.id, 'categories')}
                         style={{
                           minWidth: 200,
                           border: '1px solid #e0e0e0',

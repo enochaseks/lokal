@@ -1690,6 +1690,585 @@ function HelpCenterPage() {
             </div>
           )}
 
+          {/* Explore Page Guide Content */}
+          {helpTopic === 'explore-page-guide' && (
+            <div>
+              <h1 style={topicStyles.h1}>Using the Explore Page</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>The Explore page is your gateway</strong> to discovering local shops and businesses around you. Learn how to use its features effectively to find exactly what you're looking for.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Navigating the Explore Page</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Location Detection</h3>
+                  <p>When you first visit the Explore page, Lokal will request permission to access your location. This helps us show you shops and services that are closest to you.</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Allow location access for the best experience</li>
+                    <li>Your location is only used to calculate distances to shops</li>
+                    <li>If you deny location access, you can still enter your location manually</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Filtering and Searching</h3>
+                  <p>Use the search and filter options to narrow down results:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Search bar:</strong> Type keywords related to products, store names, or services</li>
+                    <li><strong>Categories:</strong> Filter shops by categories like Foods & Goods, Meat & Poultry, etc.</li>
+                    <li><strong>Filter options:</strong> Sort by "Open Now" to see currently operating shops</li>
+                    <li><strong>Sort options:</strong> Sort by distance, newest, highest rated, etc.</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Setting Search Radius</h3>
+                  <p>Adjust how far you're willing to travel:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Use the radius slider to set your preferred search distance (up to 30km)</li>
+                    <li>The map will update to show only stores within your selected radius</li>
+                    <li>Smaller radius means faster loading times and more relevant results</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Understanding Store Cards</h3>
+                  <p>Each store card displays important information:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Store name and category</li>
+                    <li>Distance from your current location</li>
+                    <li>Opening hours and "Open Now" indicator</li>
+                    <li>Rating based on customer reviews</li>
+                    <li>Featured products or special offers</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Buyer vs. Seller Explore Pages</h3>
+                  <p>Lokal offers two different versions of the Explore page depending on your account type:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Buyer Explore Page:</strong> For finding and discovering stores to shop from</li>
+                    <li><strong>Seller Explore Page:</strong> For sellers to monitor competitor presence and market coverage</li>
+                  </ul>
+                  
+                  <h4 style={{ fontSize: '1.1rem', marginTop: '15px', marginBottom: '8px' }}>For Sellers:</h4>
+                  <ul style={topicStyles.ul}>
+                    <li>View how your store appears to potential customers in the Explore page</li>
+                    <li>See if your store displays as "Open" or "Closed" based on your set hours</li>
+                    <li>Boost your store's visibility with promotional options by paying for boost periods</li>
+                    <li>Monitor which stores are currently boosted in your area</li>
+                    <li>Access the boost feature directly from your store management area rather than the Explore page</li>
+                  </ul>
+                  
+                  <p style={{ marginTop: '10px' }}>When logged in as a seller, you can see exactly how your business appears to customers, including your store card display, ratings, and open status. The boost feature allows you to make your store more prominent in search results for a set duration.</p>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '10px', color: '#333' }}>Tips for Better Results</h3>
+                <ul style={topicStyles.ul}>
+                  <li><strong>Click the 📍 pin icon</strong> at the top of the page anytime to instantly refresh your location</li>
+                  <li>Allow the app to refresh your location periodically for the most accurate results</li>
+                  <li>Try different search terms if you don't find what you're looking for initially</li>
+                  <li>Check "Recently Viewed" stores for quick access to shops you've visited before</li>
+                  <li>Use the city selector to browse shops in different areas if you're planning to travel</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Having trouble with the Explore page? See our Location Troubleshooting guide:</p>
+                <button 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('location-troubleshooting'); }}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Location Troubleshooting
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Location Troubleshooting Content */}
+          {helpTopic === 'location-troubleshooting' && (
+            <div>
+              <h1 style={topicStyles.h1}>Location Troubleshooting</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Having trouble with location detection?</strong> Follow these steps to ensure you can see the stores near you.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Common Location Issues and Solutions</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Location Permission Denied</h3>
+                  <p>If you denied location access or if your browser blocked it:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Click the <strong>📍 pin icon</strong> at the top of the Explore page to request location access again</li>
+                    <li>When the permission prompt appears, select "Allow" to grant location access</li>
+                    <li>If you don't see the prompt, check your browser settings:</li>
+                  </ul>
+                  <div style={{ marginLeft: '20px' }}>
+                    <p><strong>Chrome:</strong> Click the lock icon in the address bar {'->'} Site Settings {'->'} Location {'->'} Allow</p>
+                    <p><strong>Safari:</strong> Settings {'->'} Safari {'->'} Privacy & Security {'->'} Location Services {'->'} Enable</p>
+                    <p><strong>Firefox:</strong> Click the lock icon {'->'} Permissions {'->'} Access Your Location {'->'} Allow</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Manual Location Entry</h3>
+                  <p>If automatic location detection isn't working:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Click "Enter location manually" on the Explore page</li>
+                    <li>Type your city, area, or postal code</li>
+                    <li>Select from the suggested options that appear</li>
+                    <li>Your search results will update based on the entered location</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Inaccurate Location</h3>
+                  <p>If Lokal shows an incorrect location:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>First, try the <strong>📍 pin icon</strong> to refresh your location (see detailed guide in step 4 below)</li>
+                    <li>If your location is still incorrect, try these solutions:</li>
+                    <ul style={{ marginTop: '8px', marginLeft: '15px' }}>
+                      <li>Make sure your device's GPS is enabled in your device settings</li>
+                      <li>Grant precise location permissions (not just approximate) if your device offers this option</li>
+                      <li>Try switching from Wi-Fi to mobile data or vice versa (different networks may provide different location accuracy)</li>
+                      <li>Move to a location with better GPS signal (away from tall buildings or underground areas)</li>
+                      <li>Try clearing your browser cache and cookies</li>
+                      <li>Restart your browser or device</li>
+                    </ul>
+                    <li>If automatic location detection continues to fail, use the manual location entry option as described in step 2</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Using the Pin Icon to Refresh Location</h3>
+                  <p>The pin icon is your most important tool for location updates:</p>
+                  <div style={{ padding: '15px', backgroundColor: '#e6f7f5', borderRadius: '8px', marginBottom: '15px', border: '1px solid #a8e6e0' }}>
+                    <h4 style={{ fontSize: '1.05rem', marginBottom: '10px', color: '#007B7F' }}>How to Use the Pin Icon</h4>
+                    <ul style={topicStyles.ul}>
+                      <li>Look for the <strong>📍 pin icon</strong> at the top of the Explore page next to your city name</li>
+                      <li>Click on it to instantly trigger a new location detection</li>
+                      <li>The icon will change to a spinning <strong>🔄</strong> symbol while detecting your location</li>
+                      <li>Your city name will temporarily change to "Detecting location..." during this process</li>
+                      <li>When complete, the map and store listings will update based on your refreshed location</li>
+                    </ul>
+                  </div>
+                  
+                  <h4 style={{ fontSize: '1.05rem', marginBottom: '10px', color: '#007B7F' }}>When to Use the Pin Icon</h4>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>When you first open the Explore page</strong> and want to ensure location accuracy</li>
+                    <li><strong>After changing your physical location</strong> (e.g., traveling to a different area)</li>
+                    <li><strong>When store distances seem incorrect</strong> or don't match your actual location</li>
+                    <li><strong>When you see the message "Location unavailable"</strong> but want to try detection again</li>
+                    <li><strong>When switching between networks</strong> (e.g., from mobile data to WiFi)</li>
+                  </ul>
+                  
+                  <h4 style={{ fontSize: '1.05rem', marginBottom: '10px', marginTop: '15px', color: '#007B7F' }}>Troubleshooting Pin Icon Issues</h4>
+                  <ul style={topicStyles.ul}>
+                    <li>If clicking the pin icon doesn't update your location after several attempts, check your browser's location permissions</li>
+                    <li>Some browsers may require you to interact with the page first before allowing location access</li>
+                    <li>On mobile devices, ensure location services are enabled in your device settings</li>
+                    <li>If the pin icon stays in the spinning state for more than 30 seconds, try refreshing the page</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>No Stores Showing</h3>
+                  <p>If you don't see any stores after location is detected:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Try increasing your search radius using the slider</li>
+                    <li>Remove any category or filter selections that might be limiting results</li>
+                    <li>Check if your city is supported by Lokal (we're constantly expanding)</li>
+                    <li>Try searching for specific product types or store names</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '10px', color: '#333' }}>Location Privacy</h3>
+                <p>Lokal values your privacy:</p>
+                <ul style={topicStyles.ul}>
+                  <li>Your location is only used to show nearby stores and calculate distances</li>
+                  <li>We never track your movements or store location history without your consent</li>
+                  <li>You can use the manual location option if you prefer not to share your exact location</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Still having location issues? Our support team can help:</p>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Report Bugs Content */}
+          {helpTopic === 'report-bugs' && (
+            <div>
+              <h1 style={topicStyles.h1}>Reporting Bugs and Technical Issues</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Found something not working correctly?</strong> Help us improve Lokal by reporting bugs and technical issues.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>How to Report a Bug</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Gather Information</h3>
+                  <p>Before reporting, collect these details to help us solve the issue faster:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>What were you trying to do when the bug occurred?</li>
+                    <li>What happened instead of the expected behavior?</li>
+                    <li>Which page or feature were you using?</li>
+                    <li>Device information (phone/tablet/desktop, browser type and version)</li>
+                    <li>Screenshots showing the issue (if possible)</li>
+                    <li>Time and date when the issue occurred</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Try Basic Troubleshooting</h3>
+                  <p>Sometimes simple steps can resolve the issue:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Refresh the page</li>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Try a different browser or device if possible</li>
+                    <li>Check your internet connection</li>
+                    <li>Log out and log back in</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Submit a Bug Report</h3>
+                  <p>Contact our support team with your bug report:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Use the "Contact Support" button below</li>
+                    <li>Select "Technical Issues" as the subject category</li>
+                    <li>Include all the information you gathered in step 1</li>
+                    <li>Be as specific and detailed as possible</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Follow Up</h3>
+                  <p>After submitting your report:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>You'll receive a confirmation email with a case number</li>
+                    <li>Our technical team will investigate the issue</li>
+                    <li>We may contact you for additional information if needed</li>
+                    <li>You'll be notified when the bug is fixed</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '10px', color: '#333' }}>Common Issues and Known Bugs</h3>
+                <p>Check if your issue is already known:</p>
+                <ul style={topicStyles.ul}>
+                  <li><strong>Location detection:</strong> Sometimes requires multiple attempts on certain devices. Use our troubleshooting guide if needed.</li>
+                  <li><strong>Payment processing:</strong> Occasional delays in transaction confirmation. Always check your bank statement before attempting multiple payments.</li>
+                  <li><strong>Image loading:</strong> May be slow on poor connections. Try switching to mobile data if on Wi-Fi or vice versa.</li>
+                  <li><strong>Notifications:</strong> Push notifications might be delayed on some devices. Check the app regularly for updates.</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Ready to report a bug? Our technical team is here to help:</p>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Receipts Page Guide Content */}
+          {helpTopic === 'receipts-guide' && (
+            <div>
+              <h1 style={topicStyles.h1}>Using the Receipts Page</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Track Your Purchases & Refunds:</strong> The Receipts page provides a comprehensive view of your order history and refund transactions. Learn how to access, filter, and understand your transaction records.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>What Are Receipts?</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: 0 }}><strong>Receipts</strong> are digital records of your transactions on Lokal. They serve as proof of purchase or refund and contain important details about your interactions with sellers.</p>
+                
+                <div style={{ marginTop: '15px' }}>
+                  <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#007B7F' }}>Key Features of Lokal's Receipt System:</h4>
+                  <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                    <li><strong>Centralized Storage:</strong> All receipts are stored in a dedicated database collection, serving as a single source of truth</li>
+                    <li><strong>Complete Transaction History:</strong> Captures orders, refunds, and other financial interactions</li>
+                    <li><strong>Automatic Generation:</strong> Receipts are created instantly whenever you complete a transaction</li>
+                    <li><strong>Secure Record-keeping:</strong> Provides a reliable audit trail of all your purchases and refunds</li>
+                    <li><strong>Unified Access:</strong> All your receipts are available in one convenient location, regardless of where the transaction originated</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Accessing Your Receipts</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Navigate to Receipts</h3>
+                  <p>Access your receipts by clicking on the "Receipts" option in your account menu or navigation bar. This page contains all your orders and refunds in one convenient location.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Understanding Receipt Types</h3>
+                  <p>The Receipts page displays two main types of transaction records:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Order Receipts:</strong> Confirmations of purchases you've made, marked with a 🧾 icon</li>
+                    <li><strong>Refund Receipts:</strong> Records of refunds you've received, marked with a 💸 icon</li>
+                  </ul>
+                  <p>Some receipts may also display a ♻️ Regenerated tag, indicating that the seller has regenerated the receipt after the original transaction.</p>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e0f7fa', borderRadius: '6px' }}>
+                    <p><strong>Important:</strong> The Receipts page shows <em>all</em> your transactions from our central receipts database, including orders placed through Messages, the Explore page, or any other part of the app. Every purchase and refund associated with your account will appear here, regardless of how the order was originally placed.</p>
+                    <p style={{ marginTop: '8px' }}><strong>Note:</strong> Lokal uses a dedicated receipts collection as a single source of truth for all your transaction records. All receipts are automatically stored in this centralized database for your convenience, eliminating the need to search through different parts of the app for your purchase history.</p>
+                    <p style={{ marginTop: '8px' }}><strong>Tip:</strong> If you don't see a recently generated receipt or refund, click the "Refresh Receipts" button at the top of the page to ensure you're viewing the most up-to-date information from our centralized receipt system.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Filtering Your Receipts</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Filter by Receipt Type</h3>
+                  <p>At the top of the Receipts page, you'll find three filter buttons to organize your centralized receipt collection:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>All:</strong> Shows all receipts including both orders and refunds from the centralized database</li>
+                    <li><strong>Orders:</strong> Displays only order receipts (purchases you've made)</li>
+                    <li><strong>Refunds:</strong> Shows only refund receipts (money returned to you)</li>
+                  </ul>
+                  <p>Click on any of these buttons to filter your receipts accordingly. Thanks to our centralized receipt system, the Receipts page shows all your transactions in one place - whether they originated from the Messages page, Explore page, or other parts of the app. This unified approach ensures a complete view of your purchase history.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Search Your Receipts</h3>
+                  <p>Use the search box to find specific receipts by:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Store name (e.g., "Green Market")</li>
+                    <li>Order ID (e.g., the last few digits of an order number)</li>
+                    <li>Refund reason (for refund receipts)</li>
+                  </ul>
+                  <p>Simply type your search term in the box and the receipts will be filtered automatically.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Sort Your Receipts</h3>
+                  <p>You can organize your receipts chronologically using the "Sort By" dropdown:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Newest First:</strong> Displays your most recent transactions at the top</li>
+                    <li><strong>Oldest First:</strong> Shows your earliest transactions at the top</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Viewing Receipt Details</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>6</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Open Receipt Details</h3>
+                  <p>To view the complete details of any receipt:</p>
+                  <ol style={{ paddingLeft: '20px' }}>
+                    <li>Locate the receipt you want to view in the list</li>
+                    <li>Click anywhere on the receipt card</li>
+                    <li>A detailed receipt modal will open with comprehensive information</li>
+                  </ol>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>7</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Understanding the Receipt Detail View</h3>
+                  <p>The detailed receipt view shows:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Store Information:</strong> Name of the store where you made the purchase</li>
+                    <li><strong>Order ID:</strong> Unique identifier for your transaction</li>
+                    <li><strong>Date & Time:</strong> When the transaction occurred</li>
+                    <li><strong>Total Amount:</strong> The transaction amount with currency symbol</li>
+                    <li><strong>Item Details:</strong> List of purchased items with quantities and prices</li>
+                    <li><strong>Payment Information:</strong> Payment method used and delivery details</li>
+                    <li><strong>Refund Reason:</strong> For refund receipts, the reason for the refund</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Managing Your Receipt History</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>8</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Using Pagination</h3>
+                  <p>If you have many receipts, they'll be organized into pages:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Each page shows up to 10 receipts</li>
+                    <li>Use the "Previous" and "Next" buttons at the bottom to navigate between pages</li>
+                    <li>The current page indicator shows which page you're viewing (e.g., "Page 1 of 3")</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>9</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Refreshing Your Receipts List</h3>
+                  <p>All your receipts are stored in Lokal's dedicated receipts collection, which serves as a single source of truth for all transaction records. This centralized approach ensures you can easily access your complete purchase history in one place.</p>
+                  <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px', marginBottom: '12px' }}>
+                    <p style={{ margin: 0, fontWeight: 500 }}>How Our Centralized Receipt System Works:</p>
+                    <ul style={{ marginTop: '8px', marginBottom: 0, paddingLeft: '20px' }}>
+                      <li>Every transaction (order, refund, etc.) automatically creates a receipt in our dedicated receipts collection</li>
+                      <li>This collection serves as the single source of truth for all receipt data</li>
+                      <li>The Receipts page queries this collection directly, ensuring consistent and reliable display</li>
+                      <li>All receipt types appear in one unified view, regardless of where they originated</li>
+                    </ul>
+                  </div>
+                  <p>If you've recently made a purchase or received a refund and don't see it in your receipts:</p>
+                  <ol style={topicStyles.ul}>
+                    <li>Click the <strong>"Refresh Receipts"</strong> button at the top of the page to load the latest transactions from the centralized receipts collection</li>
+                    <li>This ensures all receipts - including newly generated ones - will appear in your list</li>
+                    <li>The system automatically updates to show regenerated receipts with the ♻️ tag</li>
+                    <li>All refund receipts will be displayed, including those from the Messages page</li>
+                    <li>Your receipts are securely stored and easily accessible through this streamlined system</li>
+                  </ol>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>10</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>What To Do When No Receipts Are Found</h3>
+                  <p>If no receipts appear in your list, it could be due to:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>You haven't made any purchases yet</li>
+                    <li>Your search term doesn't match any receipts</li>
+                    <li>You've filtered for a specific receipt type that you don't have</li>
+                  </ul>
+                  <p>Try clearing your search, switching to "All" in the filter type, or clicking the "Refresh Receipts" button to ensure you're seeing all available receipts.</p>
+                </div>
+              </div>
+              
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '10px', color: '#333' }}>Tips for Using the Receipts Page</h3>
+                <ul style={topicStyles.ul}>
+                  <li><strong>Keep Track of Expenses:</strong> Regularly check your receipts to monitor your spending on Lokal</li>
+                  <li><strong>Refresh for Latest Data:</strong> Use the "Refresh Receipts" button to ensure all recent transactions are visible</li>
+                  <li><strong>Centralized Receipt System:</strong> All your receipts are automatically stored in our secure database for easy access</li>
+                  <li><strong>Verify Refunds:</strong> If you've requested a refund, check the Receipts page for confirmation</li>
+                  <li><strong>Regenerated Receipts:</strong> Look for the ♻️ tag that indicates a seller has updated or regenerated a receipt</li>
+                  <li><strong>Save for Records:</strong> Use the detailed receipt view for record-keeping or expense tracking</li>
+                  <li><strong>Check Recent Orders:</strong> Filter by "Newest First" to quickly find your most recent transactions</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Having issues with your receipts? Learn how to request a refund:</p>
+                <button 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('refund-requests'); }}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Refund Requests
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* Other help topics will be added here */}
         </div>
       </div>
@@ -1837,6 +2416,48 @@ function HelpCenterPage() {
             </ul>
           </div>
           
+          {/* For Explore Page Guide */}
+          <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <div style={{ backgroundColor: '#007B7F', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                  <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Using the Explore Page</h3>
+            </div>
+            <p style={{ margin: '0 0 15px 0', color: '#555' }}>Learn how to use the Explore page to find stores near you, troubleshoot location issues, and get the most out of your shopping experience.</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('explore-page-guide'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Using the Explore page
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('location-troubleshooting'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Location troubleshooting
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('report-bugs'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Reporting bugs
+                </a>
+              </li>
+            </ul>
+          </div>
+          
           {/* For Buyer Support */}
           <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
@@ -1865,6 +2486,15 @@ function HelpCenterPage() {
                   style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
                 >
                   Tracking your order
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('receipts-guide'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Using the Receipts page
                 </a>
               </li>
               <li style={{ marginBottom: '8px' }}>

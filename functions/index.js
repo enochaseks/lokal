@@ -35,6 +35,18 @@ exports.helloWorld = onRequest((request, response) => {
 // Import the boost store functions
 const boostStoreFunctions = require('./boost-store-function');
 
+// Import the delete user functions
+const deleteUserFunctions = require('./delete-user-function');
+
+// Import the store buyer receipt functions
+const storeBuyerReceiptFunction = require('./store-buyer-receipt');
+
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
 exports.expireStoreBoosts = boostStoreFunctions.expireStoreBoosts;
+
+// Export the delete user functions
+exports.deleteUserAccount = deleteUserFunctions.deleteUserAccount;
+
+// Export the store buyer receipt functions
+exports.storeBuyerReceipt = storeBuyerReceiptFunction.storeBuyerReceipt;

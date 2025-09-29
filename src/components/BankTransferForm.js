@@ -27,11 +27,18 @@ const BankTransferForm = ({
       // Check if seller has real payment info saved (use unmasked version for bank transfers)
       const sellerPaymentInfo = storeInfo?.bankTransferInfo || storeInfo?.paymentInfo;
       
+      // Get a valid storeName for this context
+      const validStoreName = storeInfo?.businessName || 
+                             storeInfo?.storeName || 
+                             storeInfo?.displayName || 
+                             selectedConversation?.otherUserName || 
+                             'Seller';
+      
       if (storeInfo && sellerPaymentInfo && storeInfo.paymentType === 'Own Card/Bank Details') {
         
         // Build bank details from seller's actual saved information
         const bankDetails = {
-          accountName: selectedConversation?.otherUserName || 'Seller',
+          accountName: validStoreName,
           reference: `LOKAL-${paymentData.orderId?.slice(-8) || Date.now()}`,
           isRealBankDetails: true
         };
@@ -167,10 +174,17 @@ const BankTransferForm = ({
     };
 
     const getFallbackBankDetails = (currency) => {
+      // Get a valid storeName for this context to avoid initialization issues
+      const validStoreName = storeInfo?.businessName || 
+                          storeInfo?.storeName || 
+                          storeInfo?.displayName || 
+                          selectedConversation?.otherUserName || 
+                          'Seller';
+
       switch (currency) {
         case 'GBP':
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             accountNumber: 'Contact seller for account number',
             sortCode: 'Contact seller for sort code',
             bankName: 'Contact seller for bank details',
@@ -186,7 +200,7 @@ const BankTransferForm = ({
           };
         case 'EUR':
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             iban: 'Contact seller for IBAN',
             bic: 'Contact seller for BIC',
             bankName: 'Contact seller for bank details',
@@ -202,7 +216,7 @@ const BankTransferForm = ({
           };
         case 'USD':
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             accountNumber: 'Contact seller for account number',
             routingNumber: 'Contact seller for routing number',
             bankName: 'Contact seller for bank details',
@@ -218,7 +232,7 @@ const BankTransferForm = ({
           };
         case 'NGN':
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             accountNumber: 'Contact seller for account number',
             bankName: 'Contact seller for bank details',
             reference: `LOKAL-${paymentData.orderId?.slice(-8) || Date.now()}`,
@@ -233,7 +247,7 @@ const BankTransferForm = ({
           };
         case 'KES':
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             accountNumber: 'Contact seller for account number',
             bankName: 'Contact seller for bank details',
             reference: `LOKAL-${paymentData.orderId?.slice(-8) || Date.now()}`,
@@ -248,7 +262,7 @@ const BankTransferForm = ({
           };
         default:
           return {
-            accountName: selectedConversation?.otherUserName || 'Seller',
+            accountName: validStoreName,
             accountNumber: 'Contact seller for bank details',
             bankName: 'Contact seller for bank details',
             reference: `LOKAL-${paymentData.orderId?.slice(-8) || Date.now()}`,

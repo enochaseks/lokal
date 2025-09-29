@@ -90,8 +90,268 @@ function ReceiptsPage() {
   };
 
   // View receipt details
-  const viewReceiptDetails = (receipt) => {
-    setSelectedReceipt(receipt);
+  const viewReceiptDetails = async (receipt) => {
+    // Make a copy of the receipt to avoid modifying the original
+    let receiptWithStoreInfo = {...receipt};
+    
+    try {
+      // If we have a storeId or sellerId, fetch store details to get the proper store name
+      const storeId = receipt.storeId || receipt.sellerId;
+      const userId = receipt.userId || receipt.buyerId;
+      
+      if (storeId) {
+        try {
+          // First check the stores collection - this is the primary source
+          const storeDoc = await getDoc(doc(db, 'stores', storeId));
+          
+          if (storeDoc.exists()) {
+            const storeData = storeDoc.data();
+            console.log('Store data from Firestore:', storeData);
+            
+            // Get store name from store data - force finding the actual store name
+            const storeName = storeData.storeName || 
+                             storeData.businessName || 
+                             storeData.name;
+            
+            if (!storeName) {
+              console.warn(`No store name found in store document for ID: ${storeId}`);
+            }
+            
+            // Update receipt with store information using proper field names
+            receiptWithStoreInfo = {
+              ...receiptWithStoreInfo,
+              // Only use actual store data - NEVER fallback to 'Store'
+              storeName: storeName || 'Store ID: ' + storeId.substring(0, 8),
+              // Enhanced address detection with multiple field checks
+              storeAddress: storeData.storeLocation || 
+                          storeData.address || 
+                          (storeData.location?.address) || 
+                          storeData.businessAddress ||
+                          '',
+              // Enhanced phone detection with multiple field checks
+              storePhone: storeData.phoneNumber || 
+                         storeData.phone || 
+                         storeData.contactNumber || 
+                         storeData.businessPhone ||
+                         '',
+              phoneType: storeData.phoneType || 'work',
+              storeEmail: storeData.email || '',
+              // Include store owner info for better connectivity
+              storeOwnerId: storeData.ownerId || storeId,
+              storeData: storeData
+            };
+          } else {
+            // If no store document, try to get user profile
+            // The storeId might be the user ID of the store owner
+            const userDoc = await getDoc(doc(db, 'users', storeId));
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log('Store owner data from Firestore:', userData);
+              
+              // Update receipt with user information - no fallbacks to 'Store'
+              receiptWithStoreInfo = {
+                ...receiptWithStoreInfo,
+                // Only use actual store name data from user profile
+                storeName: userData.storeName || 
+                           userData.businessName || 
+                           userData.displayName || 
+                           'Seller ID: ' + storeId.substring(0, 8),
+                storeAddress: userData.storeLocation || 
+                           userData.address || 
+                           userData.businessAddress || 
+                           (userData.location?.address) || 
+                           '',
+                storePhone: userData.phoneNumber || 
+                          userData.phone || 
+                          userData.contactNumber || 
+                          userData.businessPhone ||
+                          '',
+                phoneType: userData.phoneType || 'work',
+                storeEmail: userData.email || '',
+                storeOwnerId: storeId
+              };
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching store information:', error);
+        }
+      }
+      
+      // If we have userId or buyerId, try to get additional information
+      if (userId && (!receiptWithStoreInfo.storeName || receiptWithStoreInfo.storeName === 'Store' || receiptWithStoreInfo.storeName.includes('ID:'))) {
+        try {
+          console.log('Looking up additional store information by user ID:', userId);
+          
+          // First check if this user has any stores associated with them
+          const userStoresQuery = query(collection(db, 'stores'), 
+                                      where('ownerId', '==', userId));
+          const userStoresSnapshot = await getDocs(userStoresQuery);
+          
+          if (!userStoresSnapshot.empty) {
+            // User is a store owner - get their store information
+            const storeData = userStoresSnapshot.docs[0].data();
+            console.log('Found store owned by user:', storeData);
+            
+            // Use the store information to enhance the receipt - no fallbacks
+            receiptWithStoreInfo = {
+              ...receiptWithStoreInfo,
+              storeId: userStoresSnapshot.docs[0].id,
+              storeName: storeData.storeName || storeData.businessName || storeData.name || 'Store ID: ' + userStoresSnapshot.docs[0].id.substring(0, 8),
+              storeAddress: storeData.storeLocation || 
+                           storeData.address || 
+                           storeData.businessAddress || 
+                           (storeData.location?.address) || 
+                           '',
+              storePhone: storeData.phoneNumber || 
+                         storeData.phone || 
+                         storeData.contactNumber || 
+                         storeData.businessPhone ||
+                         '',
+              phoneType: storeData.phoneType || 'work',
+              storeEmail: storeData.email || '',
+              storeData: storeData
+            };
+          } else {
+            // Check if we have user information
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log('User data from Firestore:', userData);
+              
+              // Check if the user has store information in their profile
+              if (userData.storeName || userData.businessName || userData.storeInfo) {
+                // The user has store information in their profile - no fallbacks
+                receiptWithStoreInfo = {
+                  ...receiptWithStoreInfo,
+                  storeName: userData.storeName || userData.businessName || userData.displayName || 'User ID: ' + userId.substring(0, 8),
+                  storeAddress: userData.storeLocation || 
+                               userData.address || 
+                               userData.businessAddress || 
+                               (userData.location?.address) || 
+                               (typeof userData.location === 'string' ? userData.location : '') || 
+                               '',
+                  storePhone: userData.phoneNumber || 
+                             userData.phone || 
+                             userData.contactNumber || 
+                             userData.businessPhone ||
+                             '',
+                  phoneType: userData.phoneType || 'personal',
+                  storeEmail: userData.email || ''
+                };
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user store information:', error);
+        }
+      }
+
+      // Look for fee information in transactions collection
+      if (receipt.orderId) {
+        // Try to find more detailed fee information in transactions collection
+        const transactionsQuery = query(
+          collection(db, 'transactions'),
+          where('orderId', '==', receipt.orderId)
+        );
+
+        const transactionsSnapshot = await getDocs(transactionsQuery);
+        
+        if (!transactionsSnapshot.empty) {
+          const transactionDoc = transactionsSnapshot.docs[0];
+          const transactionData = transactionDoc.data();
+          
+          // Update fee information if available
+          if (transactionData.deliveryFee || transactionData.serviceFee || transactionData.platformFee) {
+            console.log('Found fee data in transactions:', transactionData.deliveryFee, transactionData.serviceFee);
+            receiptWithStoreInfo = {
+              ...receiptWithStoreInfo,
+              deliveryFee: transactionData.deliveryFee || receiptWithStoreInfo.deliveryFee || 0,
+              serviceFee: transactionData.serviceFee || receiptWithStoreInfo.serviceFee || 0,
+              platformFee: transactionData.platformFee || receiptWithStoreInfo.platformFee || 0,
+              subtotal: transactionData.subtotal || receiptWithStoreInfo.subtotal || 0,
+              breakdown: transactionData.breakdown || receiptWithStoreInfo.breakdown || {}
+            };
+          }
+        }
+        
+        // Also check payments collection
+        const paymentsQuery = query(
+          collection(db, 'payments'),
+          where('orderId', '==', receipt.orderId)
+        );
+        
+        const paymentsSnapshot = await getDocs(paymentsQuery);
+        
+        if (!paymentsSnapshot.empty) {
+          const paymentDoc = paymentsSnapshot.docs[0];
+          const paymentData = paymentDoc.data();
+          
+          // Check for breakdown in payment data
+          if (paymentData.breakdown) {
+            console.log('Found fee data in payments breakdown:', paymentData.breakdown);
+            receiptWithStoreInfo = {
+              ...receiptWithStoreInfo,
+              deliveryFee: paymentData.breakdown.deliveryFee || receiptWithStoreInfo.deliveryFee || 0,
+              serviceFee: paymentData.breakdown.serviceFee || receiptWithStoreInfo.serviceFee || 0,
+              subtotal: paymentData.breakdown.subtotal || receiptWithStoreInfo.subtotal || 0,
+              platformFee: paymentData.breakdown.platformFee || receiptWithStoreInfo.platformFee || 0
+            };
+          } else if (paymentData.deliveryFee || paymentData.serviceFee) {
+            receiptWithStoreInfo = {
+              ...receiptWithStoreInfo,
+              deliveryFee: paymentData.deliveryFee || receiptWithStoreInfo.deliveryFee || 0,
+              serviceFee: paymentData.serviceFee || receiptWithStoreInfo.serviceFee || 0,
+              platformFee: paymentData.platformFee || receiptWithStoreInfo.platformFee || 0
+            };
+          }
+          
+          // Get delivery type from payment data if available
+          if (paymentData.deliveryType) {
+            receiptWithStoreInfo.deliveryType = paymentData.deliveryType;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching additional receipt information:', error);
+    }
+    
+      // Calculate subtotal if it's missing but we have all the necessary information
+    if (!receiptWithStoreInfo.subtotal && receiptWithStoreInfo.amount > 0) {
+      // Ensure fee values are numbers, not undefined
+      const serviceFee = Number(receiptWithStoreInfo.serviceFee || 0);
+      const deliveryFee = Number(receiptWithStoreInfo.deliveryFee || 0);
+      const platformFee = Number(receiptWithStoreInfo.platformFee || 0);
+      
+      if (serviceFee > 0 || deliveryFee > 0 || platformFee > 0) {
+        // Subtotal = Total - (serviceFee + deliveryFee + platformFee)
+        receiptWithStoreInfo.subtotal = receiptWithStoreInfo.amount - serviceFee - deliveryFee - platformFee;
+      } else {
+        // If there are no fees, use amount as subtotal
+        receiptWithStoreInfo.subtotal = receiptWithStoreInfo.amount;
+      }
+    }
+    
+    // Ensure all fee fields exist with numeric values (prevents UI errors)
+    receiptWithStoreInfo.serviceFee = Number(receiptWithStoreInfo.serviceFee || 0);
+    receiptWithStoreInfo.deliveryFee = Number(receiptWithStoreInfo.deliveryFee || 0);
+    receiptWithStoreInfo.platformFee = Number(receiptWithStoreInfo.platformFee || 0);
+    receiptWithStoreInfo.subtotal = Number(receiptWithStoreInfo.subtotal || 0);
+    
+    // Log the final store information to verify we have the data
+    console.log("Final receipt store information:", {
+      storeName: receiptWithStoreInfo.storeName,
+      storeAddress: receiptWithStoreInfo.storeAddress,
+      storePhone: receiptWithStoreInfo.storePhone,
+      storeEmail: receiptWithStoreInfo.storeEmail,
+      storeBusinessId: receiptWithStoreInfo.storeBusinessId,
+      storeRegistrationNumber: receiptWithStoreInfo.storeRegistrationNumber,
+      storeVatNumber: receiptWithStoreInfo.storeVatNumber
+    });
+    
+    // Set the enhanced receipt with store information
+    setSelectedReceipt(receiptWithStoreInfo);
     setShowReceiptModal(true);
   };
 
@@ -106,153 +366,97 @@ function ReceiptsPage() {
         try {
           console.log("Fetching all orders and receipts for user:", user.uid);
           
-          // 1. First, get messages that are receipts (both orders and refunds)
-          const messagesQuery = query(
-            collection(db, 'messages'),
-            where('receiverId', '==', user.uid),
-            where('isReceipt', '==', true),
+          // Primary: Query the dedicated receipts collection for all user receipts
+          // This is the main source of receipts data
+          const receiptsQuery = query(
+            collection(db, 'receipts'),
+            where('userId', '==', user.uid),
             orderBy('timestamp', 'desc')
           );
           
-          // 2. Also check for messages with receiptType field
-          const receiptTypesQuery = query(
-            collection(db, 'messages'),
-            where('receiverId', '==', user.uid),
-            where('receiptType', 'in', ['order_receipt', 'refund_receipt']),
-            orderBy('timestamp', 'desc')
-          );
-          
-          // 3. Also check for messages with type='receipt'
-          const typeReceiptQuery = query(
-            collection(db, 'messages'),
-            where('receiverId', '==', user.uid),
-            where('type', '==', 'receipt'),
-            orderBy('timestamp', 'desc')
-          );
-          
-          // 4. Check for actual orders in the orders collection
-          const ordersQuery = query(
-            collection(db, 'orders'),
-            where('buyerId', '==', user.uid),
-            orderBy('createdAt', 'desc')
-          );
-          
-          // 5. Check for transactions in the transactions collection
-          const transactionsQuery = query(
-            collection(db, 'transactions'),
+          // Secondary: Also query receipts where user is the buyer
+          const buyerReceiptsQuery = query(
+            collection(db, 'receipts'),
             where('buyerId', '==', user.uid),
             orderBy('timestamp', 'desc')
           );
           
-          // Execute all queries
-          const [messagesSnapshot, receiptTypesSnapshot, typeReceiptSnapshot, ordersSnapshot, transactionsSnapshot] = await Promise.all([
-            getDocs(messagesQuery),
-            getDocs(receiptTypesQuery),
-            getDocs(typeReceiptQuery),
-            getDocs(ordersQuery),
-            getDocs(transactionsQuery)
+          // For backwards compatibility: Check for refund receipts 
+          // that might be specifically tagged with the user ID
+          const refundReceiptsQuery = query(
+            collection(db, 'receipts'),
+            where('refundUserId', '==', user.uid),
+            orderBy('timestamp', 'desc')
+          );
+          
+          // For regenerated receipts with specific flag
+          const regeneratedReceiptsQuery = query(
+            collection(db, 'receipts'),
+            where('buyerId', '==', user.uid),
+            where('isRegenerated', '==', true),
+            orderBy('timestamp', 'desc')
+          );
+          
+          // Execute all queries from the receipts collection
+          const [
+            receiptsSnapshot,
+            buyerReceiptsSnapshot,
+            refundReceiptsSnapshot,
+            regeneratedReceiptsSnapshot
+          ] = await Promise.all([
+            getDocs(receiptsQuery),
+            getDocs(buyerReceiptsQuery),
+            getDocs(refundReceiptsQuery),
+            getDocs(regeneratedReceiptsQuery)
           ]);
           
-          console.log(`Found receipts - Messages: ${messagesSnapshot.size}, ReceiptTypes: ${receiptTypesSnapshot.size}, TypeReceipt: ${typeReceiptSnapshot.size}, Orders: ${ordersSnapshot.size}, Transactions: ${transactionsSnapshot.size}`);
+          console.log(`Found receipts - Primary user receipts: ${receiptsSnapshot.size}, ` +
+                      `Buyer receipts: ${buyerReceiptsSnapshot.size}, ` +
+                      `Refund receipts: ${refundReceiptsSnapshot.size}, ` + 
+                      `Regenerated receipts: ${regeneratedReceiptsSnapshot.size}`);
           
           // Process all receipts
           const allReceipts = [];
           
-          // Process isReceipt=true messages
-          messagesSnapshot.forEach(doc => {
+          // Helper function to process receipts from receipts collection
+          const processReceipt = (doc) => {
+            // Skip if already added
+            if (allReceipts.some(r => r.id === doc.id)) return;
+            
             const data = doc.data();
-            allReceipts.push({
+            
+            // Ensure this receipt belongs to the current user
+            if (data.userId !== user.uid && data.buyerId !== user.uid && data.refundUserId !== user.uid) return;
+            
+            // Add the receipt to our collection
+            const receiptData = {
               id: doc.id,
               ...data,
-              source: 'messages',
-              receiptType: data.receiptType || (data.message?.includes('REFUND RECEIPT') ? 'refund_receipt' : 'order_receipt')
-            });
-          });
+              orderId: data.orderId || doc.id,
+              storeName: data.storeName || data.businessName || data.storeData?.businessName || data.storeData?.storeName || data.sellerName || 'Store',
+              storeId: data.storeId || data.sellerId,
+              amount: data.amount || data.totalAmount || data.total || 0,
+              currency: data.currency || 'GBP',
+              timestamp: data.timestamp || data.createdAt || new Date(),
+              source: 'receipts',
+              // Add fee information if available
+              subtotal: data.subtotal || (data.breakdown?.subtotal) || null,
+              serviceFee: data.serviceFee || (data.breakdown?.serviceFee) || 0,
+              deliveryFee: data.deliveryFee || (data.breakdown?.deliveryFee) || 0,
+              platformFee: data.platformFee || (data.breakdown?.platformFee) || 0,
+              // Ensure we have the receipt type correctly set
+              receiptType: data.receiptType || (data.isRefund ? 'refund_receipt' : 'order_receipt')
+            };
+            
+            allReceipts.push(receiptData);
+            console.log(`Added receipt from receipts collection: ${doc.id} - ${receiptData.receiptType}`);
+          };
           
-          // Process receiptType field messages
-          receiptTypesSnapshot.forEach(doc => {
-            // Avoid duplicates
-            if (!allReceipts.some(r => r.id === doc.id)) {
-              const data = doc.data();
-              allReceipts.push({
-                id: doc.id,
-                ...data,
-                source: 'messages',
-                receiptType: data.receiptType
-              });
-            }
-          });
-          
-          // Process type=receipt messages
-          typeReceiptSnapshot.forEach(doc => {
-            // Avoid duplicates
-            if (!allReceipts.some(r => r.id === doc.id)) {
-              const data = doc.data();
-              allReceipts.push({
-                id: doc.id,
-                ...data,
-                source: 'messages',
-                receiptType: data.receiptType || (data.message?.includes('REFUND RECEIPT') ? 'refund_receipt' : 'order_receipt')
-              });
-            }
-          });
-          
-          // Process orders from orders collection
-          ordersSnapshot.forEach(doc => {
-            const data = doc.data();
-            // Don't add duplicates - check by orderId since that should be unique
-            if (!allReceipts.some(r => r.orderId === doc.id)) {
-              const orderData = {
-                id: `order_${doc.id}`,
-                orderId: doc.id,
-                buyerId: data.buyerId,
-                sellerId: data.sellerId,
-                storeName: data.storeName || 'Store',
-                items: data.items || [],
-                totalAmount: data.totalAmount || data.amount || 0,
-                currency: data.currency || 'GBP',
-                timestamp: data.createdAt || data.timestamp || new Date(),
-                paymentMethod: data.paymentMethod || 'Card',
-                deliveryMethod: data.deliveryMethod || 'Not specified',
-                source: 'orders',
-                receiptType: 'order_receipt'
-              };
-              
-              allReceipts.push(orderData);
-              console.log(`Added order from orders collection: ${doc.id}`);
-            }
-          });
-          
-          // Process transactions
-          transactionsSnapshot.forEach(doc => {
-            const data = doc.data();
-            // Check if this transaction is already represented
-            const transactionId = data.orderId || doc.id;
-            if (!allReceipts.some(r => r.orderId === transactionId)) {
-              const isRefund = data.type === 'refund' || data.transactionType === 'refund' || 
-                              (typeof data.amount === 'number' && data.amount < 0);
-              
-              const transactionData = {
-                id: `transaction_${doc.id}`,
-                orderId: transactionId,
-                buyerId: data.buyerId,
-                sellerId: data.sellerId,
-                storeName: data.storeName || data.sellerName || 'Store',
-                items: data.items || [],
-                totalAmount: Math.abs(data.amount || 0),
-                currency: data.currency || 'GBP',
-                timestamp: data.timestamp || data.createdAt || new Date(),
-                paymentMethod: data.paymentMethod || 'Card',
-                deliveryMethod: data.deliveryMethod || 'Not specified',
-                refundReason: data.reason || data.refundReason || '',
-                source: 'transactions',
-                receiptType: isRefund ? 'refund_receipt' : 'order_receipt'
-              };
-              
-              allReceipts.push(transactionData);
-              console.log(`Added ${isRefund ? 'refund' : 'order'} from transactions collection: ${doc.id}`);
-            }
-          });
+          // Process receipts from each query
+          receiptsSnapshot.forEach(doc => processReceipt(doc));
+          buyerReceiptsSnapshot.forEach(doc => processReceipt(doc));
+          refundReceiptsSnapshot.forEach(doc => processReceipt(doc));
+          regeneratedReceiptsSnapshot.forEach(doc => processReceipt(doc));
           
           console.log(`Total receipts found after processing: ${allReceipts.length}`);
           
@@ -272,51 +476,67 @@ function ReceiptsPage() {
           
           // Process receipts to extract key information
           const processedReceipts = allReceipts.map(receipt => {
-            // Get store information
-            const storeName = receipt.storeName || receipt.orderData?.storeName || receipt.sellerName || 'Store';
+            // Since we're using a dedicated receipts collection, most of the fields
+            // should already be properly formatted. We'll just ensure all required fields exist.
+            
+            // Get store information - NEVER default to just 'Store'
+            let storeName = receipt.storeName || 
+                           receipt.businessName || 
+                           receipt.sellerName;
+                           
+            // If we still don't have a name, check if there's store data embedded
+            if (!storeName && receipt.storeData) {
+              storeName = receipt.storeData.storeName || 
+                         receipt.storeData.businessName || 
+                         receipt.storeData.name || 
+                         receipt.storeData.displayName;
+            }
+            
+            // If we have a store ID but no name, use a placeholder with ID
+            if (!storeName && (receipt.storeId || receipt.sellerId)) {
+              const storeId = receipt.storeId || receipt.sellerId;
+              storeName = `Store ${storeId.substring(0, 6)}`;
+            } else if (!storeName) {
+              // Last resort default
+              storeName = 'Unknown Store';
+            }
             
             // Get order ID
-            const orderId = receipt.orderId || receipt.orderData?.orderId || '';
+            const orderId = receipt.orderId || receipt.orderID || receipt.id || '';
             
-            // Get amount
+            // Get amount - handle both normal and refund (negative) amounts
             let amount = 0;
-            let currency = 'GBP';
-            
             if (receipt.amount !== undefined && receipt.amount !== null) {
               amount = typeof receipt.amount === 'number' ? Math.abs(receipt.amount) : 0;
-              currency = receipt.currency || 'GBP';
-            } else if (receipt.orderData?.totalAmount) {
-              amount = receipt.orderData.totalAmount;
-              currency = receipt.orderData.currency || 'GBP';
             } else if (receipt.totalAmount !== undefined && receipt.totalAmount !== null) {
               amount = typeof receipt.totalAmount === 'number' ? Math.abs(receipt.totalAmount) : 0;
-              currency = receipt.currency || 'GBP';
             }
+            
+            // Get currency
+            const currency = receipt.currency || 'GBP';
             
             // Get date
             const timestamp = receipt.timestamp || receipt.createdAt || new Date();
             
             // Get items
-            const items = receipt.items || receipt.orderData?.items || [];
+            const items = receipt.items || [];
             
             // Get payment method
-            const paymentMethod = receipt.paymentMethod || receipt.orderData?.paymentMethod || 'Card';
+            const paymentMethod = receipt.paymentMethod || 'Card';
             
             // Get delivery method
-            const deliveryMethod = receipt.deliveryMethod || receipt.orderData?.deliveryMethod || 'Not specified';
+            const deliveryMethod = receipt.deliveryMethod || 'Not specified';
             
             // Get refund reason for refunds
-            const refundReason = receipt.refundReason || receipt.orderData?.refundReason || '';
+            const refundReason = receipt.refundReason || receipt.reason || '';
             
-            // Get receipt message content
-            let receiptContent = '';
-            if (receipt.message) {
-              receiptContent = receipt.message;
-            } else if (receipt.text && receipt.text.length > 20) {
-              receiptContent = receipt.text;
-            }
+            // Get receipt content (most receipts should have this already set)
+            const receiptContent = receipt.receiptContent || receipt.content || receipt.message || '';
             
-            // Return processed receipt
+            // Check if this is a regenerated receipt
+            const isRegenerated = receipt.isRegenerated || false;
+            
+            // Return processed receipt with standardized fields
             return {
               id: receipt.id,
               orderId,
@@ -328,27 +548,73 @@ function ReceiptsPage() {
               paymentMethod,
               deliveryMethod,
               refundReason,
-              receiptType: receipt.receiptType,
+              receiptType: receipt.receiptType || (receipt.isRefund ? 'refund_receipt' : 'order_receipt'),
               receiptContent,
-              isRegenerated: receipt.message?.includes('Re-generated') || false,
+              isRegenerated,
               rawData: receipt
             };
           });
           
-          // Final cleanup - ensure no duplicates and all required fields are present
-          const finalReceipts = processedReceipts.filter((receipt, index, self) => {
-            // Filter out any undefined or null receipts
-            if (!receipt) return false;
+          // Check if we need to search for additional receipts from legacy sources
+          // For most users, the receipts collection should be sufficient
+          // This code can be enabled if needed for backward compatibility
+          /*
+          // Legacy code for searching through messages has been removed
+          // All receipts should now be properly stored in the receipts collection
+          console.log("Using dedicated receipts collection instead of searching through messages");
+          */
+          
+          // Better deduplication and prioritization of receipts
+          const receiptsByOrderId = {};
+          
+          // Group receipts by orderId
+          processedReceipts.forEach(receipt => {
+            if (!receipt) return;
             
-            // Keep only the first occurrence of receipts with the same orderId
-            return receipt.orderId ? 
-              index === self.findIndex(r => r.orderId === receipt.orderId) : 
-              true;
-          }).map(receipt => {
-            // Ensure all required fields have at least default values
+            const orderId = receipt.orderId || receipt.id || 'Unknown';
+            
+            // If we don't have this order ID yet, add it
+            if (!receiptsByOrderId[orderId]) {
+              receiptsByOrderId[orderId] = receipt;
+              return;
+            }
+            
+            // We have a duplicate order ID - decide which receipt to keep
+            const existing = receiptsByOrderId[orderId];
+            
+            // Always prioritize regenerated receipts (newer information)
+            if (receipt.isRegenerated && !existing.isRegenerated) {
+              receiptsByOrderId[orderId] = receipt;
+              return;
+            }
+            
+            // Prioritize receipts with more information
+            const existingInfoScore = calculateInfoScore(existing);
+            const newInfoScore = calculateInfoScore(receipt);
+            
+            if (newInfoScore > existingInfoScore) {
+              receiptsByOrderId[orderId] = receipt;
+            }
+          });
+          
+          // Convert back to array and ensure all required fields
+          const finalReceipts = Object.values(receiptsByOrderId).map(receipt => {
+            let finalStoreName = receipt.storeName || receipt.sellerName;
+            
+            // If we still don't have a name and have a store ID, use that
+            if (!finalStoreName && (receipt.storeId || receipt.sellerId)) {
+              const id = receipt.storeId || receipt.sellerId;
+              finalStoreName = `Store ID: ${id.substring(0, 8)}`;
+            } else if (!finalStoreName) {
+              // No information at all - use order ID if available
+              finalStoreName = receipt.orderId ? 
+                `Order ${receipt.orderId.substring(0, 8)}` : 
+                'Unknown Store';
+            }
+            
             return {
               ...receipt,
-              storeName: receipt.storeName || 'Store',
+              storeName: finalStoreName,
               orderId: receipt.orderId || receipt.id || 'Unknown',
               amount: receipt.amount || 0,
               currency: receipt.currency || 'GBP',
@@ -356,6 +622,20 @@ function ReceiptsPage() {
               receiptType: receipt.receiptType || 'order_receipt'
             };
           });
+          
+          // Helper function to calculate information completeness score for a receipt
+          function calculateInfoScore(receipt) {
+            let score = 0;
+            if (receipt.items && receipt.items.length) score += 3;
+            if (receipt.amount && receipt.amount > 0) score += 2;
+            if (receipt.storeName && receipt.storeName !== 'Store') score += 1;
+            if (receipt.timestamp) score += 1;
+            if (receipt.paymentMethod) score += 1;
+            if (receipt.deliveryMethod) score += 1;
+            if (receipt.receiptContent) score += 2;
+            if (receipt.isRegenerated) score += 5; // Strongly prefer regenerated receipts
+            return score;
+          }
           
           console.log(`Final receipt count after deduplication: ${finalReceipts.length}`);
           setReceipts(finalReceipts);
@@ -377,11 +657,8 @@ function ReceiptsPage() {
   
   // Filter receipts based on current filters
   const filteredReceipts = receipts.filter(receipt => {
-    // Determine receipt type if not explicitly set
-    const actualReceiptType = receipt.receiptType || 
-                              (receipt.source === 'orders' ? 'order_receipt' : 
-                               (receipt.refundReason || (typeof receipt.amount === 'number' && receipt.amount < 0)) ? 
-                               'refund_receipt' : 'order_receipt');
+    // Better receipt type detection with improved logic
+    const actualReceiptType = determineReceiptType(receipt);
     
     // Filter by type
     if (filterType === 'orders' && actualReceiptType !== 'order_receipt') return false;
@@ -393,12 +670,35 @@ function ReceiptsPage() {
       return (
         (receipt.storeName?.toLowerCase() || '').includes(searchLower) ||
         (receipt.orderId?.toLowerCase() || '').includes(searchLower) ||
-        (receipt.refundReason && receipt.refundReason.toLowerCase().includes(searchLower))
+        (receipt.refundReason && receipt.refundReason.toLowerCase().includes(searchLower)) ||
+        (receipt.receiptContent && receipt.receiptContent.toLowerCase().includes(searchLower))
       );
     }
     
     return true;
   });
+  
+  // Helper function to better determine receipt type
+  function determineReceiptType(receipt) {
+    // If explicitly set, use that
+    if (receipt.receiptType) return receipt.receiptType;
+    
+    // Check for explicit refund indicators
+    const isRefund = 
+      receipt.refundReason || 
+      (typeof receipt.amount === 'number' && receipt.amount < 0) ||
+      receipt.receiptContent?.includes('REFUND') ||
+      receipt.message?.includes('REFUND') ||
+      receipt.text?.includes('REFUND') ||
+      receipt.message?.includes('refund') ||
+      receipt.text?.includes('refund') ||
+      receipt.source === 'refunds';
+    
+    if (isRefund) return 'refund_receipt';
+    
+    // Default to order receipt for anything else
+    return 'order_receipt';
+  }
   
   // Sort receipts
   const sortedReceipts = [...filteredReceipts].sort((a, b) => {
@@ -454,13 +754,53 @@ function ReceiptsPage() {
         padding: '0 1rem',
         paddingTop: 'calc(60px + 1.5rem)' // Account for navbar height (60px) plus additional margin
       }}>
-        <h1 style={{
-          fontSize: '1.75rem',
-          fontWeight: 'bold',
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '1.5rem'
         }}>
-          My Receipts
-        </h1>
+          <h1 style={{
+            fontSize: '1.75rem',
+            fontWeight: 'bold',
+            margin: 0
+          }}>
+            My Receipts
+          </h1>
+          
+          <button 
+            onClick={() => {
+              setLoading(true);
+              setTimeout(async () => {
+                try {
+                  // Reload the page to ensure fresh data
+                  window.location.reload();
+                } catch (error) {
+                  console.error("Error refreshing receipts:", error);
+                  setLoading(false);
+                }
+              }, 100);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              backgroundColor: '#4f46e5',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+              <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+              <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+            </svg>
+            Refresh Receipts
+          </button>
+        </div>
         
         {/* Filters */}
         <div style={{
@@ -613,8 +953,16 @@ function ReceiptsPage() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <div style={{ fontWeight: '500', marginBottom: '0.25rem' }}>
-                        {receipt.storeName || 'Store'}
+                      <div style={{ 
+                        fontWeight: '600', 
+                        marginBottom: '0.25rem',
+                        fontSize: '1.1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.375rem'
+                      }}>
+                        <span role="img" aria-label="store">🏪</span>
+                        {receipt.storeName}
                       </div>
                       <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                         Order #{receipt.orderId ? receipt.orderId.slice(-8) : 'Unknown'}
@@ -800,8 +1148,125 @@ function ReceiptsPage() {
             {/* Store & Order Info */}
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <div style={{ fontWeight: '500', fontSize: '1.125rem' }}>
-                  {selectedReceipt.storeName}
+                <div style={{ width: '70%' }}>
+                  {/* Store Header Section */}
+                  <div style={{
+                    backgroundColor: '#f3f4f6',
+                    padding: '0.75rem',
+                    borderRadius: '0.5rem',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {/* Store Icon and Heading */}
+                    <div style={{ 
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginBottom: '0.5rem'
+                    }}>
+                      <span role="img" aria-label="store" style={{ fontSize: '1.5rem' }}>🏪</span>
+                      <h3 style={{ 
+                        margin: 0, 
+                        padding: 0,
+                        fontSize: '1.2rem',
+                        fontWeight: '600',
+                        color: '#111827'
+                      }}>Store Information</h3>
+                    </div>
+                    
+                    {/* Store Name - Always displayed prominently */}
+                    <div style={{ 
+                      fontSize: '1.3rem', 
+                      fontWeight: '700',
+                      color: '#111827',
+                      marginBottom: '0.5rem',
+                      borderBottom: '1px solid #e5e7eb',
+                      paddingBottom: '0.5rem'
+                    }}>
+                      {/* Only display actual store name, no fallbacks */}
+                      {selectedReceipt.storeName}
+                    </div>
+                    
+                    {/* Store Contact Details - Always show section, with message if no details */}
+                    <div style={{
+                      fontSize: '0.9rem',
+                      color: '#4b5563'
+                    }}>
+                      {selectedReceipt.storeAddress ? (
+                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                          <span role="img" aria-label="address" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📍</span>
+                          <span>{selectedReceipt.storeAddress}</span>
+                        </div>
+                      ) : (
+                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af' }}>
+                          <span role="img" aria-label="no address" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📍</span>
+                          <span>Address not provided</span>
+                        </div>
+                      )}
+                      
+                      {selectedReceipt.storePhone ? (
+                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span role="img" aria-label="phone" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>
+                            {selectedReceipt.phoneType === 'personal' ? '📱' : '📞'}
+                          </span>
+                          <span>
+                            {selectedReceipt.storePhone} 
+                            {selectedReceipt.phoneType && (
+                              <span style={{ fontSize: '0.85rem', color: '#6b7280', marginLeft: '0.5rem' }}>
+                                ({selectedReceipt.phoneType === 'personal' ? 'Personal' : 'Work'})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af' }}>
+                          <span role="img" aria-label="no phone" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📞</span>
+                          <span>No phone number available</span>
+                        </div>
+                      )}
+                      
+                      {selectedReceipt.storeEmail && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span role="img" aria-label="email" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>✉️</span>
+                          <span>{selectedReceipt.storeEmail}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Business Information Section */}
+                    {(selectedReceipt.storeBusinessId || selectedReceipt.storeRegistrationNumber || selectedReceipt.storeVatNumber) && (
+                      <div style={{ 
+                        marginTop: '0.75rem', 
+                        padding: '0.5rem',
+                        borderTop: '1px solid #e5e7eb',
+                        fontSize: '0.85rem',
+                        color: '#4b5563'
+                      }}>
+                        {/* Business ID */}
+                        {selectedReceipt.storeBusinessId && (
+                          <div style={{ marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span role="img" aria-label="business" style={{ fontSize: '0.9rem', minWidth: '1.2rem' }}>🏢</span>
+                            <span>Business ID: {selectedReceipt.storeBusinessId}</span>
+                          </div>
+                        )}
+                        
+                        {/* Registration Number */}
+                        {selectedReceipt.storeRegistrationNumber && (
+                          <div style={{ marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span role="img" aria-label="registration" style={{ fontSize: '0.9rem', minWidth: '1.2rem' }}>📝</span>
+                            <span>Registration No: {selectedReceipt.storeRegistrationNumber}</span>
+                          </div>
+                        )}
+                        
+                        {/* VAT Number */}
+                        {selectedReceipt.storeVatNumber && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span role="img" aria-label="vat" style={{ fontSize: '0.9rem', minWidth: '1.2rem' }}>🧾</span>
+                            <span>VAT No: {selectedReceipt.storeVatNumber}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontWeight: '600', fontSize: '1.125rem', textAlign: 'right' }}>
@@ -871,9 +1336,50 @@ function ReceiptsPage() {
                       })}
                     </tbody>
                     <tfoot style={{ backgroundColor: '#f9fafb' }}>
+                      {/* Show subtotal if we have fee information */}
+                      {(selectedReceipt.subtotal || selectedReceipt.serviceFee || selectedReceipt.deliveryFee) && (
+                        <tr style={{ borderTop: '1px solid #e5e7eb' }}>
+                          <td colSpan="3" style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>Subtotal</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>
+                            {getCurrencySymbol(selectedReceipt.currency)}{formatPrice(selectedReceipt.subtotal || 0, selectedReceipt.currency)}
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Delivery Fee */}
+                      {selectedReceipt.deliveryFee > 0 && (
+                        <tr>
+                          <td colSpan="3" style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>Delivery Fee</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>
+                            {getCurrencySymbol(selectedReceipt.currency)}{formatPrice(selectedReceipt.deliveryFee, selectedReceipt.currency)}
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Service Fee */}
+                      {selectedReceipt.serviceFee > 0 && (
+                        <tr>
+                          <td colSpan="3" style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>Service Fee</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>
+                            {getCurrencySymbol(selectedReceipt.currency)}{formatPrice(selectedReceipt.serviceFee, selectedReceipt.currency)}
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Platform Fee */}
+                      {selectedReceipt.platformFee > 0 && (
+                        <tr>
+                          <td colSpan="3" style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>Platform Fee</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500', textAlign: 'right', color: '#4b5563', fontSize: '0.85rem' }}>
+                            {getCurrencySymbol(selectedReceipt.currency)}{formatPrice(selectedReceipt.platformFee, selectedReceipt.currency)}
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Total row */}
                       <tr style={{ borderTop: '1px solid #e5e7eb' }}>
-                        <td colSpan="3" style={{ padding: '0.75rem', fontWeight: '500', textAlign: 'right' }}>Total</td>
-                        <td style={{ padding: '0.75rem', fontWeight: '600', textAlign: 'right' }}>
+                        <td colSpan="3" style={{ padding: '0.75rem', fontWeight: '600', textAlign: 'right', color: '#111827' }}>Total</td>
+                        <td style={{ padding: '0.75rem', fontWeight: '700', textAlign: 'right', color: '#111827' }}>
                           {getCurrencySymbol(selectedReceipt.currency)}{formatPrice(Math.abs(selectedReceipt.amount), selectedReceipt.currency)}
                         </td>
                       </tr>
@@ -885,7 +1391,42 @@ function ReceiptsPage() {
               )}
             </div>
             
-            {/* Additional Information */}
+            {/* Business Information */}
+            {(selectedReceipt.storeBusinessId || selectedReceipt.storeRegistrationNumber || selectedReceipt.storeVatNumber) && (
+              <div style={{ 
+                padding: '1rem', 
+                backgroundColor: '#f9fafb', 
+                borderRadius: '0.375rem',
+                marginBottom: '1.5rem'
+              }}>
+                <h3 style={{ fontWeight: '500', marginBottom: '0.75rem', fontSize: '1rem' }}>Business Information</h3>
+                
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {selectedReceipt.storeBusinessId && (
+                    <div>
+                      <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Business ID</div>
+                      <div style={{ fontSize: '0.875rem' }}>{selectedReceipt.storeBusinessId}</div>
+                    </div>
+                  )}
+                  
+                  {selectedReceipt.storeRegistrationNumber && (
+                    <div>
+                      <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Registration Number</div>
+                      <div style={{ fontSize: '0.875rem' }}>{selectedReceipt.storeRegistrationNumber}</div>
+                    </div>
+                  )}
+                  
+                  {selectedReceipt.storeVatNumber && (
+                    <div>
+                      <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>VAT Number</div>
+                      <div style={{ fontSize: '0.875rem' }}>{selectedReceipt.storeVatNumber}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Payment Information */}
             <div style={{ 
               padding: '1rem', 
               backgroundColor: '#f9fafb', 
@@ -905,7 +1446,7 @@ function ReceiptsPage() {
                 <div>
                   <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Delivery Method</div>
                   <div style={{ fontSize: '0.875rem' }}>
-                    {selectedReceipt.deliveryMethod?.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Not specified'}
+                    {selectedReceipt.deliveryType || selectedReceipt.deliveryMethod?.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Not specified'}
                   </div>
                 </div>
                 
