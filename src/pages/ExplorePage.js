@@ -8,8 +8,24 @@ import { doc, getDoc } from 'firebase/firestore';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
+import { generateMonthlyAnalyticsPDF, scheduleMonthlyReport, generateCustomRangePDF } from '../utils/pdfGenerator';
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Add CSS animation for spinner
+const spinKeyframes = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+// Inject CSS animations
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = spinKeyframes;
+  document.head.appendChild(style);
+}
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
@@ -237,6 +253,33 @@ function ExplorePage() {
   const [showRevenueDetails, setShowRevenueDetails] = useState(false);
   const [revenueDetails, setRevenueDetails] = useState([]);
   const [revenueDetailsLoading, setRevenueDetailsLoading] = useState(false);
+
+  // PDF generation state
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [showPdfOptions, setShowPdfOptions] = useState(false);
+  const [customDateRange, setCustomDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [pdfMessage, setPdfMessage] = useState('');
+
+  // Analytics notification settings
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    enabled: true,
+    frequency: 'weekly', // weekly, biweekly, monthly
+    dayOfWeek: 'monday', // monday, tuesday, etc.
+    timeOfDay: '09:00', // 24-hour format
+    email: true,
+    push: true,
+    lastUpdated: null,
+    nextUpdate: null
+  });
+  const [analyticsUpdateStatus, setAnalyticsUpdateStatus] = useState({
+    lastUpdate: null,
+    nextUpdate: null,
+    isUpdating: false
+  });
 
   // Fix the useEffect to properly set currentUser
   useEffect(() => {
@@ -1348,6 +1391,263 @@ function ExplorePage() {
       setRevenueDetailsLoading(false);
     }
   };
+
+  // PDF Generation Functions
+  const handleGenerateMonthlyPDF = async () => {
+    if (!sellerStore || !storeAnalytics) {
+      setPdfMessage('❌ Store data not available for PDF generation');
+      return;
+    }
+
+    setPdfGenerating(true);
+    setPdfMessage('📄 Generating monthly analytics report...');
+
+    try {
+      const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, 'monthly');
+      
+      if (result.success) {
+        setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
+      } else {
+        setPdfMessage(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setPdfMessage('❌ Failed to generate PDF report. Please try again.');
+    } finally {
+      setPdfGenerating(false);
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setPdfMessage('');
+      }, 5000);
+    }
+  };
+
+  const handleGenerateCurrentPeriodPDF = async () => {
+    if (!sellerStore || !storeAnalytics) {
+      setPdfMessage('❌ Store data not available for PDF generation');
+      return;
+    }
+
+    setPdfGenerating(true);
+    setPdfMessage(`📄 Generating ${selectedAnalyticsPeriod} analytics report...`);
+
+    try {
+      const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, selectedAnalyticsPeriod);
+      
+      if (result.success) {
+        setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
+      } else {
+        setPdfMessage(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setPdfMessage('❌ Failed to generate PDF report. Please try again.');
+    } finally {
+      setPdfGenerating(false);
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setPdfMessage('');
+      }, 5000);
+    }
+  };
+
+  const handleGenerateCustomRangePDF = async () => {
+    if (!sellerStore || !storeAnalytics) {
+      setPdfMessage('❌ Store data not available for PDF generation');
+      return;
+    }
+
+    if (!customDateRange.startDate || !customDateRange.endDate) {
+      setPdfMessage('❌ Please select both start and end dates');
+      return;
+    }
+
+    setPdfGenerating(true);
+    setPdfMessage('📄 Generating custom range analytics report...');
+
+    try {
+      const result = await generateCustomRangePDF(
+        sellerStore, 
+        storeAnalytics, 
+        customDateRange.startDate, 
+        customDateRange.endDate
+      );
+      
+      if (result.success) {
+        setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
+        setCustomDateRange({ startDate: '', endDate: '' });
+        setShowPdfOptions(false);
+      } else {
+        setPdfMessage(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setPdfMessage('❌ Failed to generate PDF report. Please try again.');
+    } finally {
+      setPdfGenerating(false);
+      
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        setPdfMessage('');
+      }, 5000);
+    }
+  };
+
+  // Analytics notification functions
+  const loadNotificationPreferences = async () => {
+    if (!currentUser || !sellerStore) return;
+    
+    try {
+      const prefsDoc = await getDoc(doc(db, 'analyticsNotifications', sellerStore.id));
+      if (prefsDoc.exists()) {
+        const prefs = prefsDoc.data();
+        setNotificationPreferences(prefs);
+        
+        // Calculate next update based on preferences
+        const nextUpdate = calculateNextUpdate(prefs);
+        setAnalyticsUpdateStatus(prev => ({
+          ...prev,
+          nextUpdate,
+          lastUpdate: prefs.lastUpdated
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading notification preferences:', error);
+    }
+  };
+
+  const saveNotificationPreferences = async (prefs) => {
+    if (!currentUser || !sellerStore) return;
+    
+    try {
+      const nextUpdate = calculateNextUpdate(prefs);
+      const updatedPrefs = {
+        ...prefs,
+        storeId: sellerStore.id,
+        userId: currentUser.uid,
+        updatedAt: new Date().toISOString(),
+        nextUpdate: nextUpdate.toISOString()
+      };
+      
+      await setDoc(doc(db, 'analyticsNotifications', sellerStore.id), updatedPrefs);
+      setNotificationPreferences(updatedPrefs);
+      setAnalyticsUpdateStatus(prev => ({
+        ...prev,
+        nextUpdate
+      }));
+      
+      return { success: true, message: 'Notification preferences saved successfully!' };
+    } catch (error) {
+      console.error('Error saving notification preferences:', error);
+      return { success: false, message: 'Failed to save preferences. Please try again.' };
+    }
+  };
+
+  const calculateNextUpdate = (prefs) => {
+    const now = new Date();
+    let nextUpdate = new Date();
+    
+    // Set the time
+    const [hours, minutes] = prefs.timeOfDay.split(':');
+    nextUpdate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    // Set the day based on frequency
+    if (prefs.frequency === 'weekly') {
+      const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const targetDay = daysOfWeek.indexOf(prefs.dayOfWeek.toLowerCase());
+      const currentDay = nextUpdate.getDay();
+      
+      let daysToAdd = targetDay - currentDay;
+      if (daysToAdd <= 0) daysToAdd += 7; // Next week
+      
+      nextUpdate.setDate(nextUpdate.getDate() + daysToAdd);
+    } else if (prefs.frequency === 'biweekly') {
+      nextUpdate.setDate(nextUpdate.getDate() + 14);
+    } else if (prefs.frequency === 'monthly') {
+      nextUpdate.setMonth(nextUpdate.getMonth() + 1);
+    }
+    
+    // If the calculated time is in the past, move to next period
+    if (nextUpdate <= now) {
+      if (prefs.frequency === 'weekly') {
+        nextUpdate.setDate(nextUpdate.getDate() + 7);
+      } else if (prefs.frequency === 'biweekly') {
+        nextUpdate.setDate(nextUpdate.getDate() + 14);
+      } else if (prefs.frequency === 'monthly') {
+        nextUpdate.setMonth(nextUpdate.getMonth() + 1);
+      }
+    }
+    
+    return nextUpdate;
+  };
+
+  const triggerAnalyticsUpdate = async () => {
+    if (!currentUser || !sellerStore) return;
+    
+    setAnalyticsUpdateStatus(prev => ({ ...prev, isUpdating: true }));
+    
+    try {
+      // Refresh analytics data
+      await fetchStoreAnalytics();
+      
+      const now = new Date();
+      const nextUpdate = calculateNextUpdate(notificationPreferences);
+      
+      // Update last update time
+      if (notificationPreferences.enabled) {
+        await setDoc(doc(db, 'analyticsNotifications', sellerStore.id), {
+          ...notificationPreferences,
+          lastUpdated: now.toISOString(),
+          nextUpdate: nextUpdate.toISOString()
+        });
+      }
+      
+      setAnalyticsUpdateStatus({
+        lastUpdate: now,
+        nextUpdate,
+        isUpdating: false
+      });
+      
+      // Send notification if enabled
+      if (notificationPreferences.enabled && notificationPreferences.email) {
+        await sendAnalyticsNotification();
+      }
+      
+      return { success: true, message: 'Analytics updated successfully!' };
+    } catch (error) {
+      console.error('Error updating analytics:', error);
+      setAnalyticsUpdateStatus(prev => ({ ...prev, isUpdating: false }));
+      return { success: false, message: 'Failed to update analytics. Please try again.' };
+    }
+  };
+
+  const sendAnalyticsNotification = async () => {
+    // This would integrate with your notification service
+    // For now, we'll just log it
+    console.log('Analytics notification sent to:', currentUser.email);
+    
+    // In a real implementation, you would:
+    // 1. Send email via email service (SendGrid, AWS SES, etc.)
+    // 2. Send push notification via Firebase Cloud Messaging
+    // 3. Create in-app notification record
+  };
+
+  // Load notification preferences when seller store is loaded
+  useEffect(() => {
+    if (currentUser && userType === 'seller' && sellerStore) {
+      loadNotificationPreferences();
+    }
+  }, [currentUser, userType, sellerStore]);
+
+  // Schedule automatic monthly reports when seller store is loaded
+  useEffect(() => {
+    if (currentUser && userType === 'seller' && sellerStore && storeAnalytics) {
+      // Set up automatic monthly report generation
+      scheduleMonthlyReport(sellerStore, storeAnalytics);
+    }
+  }, [currentUser, userType, sellerStore, storeAnalytics]);
 
   // Fetch analytics when user is seller and store is loaded
   useEffect(() => {
@@ -2673,7 +2973,15 @@ function ExplorePage() {
             textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
           }}>
             📊 Store Analytics
-            <div style={{ marginLeft: 'auto', marginRight: '1rem', display: 'flex', gap: '8px' }}>
+            <div style={{ 
+              marginLeft: 'auto', 
+              marginRight: window.innerWidth <= 480 ? '0.5rem' : '1rem', 
+              display: 'flex', 
+              gap: window.innerWidth <= 480 ? '4px' : '8px',
+              flexWrap: window.innerWidth <= 768 ? 'wrap' : 'nowrap',
+              alignItems: 'center',
+              justifyContent: window.innerWidth <= 768 ? 'flex-end' : 'flex-start'
+            }}>
               <select
                 value={selectedAnalyticsPeriod}
                 onChange={(e) => setSelectedAnalyticsPeriod(e.target.value)}
@@ -2681,18 +2989,20 @@ function ExplorePage() {
                   background: 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid #007B7F',
                   borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '0.9rem',
+                  padding: window.innerWidth <= 480 ? '4px 8px' : '6px 12px',
+                  fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
                   fontWeight: '500',
                   color: '#007B7F',
                   cursor: 'pointer',
-                  outline: 'none'
+                  outline: 'none',
+                  minWidth: window.innerWidth <= 480 ? '80px' : 'auto',
+                  maxWidth: window.innerWidth <= 480 ? '120px' : 'none'
                 }}
               >
-                <option value="24hours">Last 24 Hours</option>
-                <option value="7days">Last 7 Days</option>
-                <option value="30days">Last 30 Days</option>
-                <option value="90days">Last 90 Days</option>
+                <option value="24hours">{window.innerWidth <= 480 ? '24h' : 'Last 24 Hours'}</option>
+                <option value="7days">{window.innerWidth <= 480 ? '7d' : 'Last 7 Days'}</option>
+                <option value="30days">{window.innerWidth <= 480 ? '30d' : 'Last 30 Days'}</option>
+                <option value="90days">{window.innerWidth <= 480 ? '90d' : 'Last 90 Days'}</option>
               </select>
               <button
                 onClick={fetchStoreAnalytics}
@@ -2702,20 +3012,231 @@ function ExplorePage() {
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '0.9rem',
+                  padding: window.innerWidth <= 480 ? '4px 8px' : '6px 12px',
+                  fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
                   fontWeight: '600',
                   cursor: analyticsLoading ? 'not-allowed' : 'pointer',
                   opacity: analyticsLoading ? 0.7 : 1,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: window.innerWidth <= 480 ? '2px' : '4px',
+                  minWidth: window.innerWidth <= 480 ? '40px' : 'auto',
+                  justifyContent: 'center'
                 }}
               >
-                {analyticsLoading ? '🔄' : '🔃'} Refresh
+                {window.innerWidth <= 480 ? (analyticsLoading ? '🔄' : '🔃') : `${analyticsLoading ? '🔄' : '🔃'} Refresh`}
+              </button>
+              <button
+                onClick={handleGenerateCurrentPeriodPDF}
+                disabled={pdfGenerating || analyticsLoading}
+                style={{
+                  background: '#10B981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: window.innerWidth <= 480 ? '4px 8px' : '6px 12px',
+                  fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                  fontWeight: '600',
+                  cursor: (pdfGenerating || analyticsLoading) ? 'not-allowed' : 'pointer',
+                  opacity: (pdfGenerating || analyticsLoading) ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: window.innerWidth <= 480 ? '2px' : '4px',
+                  minWidth: window.innerWidth <= 480 ? '40px' : 'auto',
+                  justifyContent: 'center'
+                }}
+                title={`Generate PDF report for ${selectedAnalyticsPeriod}`}
+              >
+                {window.innerWidth <= 480 ? (pdfGenerating ? '📄' : '📊') : `${pdfGenerating ? '📄' : '📊'} PDF`}
+              </button>
+              <button
+                onClick={() => setShowPdfOptions(!showPdfOptions)}
+                disabled={pdfGenerating || analyticsLoading}
+                style={{
+                  background: '#8B5CF6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: window.innerWidth <= 480 ? '4px 8px' : '6px 12px',
+                  fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                  fontWeight: '600',
+                  cursor: (pdfGenerating || analyticsLoading) ? 'not-allowed' : 'pointer',
+                  opacity: (pdfGenerating || analyticsLoading) ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: window.innerWidth <= 480 ? '2px' : '4px',
+                  minWidth: window.innerWidth <= 480 ? '32px' : 'auto',
+                  justifyContent: 'center'
+                }}
+                title="More PDF options"
+              >
+                ⚙️
               </button>
             </div>
           </h2>
+
+          {/* PDF Status Message */}
+          {pdfMessage && (
+            <div style={{
+              margin: '0 1rem 1rem',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              background: pdfMessage.includes('✅') ? '#D1FAE5' : 
+                         pdfMessage.includes('❌') ? '#FEE2E2' : '#FEF3C7',
+              color: pdfMessage.includes('✅') ? '#065F46' : 
+                     pdfMessage.includes('❌') ? '#991B1B' : '#92400E',
+              border: `1px solid ${pdfMessage.includes('✅') ? '#10B981' : 
+                                  pdfMessage.includes('❌') ? '#EF4444' : '#F59E0B'}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              {pdfMessage}
+            </div>
+          )}
+
+          {/* PDF Options Dropdown */}
+          {showPdfOptions && (
+            <div style={{
+              margin: '0 1rem 1rem',
+              background: 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '8px',
+              padding: '16px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+            }}>
+              <h4 style={{ 
+                margin: '0 0 12px 0', 
+                color: '#374151', 
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📄 PDF Report Options
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Monthly Report Button */}
+                <button
+                  onClick={handleGenerateMonthlyPDF}
+                  disabled={pdfGenerating}
+                  style={{
+                    background: '#3B82F6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    cursor: pdfGenerating ? 'not-allowed' : 'pointer',
+                    opacity: pdfGenerating ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    justifyContent: 'center'
+                  }}
+                >
+                  📅 Generate Monthly Report
+                </button>
+
+                {/* Custom Date Range */}
+                <div style={{
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '6px',
+                  padding: '12px'
+                }}>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: '600',
+                    color: '#374151'
+                  }}>
+                    Custom Date Range:
+                  </label>
+                  
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <input
+                      type="date"
+                      value={customDateRange.startDate}
+                      onChange={(e) => setCustomDateRange(prev => ({
+                        ...prev,
+                        startDate: e.target.value
+                      }))}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                    <span style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      color: '#6B7280',
+                      fontSize: '0.9rem'
+                    }}>
+                      to
+                    </span>
+                    <input
+                      type="date"
+                      value={customDateRange.endDate}
+                      onChange={(e) => setCustomDateRange(prev => ({
+                        ...prev,
+                        endDate: e.target.value
+                      }))}
+                      style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '4px',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={handleGenerateCustomRangePDF}
+                    disabled={pdfGenerating || !customDateRange.startDate || !customDateRange.endDate}
+                    style={{
+                      background: '#F59E0B',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      cursor: (pdfGenerating || !customDateRange.startDate || !customDateRange.endDate) ? 'not-allowed' : 'pointer',
+                      opacity: (pdfGenerating || !customDateRange.startDate || !customDateRange.endDate) ? 0.7 : 1,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    📊 Generate Custom Report
+                  </button>
+                </div>
+
+                {/* Info Box */}
+                <div style={{
+                  background: '#F0F9FF',
+                  border: '1px solid #0EA5E9',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '0.8rem',
+                  color: '#0C4A6E'
+                }}>
+                  ℹ️ <strong>Auto Monthly Reports:</strong> PDF reports are automatically generated every month and saved to your downloads folder.
+                </div>
+              </div>
+            </div>
+          )}
 
           {analyticsLoading ? (
             <div style={{
@@ -2734,183 +3255,578 @@ function ExplorePage() {
             </div>
           ) : (
             <div style={{ padding: '0 1rem 2rem' }}>
-              {/* Overview Cards */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                gap: '1rem', 
-                marginBottom: '2rem' 
+              {/* Enhanced Performance Dashboard */}
+              <div style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '20px',
+                padding: window.innerWidth <= 480 ? '1rem' : window.innerWidth <= 768 ? '1.5rem' : '2rem',
+                marginBottom: '2rem',
+                color: 'white',
+                boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+                margin: window.innerWidth <= 480 ? '0 0.5rem 2rem' : '0 1rem 2rem'
               }}>
-                {/* Total Views Card - Clickable */}
-                <div 
-                  onClick={() => {
-                    setShowViewerDetails(true);
-                    fetchViewerDetails();
-                  }}
-                  style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    borderRadius: '12px',
-                    padding: '1.5rem',
-                    color: 'white',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    position: 'relative'
-                  }}
-                  className="total-views-card"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ fontSize: '2rem' }}>👁️</div>
-                    <div>
-                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
-                        {storeAnalytics.totalViews.toLocaleString()}
+                <h3 style={{
+                  margin: '0 0 2rem 0',
+                  fontSize: window.innerWidth <= 480 ? '1.3rem' : window.innerWidth <= 768 ? '1.5rem' : '1.8rem',
+                  fontWeight: '700',
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: window.innerWidth <= 480 ? '8px' : '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  📊 September 2025 Performance Overview
+                </h3>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '1fr 1fr',
+                  gap: window.innerWidth <= 480 ? '1.5rem' : '2rem',
+                  alignItems: window.innerWidth <= 768 ? 'stretch' : 'center'
+                }}>
+                  {/* Pie Chart Section */}
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center',
+                    order: window.innerWidth <= 768 ? 2 : 1
+                  }}>
+                    {/* Custom Pie Chart */}
+                    <div style={{
+                      position: 'relative',
+                      width: window.innerWidth <= 480 ? '160px' : window.innerWidth <= 768 ? '180px' : '200px',
+                      height: window.innerWidth <= 480 ? '160px' : window.innerWidth <= 768 ? '180px' : '200px',
+                      marginBottom: '1.5rem'
+                    }}>
+                      <svg 
+                        width={window.innerWidth <= 480 ? '160' : window.innerWidth <= 768 ? '180' : '200'} 
+                        height={window.innerWidth <= 480 ? '160' : window.innerWidth <= 768 ? '180' : '200'} 
+                        viewBox={window.innerWidth <= 480 ? '0 0 160 160' : window.innerWidth <= 768 ? '0 0 180 180' : '0 0 200 200'} 
+                        style={{ transform: 'rotate(-90deg)', maxWidth: '100%', height: 'auto' }}
+                      >
+                        {/* Views Segment (largest) */}
+                        <circle
+                          cx={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          cy={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          r={window.innerWidth <= 480 ? "60" : window.innerWidth <= 768 ? "70" : "80"}
+                          fill="none"
+                          stroke="#4facfe"
+                          strokeWidth={window.innerWidth <= 480 ? "16" : window.innerWidth <= 768 ? "18" : "20"}
+                          strokeDasharray={`${(storeAnalytics.totalViews || 1) * 0.8} ${2 * Math.PI * (window.innerWidth <= 480 ? 60 : window.innerWidth <= 768 ? 70 : 80)}`}
+                          strokeDashoffset="0"
+                          opacity="0.9"
+                        />
+                        {/* Orders Segment */}
+                        <circle
+                          cx={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          cy={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          r={window.innerWidth <= 480 ? "60" : window.innerWidth <= 768 ? "70" : "80"}
+                          fill="none"
+                          stroke="#f093fb"
+                          strokeWidth={window.innerWidth <= 480 ? "16" : window.innerWidth <= 768 ? "18" : "20"}
+                          strokeDasharray={`${(storeAnalytics.totalOrders || 0) * 8} ${2 * Math.PI * (window.innerWidth <= 480 ? 60 : window.innerWidth <= 768 ? 70 : 80)}`}
+                          strokeDashoffset={`-${(storeAnalytics.totalViews || 1) * 0.8}`}
+                          opacity="0.9"
+                        />
+                        {/* Revenue Segment */}
+                        <circle
+                          cx={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          cy={window.innerWidth <= 480 ? "80" : window.innerWidth <= 768 ? "90" : "100"}
+                          r={window.innerWidth <= 480 ? "60" : window.innerWidth <= 768 ? "70" : "80"}
+                          fill="none"
+                          stroke="#fee140"
+                          strokeWidth={window.innerWidth <= 480 ? "16" : window.innerWidth <= 768 ? "18" : "20"}
+                          strokeDasharray={`${Math.max((storeAnalytics.totalRevenue || 0) * 2, 10)} ${2 * Math.PI * (window.innerWidth <= 480 ? 60 : window.innerWidth <= 768 ? 70 : 80)}`}
+                          strokeDashoffset={`-${(storeAnalytics.totalViews || 1) * 0.8 + (storeAnalytics.totalOrders || 0) * 8}`}
+                          opacity="0.9"
+                        />
+                      </svg>
+                      {/* Center Text */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        textAlign: 'center',
+                        color: 'white'
+                      }}>
+                        <div style={{ 
+                          fontSize: window.innerWidth <= 480 ? '1.2rem' : window.innerWidth <= 768 ? '1.3rem' : '1.5rem', 
+                          fontWeight: 'bold' 
+                        }}>
+                          {((storeAnalytics.totalOrders / Math.max(storeAnalytics.totalViews, 1)) * 100).toFixed(1)}%
+                        </div>
+                        <div style={{ 
+                          fontSize: window.innerWidth <= 480 ? '0.7rem' : '0.8rem', 
+                          opacity: 0.8 
+                        }}>
+                          Conversion
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Views</div>
+                    </div>
+
+                    {/* Legend */}
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: window.innerWidth <= 480 ? 'row' : 'column', 
+                      gap: window.innerWidth <= 480 ? '12px' : '8px', 
+                      alignItems: window.innerWidth <= 480 ? 'center' : 'flex-start',
+                      justifyContent: window.innerWidth <= 480 ? 'center' : 'flex-start',
+                      flexWrap: window.innerWidth <= 480 ? 'wrap' : 'nowrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ 
+                          width: window.innerWidth <= 480 ? '10px' : '12px', 
+                          height: window.innerWidth <= 480 ? '10px' : '12px', 
+                          background: '#4facfe', 
+                          borderRadius: '50%' 
+                        }}></div>
+                        <span style={{ fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem' }}>
+                          👁️ {storeAnalytics.totalViews} Views
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ 
+                          width: window.innerWidth <= 480 ? '10px' : '12px', 
+                          height: window.innerWidth <= 480 ? '10px' : '12px', 
+                          background: '#f093fb', 
+                          borderRadius: '50%' 
+                        }}></div>
+                        <span style={{ fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem' }}>
+                          🛍️ {storeAnalytics.totalOrders} Orders
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ 
+                          width: window.innerWidth <= 480 ? '10px' : '12px', 
+                          height: window.innerWidth <= 480 ? '10px' : '12px', 
+                          background: '#fee140', 
+                          borderRadius: '50%' 
+                        }}></div>
+                        <span style={{ fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem' }}>
+                          💰 £{storeAnalytics.totalRevenue.toFixed(2)} Revenue
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Insights & Recommendations */}
                   <div style={{ 
-                    position: 'absolute',
-                    top: '10px',
-                    right: '15px',
-                    fontSize: '0.8rem',
-                    opacity: 0.8,
-                    background: 'rgba(255,255,255,0.2)',
-                    padding: '4px 8px',
-                    borderRadius: '12px'
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: window.innerWidth <= 480 ? '1rem' : '1.5rem',
+                    order: window.innerWidth <= 768 ? 1 : 2
                   }}>
-                    Click to see viewers
+                    {/* What's Going Well */}
+                    <div style={{
+                      background: 'rgba(255,255,255,0.15)',
+                      borderRadius: '12px',
+                      padding: window.innerWidth <= 480 ? '1rem' : '1.5rem',
+                      backdropFilter: 'blur(10px)'
+                    }}>
+                      <h4 style={{ 
+                        margin: '0 0 1rem 0', 
+                        fontSize: window.innerWidth <= 480 ? '1rem' : '1.2rem', 
+                        fontWeight: '600', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                      }}>
+                        🎉 What's Going Well
+                      </h4>
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: window.innerWidth <= 480 ? '6px' : '8px', 
+                        fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem' 
+                      }}>
+                        {storeAnalytics.totalViews > 0 && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                          }}>
+                            <span style={{ color: '#4ade80', flexShrink: 0 }}>✅</span>
+                            <span style={{ lineHeight: '1.4' }}>
+                              Great visibility with {storeAnalytics.totalViews} store views
+                            </span>
+                          </div>
+                        )}
+                        {storeAnalytics.totalOrders > 0 && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                          }}>
+                            <span style={{ color: '#4ade80', flexShrink: 0 }}>✅</span>
+                            <span style={{ lineHeight: '1.4' }}>
+                              Converting viewers to customers ({storeAnalytics.totalOrders} orders)
+                            </span>
+                          </div>
+                        )}
+                        {storeAnalytics.totalRevenue > 0 && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                          }}>
+                            <span style={{ color: '#4ade80', flexShrink: 0 }}>✅</span>
+                            <span style={{ lineHeight: '1.4' }}>
+                              Generating revenue (£{storeAnalytics.totalRevenue.toFixed(2)} this month)
+                            </span>
+                          </div>
+                        )}
+                        {(storeAnalytics.totalViews === 0 && storeAnalytics.totalOrders === 0) && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'flex-start', 
+                            gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                          }}>
+                            <span style={{ color: '#fbbf24', flexShrink: 0 }}>🌟</span>
+                            <span style={{ lineHeight: '1.4' }}>
+                              Fresh start! Your store is ready to welcome customers
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Opportunities for Growth */}
+                    <div style={{
+                      background: 'rgba(255,255,255,0.15)',
+                      borderRadius: '12px',
+                      padding: window.innerWidth <= 480 ? '1rem' : '1.5rem',
+                      backdropFilter: 'blur(10px)'
+                    }}>
+                      <h4 style={{ 
+                        margin: '0 0 1rem 0', 
+                        fontSize: window.innerWidth <= 480 ? '1rem' : '1.2rem', 
+                        fontWeight: '600', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                      }}>
+                        🚀 Growth Opportunities
+                      </h4>
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: window.innerWidth <= 480 ? '6px' : '8px', 
+                        fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem' 
+                      }}>
+                        {storeAnalytics.totalViews === 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#fbbf24' }}>💡</span>
+                            <span>Boost your store to increase visibility</span>
+                          </div>
+                        )}
+                        {storeAnalytics.totalViews > 0 && storeAnalytics.totalOrders === 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#fbbf24' }}>💡</span>
+                            <span>Optimize product prices and descriptions</span>
+                          </div>
+                        )}
+                        {storeAnalytics.totalOrders > 0 && storeAnalytics.totalRevenue < 100 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#fbbf24' }}>�</span>
+                            <span>Add higher-value products to increase revenue</span>
+                          </div>
+                        )}
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'flex-start', 
+                          gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                        }}>
+                          <span style={{ color: '#60a5fa', flexShrink: 0 }}>📱</span>
+                          <span style={{ lineHeight: '1.4' }}>Share your store link on social media</span>
+                        </div>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'flex-start', 
+                          gap: window.innerWidth <= 480 ? '6px' : '8px' 
+                        }}>
+                          <span style={{ color: '#60a5fa', flexShrink: 0 }}>📷</span>
+                          <span style={{ lineHeight: '1.4' }}>Upload high-quality product photos</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Total Orders Card - Clickable */}
-                <div 
-                  onClick={() => {
-                    setShowOrderDetails(true);
-                    fetchOrderDetails();
-                  }}
-                  style={{
-                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                    borderRadius: '12px',
-                    padding: '1.5rem',
-                    color: 'white',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    position: 'relative'
-                  }}
-                  className="total-orders-card"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ fontSize: '2rem' }}>🛍️</div>
-                    <div>
-                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
-                        {storeAnalytics.totalOrders.toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Orders</div>
-                    </div>
-                  </div>
-                  <div style={{ 
-                    position: 'absolute',
-                    top: '10px',
-                    right: '15px',
-                    fontSize: '0.8rem',
-                    opacity: 0.8,
-                    background: 'rgba(255,255,255,0.2)',
-                    padding: '4px 8px',
-                    borderRadius: '12px'
-                  }}>
-                    Click to see orders
-                  </div>
+                {/* Quick Action Buttons */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: window.innerWidth <= 480 ? 'repeat(auto-fit, minmax(120px, 1fr))' : 
+                                      window.innerWidth <= 768 ? 'repeat(auto-fit, minmax(140px, 1fr))' : 
+                                      'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: window.innerWidth <= 480 ? '0.8rem' : '1rem',
+                  marginTop: '2rem',
+                  justifyItems: 'center'
+                }}>
+                  <button
+                    onClick={() => {
+                      setShowViewerDetails(true);
+                      fetchViewerDetails();
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      padding: window.innerWidth <= 480 ? '10px 12px' : window.innerWidth <= 768 ? '11px 16px' : '12px 20px',
+                      color: 'white',
+                      fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      minHeight: window.innerWidth <= 480 ? '44px' : 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)',
+                      width: '100%',
+                      minWidth: 'fit-content',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.3)';
+                      e.target.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.2)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    {window.innerWidth <= 480 ? '👁️ Views' : '👁️ View Details'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowOrderDetails(true);
+                      fetchOrderDetails();
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      padding: window.innerWidth <= 480 ? '10px 12px' : window.innerWidth <= 768 ? '11px 16px' : '12px 20px',
+                      color: 'white',
+                      fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      minHeight: window.innerWidth <= 480 ? '44px' : 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.3)';
+                      e.target.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.2)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    {window.innerWidth <= 480 ? '🛍️ Orders' : '🛍️ Order Details'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRevenueDetails(true);
+                      fetchRevenueDetails();
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      padding: window.innerWidth <= 480 ? '10px 12px' : window.innerWidth <= 768 ? '11px 16px' : '12px 20px',
+                      color: 'white',
+                      fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      minHeight: window.innerWidth <= 480 ? '44px' : 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.3)';
+                      e.target.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.2)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    {window.innerWidth <= 480 ? '💰 Revenue' : '💰 Revenue Details'}
+                  </button>
+                  <button
+                    onClick={() => triggerAnalyticsUpdate()}
+                    disabled={analyticsUpdateStatus.isUpdating}
+                    style={{
+                      background: analyticsUpdateStatus.isUpdating ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      padding: window.innerWidth <= 480 ? '10px 12px' : window.innerWidth <= 768 ? '11px 16px' : '12px 20px',
+                      color: analyticsUpdateStatus.isUpdating ? 'rgba(255,255,255,0.6)' : 'white',
+                      fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                      fontWeight: '600',
+                      cursor: analyticsUpdateStatus.isUpdating ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: window.innerWidth <= 480 ? '4px' : '8px',
+                      minHeight: window.innerWidth <= 480 ? '44px' : 'auto',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!analyticsUpdateStatus.isUpdating) {
+                        e.target.style.background = 'rgba(255,255,255,0.3)';
+                        e.target.style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!analyticsUpdateStatus.isUpdating) {
+                        e.target.style.background = 'rgba(255,255,255,0.2)';
+                        e.target.style.transform = 'translateY(0)';
+                      }
+                    }}
+                  >
+                    {analyticsUpdateStatus.isUpdating ? (
+                      <>
+                        <div style={{ 
+                          width: '16px', 
+                          height: '16px', 
+                          border: '2px solid rgba(255,255,255,0.3)',
+                          borderTop: '2px solid white',
+                          borderRadius: '50%',
+                          animation: 'spin 1s linear infinite'
+                        }}></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>{window.innerWidth <= 480 ? '🔄 Update' : '🔄 Update Now'}</>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowNotificationSettings(true)}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      padding: window.innerWidth <= 480 ? '10px 12px' : window.innerWidth <= 768 ? '11px 16px' : '12px 20px',
+                      color: 'white',
+                      fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)',
+                      minHeight: window.innerWidth <= 480 ? '44px' : 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.3)';
+                      e.target.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.2)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    {window.innerWidth <= 480 ? '🔔' : '🔔 Notifications'}
+                  </button>
                 </div>
 
-                {/* Total Revenue Card - Clickable */}
-                <div 
-                  onClick={() => {
-                    setShowRevenueDetails(true);
-                    fetchRevenueDetails();
-                  }}
-                  style={{
-                    background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                    borderRadius: '12px',
-                    padding: '1.5rem',
-                    color: 'white',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    position: 'relative'
-                  }}
-                  className="total-revenue-card"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ fontSize: '2rem' }}>💰</div>
-                    <div>
-                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
-                        £{storeAnalytics.totalRevenue.toFixed(2)}
-                      </div>
-                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Revenue</div>
-                    </div>
-                  </div>
-                  <div style={{ 
-                    position: 'absolute',
-                    top: '10px',
-                    right: '15px',
-                    fontSize: '0.8rem',
-                    opacity: 0.8,
-                    background: 'rgba(255,255,255,0.2)',
-                    padding: '4px 8px',
-                    borderRadius: '12px'
-                  }}>
-                    Click to see revenue
-                  </div>
-                </div>
-
-                {/* Boost Status Card */}
-                {storeAnalytics.boostAnalytics.isActive && (
+                {/* Update Status Info */}
+                {analyticsUpdateStatus.nextUpdate && (
                   <div style={{
-                    background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-                    borderRadius: '12px',
-                    padding: '1.5rem',
-                    color: 'white',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                    background: 'rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: window.innerWidth <= 480 ? '0.8rem' : '1rem',
+                    marginTop: '1rem',
+                    fontSize: window.innerWidth <= 480 ? '0.8rem' : '0.9rem',
+                    textAlign: 'center',
+                    backdropFilter: 'blur(10px)'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ fontSize: '2rem' }}>⚡</div>
-                      <div>
-                        <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
-                          {storeAnalytics.boostAnalytics.daysRemaining}
-                        </div>
-                        <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Boost Days Left</div>
-                        <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
-                          {storeAnalytics.boostAnalytics.views} boost views
-                        </div>
-                      </div>
+                    <div style={{ 
+                      marginBottom: '8px',
+                      lineHeight: '1.4',
+                      wordBreak: window.innerWidth <= 480 ? 'break-word' : 'normal'
+                    }}>
+                      📅 Next automatic update: {analyticsUpdateStatus.nextUpdate.toLocaleDateString()} at {analyticsUpdateStatus.nextUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
+                    {analyticsUpdateStatus.lastUpdate && (
+                      <div style={{ 
+                        fontSize: window.innerWidth <= 480 ? '0.7rem' : '0.8rem', 
+                        opacity: 0.8,
+                        lineHeight: '1.4',
+                        wordBreak: window.innerWidth <= 480 ? 'break-word' : 'normal'
+                      }}>
+                        Last updated: {analyticsUpdateStatus.lastUpdate.toLocaleDateString()} at {analyticsUpdateStatus.lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* Boost Status Card */}
+              {storeAnalytics.boostAnalytics.isActive && (
+                <div style={{
+                  background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                  borderRadius: '12px',
+                  padding: window.innerWidth <= 480 ? '1rem' : '1.5rem',
+                  color: 'white',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                  marginBottom: '2rem',
+                  margin: window.innerWidth <= 480 ? '0 0.5rem 2rem' : '0 1rem 2rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '2rem' }}>⚡</div>
+                    <div>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {storeAnalytics.boostAnalytics.daysRemaining}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Boost Days Left</div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                        {storeAnalytics.boostAnalytics.views} boost views
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Top Products Section */}
               {storeAnalytics.topProducts.length > 0 && (
                 <div style={{
                   background: 'white',
                   borderRadius: '12px',
-                  padding: '1.5rem',
+                  padding: window.innerWidth <= 480 ? '1rem' : '1.5rem',
                   marginBottom: '2rem',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  margin: window.innerWidth <= 480 ? '0 0.5rem 2rem' : '0 1rem 2rem'
                 }}>
                   <h3 style={{ 
                     margin: '0 0 1rem 0', 
                     color: '#1F2937', 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: '8px' 
+                    gap: window.innerWidth <= 480 ? '6px' : '8px',
+                    fontSize: window.innerWidth <= 480 ? '1.1rem' : '1.2rem'
                   }}>
                     🏆 Top Selling Products
                   </h3>
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-                    gap: '1rem' 
+                    gridTemplateColumns: window.innerWidth <= 480 ? '1fr' : 
+                                        window.innerWidth <= 768 ? 'repeat(auto-fit, minmax(200px, 1fr))' : 
+                                        'repeat(auto-fit, minmax(250px, 1fr))', 
+                    gap: window.innerWidth <= 480 ? '0.8rem' : '1rem' 
                   }}>
                     {storeAnalytics.topProducts.slice(0, 6).map((product, index) => (
                       <div key={index} style={{
@@ -3491,24 +4407,58 @@ function ExplorePage() {
                   selectedAnalyticsPeriod === '30days' ? '30 days' : '90 days'}
                 </p>
               </div>
-              <button
-                onClick={() => setShowOrderDetails(false)}
-                style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '40px',
-                  height: '40px',
-                  color: 'white',
-                  fontSize: '1.2rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  onClick={() => {
+                    setShowOrderDetails(false);
+                    navigate('/reports');
+                  }}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.3)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.2)';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                  title="View detailed order reports and analytics"
+                >
+                  📊 View Reports
+                </button>
+                <button
+                  onClick={() => setShowOrderDetails(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}
@@ -3549,11 +4499,68 @@ function ExplorePage() {
                   </div>
                 </div>
               ) : (
-                <div style={{
-                  display: 'grid',
-                  gap: '1rem'
-                }}>
-                  {orderDetails.map((order, index) => (
+                <>
+                  {/* Reports Action Section */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    marginBottom: '2rem',
+                    color: 'white',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    boxShadow: '0 4px 12px rgba(240, 147, 251, 0.3)'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                        📊 Need detailed order reports?
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>
+                        Access comprehensive order analytics, export data, and track performance metrics
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowOrderDetails(false);
+                        navigate('/reports');
+                      }}
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '8px',
+                        padding: '12px 24px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.2s ease',
+                        backdropFilter: 'blur(10px)',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.3)';
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.2)';
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      📈 View Reports
+                    </button>
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gap: '1rem'
+                  }}>
+                    {orderDetails.map((order, index) => (
                     <div
                       key={`${order.id}-${index}`}
                       style={{
@@ -3668,7 +4675,8 @@ function ExplorePage() {
                       Showing latest 50 orders. Total: {storeAnalytics.totalOrders} orders
                     </div>
                   )}
-                </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -3720,24 +4728,58 @@ function ExplorePage() {
                   selectedAnalyticsPeriod === '30days' ? '30 days' : '90 days'}
                 </p>
               </div>
-              <button
-                onClick={() => setShowRevenueDetails(false)}
-                style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '40px',
-                  height: '40px',
-                  color: 'white',
-                  fontSize: '1.2rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  onClick={() => {
+                    setShowRevenueDetails(false);
+                    navigate('/messages');
+                  }}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.3)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.2)';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                  title="Go to your wallet to manage earnings"
+                >
+                  👛 View Wallet
+                </button>
+                <button
+                  onClick={() => setShowRevenueDetails(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}
@@ -3822,6 +4864,62 @@ function ExplorePage() {
                       </div>
                       <div style={{ fontSize: '0.9rem', color: '#6B7280' }}>Completed Orders</div>
                     </div>
+                  </div>
+
+                  {/* Wallet Action Section */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    marginBottom: '2rem',
+                    color: 'white',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                        💰 Ready to manage your earnings?
+                      </div>
+                      <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>
+                        Access your wallet to withdraw funds, view transaction history, and manage your earnings
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowRevenueDetails(false);
+                        navigate('/messages');
+                      }}
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '8px',
+                        padding: '12px 24px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.2s ease',
+                        backdropFilter: 'blur(10px)',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.3)';
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.2)';
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      👛 Open Wallet
+                    </button>
                   </div>
 
                   {/* Payment Methods Breakdown */}
@@ -5330,6 +6428,320 @@ function ExplorePage() {
           </div>
         );
       })}
+
+      {/* Notification Settings Modal */}
+      {showNotificationSettings && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: window.innerWidth <= 480 ? 'flex-start' : 'center',
+          zIndex: 1000,
+          padding: window.innerWidth <= 480 ? '10px' : '20px',
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: window.innerWidth <= 480 ? '1.5rem' : '2rem',
+            maxWidth: window.innerWidth <= 480 ? '100%' : '500px',
+            width: '100%',
+            maxHeight: window.innerWidth <= 480 ? 'none' : '90vh',
+            overflowY: window.innerWidth <= 480 ? 'visible' : 'auto',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            marginTop: window.innerWidth <= 480 ? '20px' : '0',
+            marginBottom: window.innerWidth <= 480 ? '20px' : '0'
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '2rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '1.5rem',
+                fontWeight: '700',
+                color: '#1f2937',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                🔔 Analytics Notifications
+              </h2>
+              <button
+                onClick={() => setShowNotificationSettings(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '4px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Settings Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Enable Notifications */}
+              <div>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  color: '#374151',
+                  cursor: 'pointer'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={notificationPreferences.enabled}
+                    onChange={(e) => setNotificationPreferences(prev => ({
+                      ...prev,
+                      enabled: e.target.checked
+                    }))}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#667eea'
+                    }}
+                  />
+                  Enable Analytics Notifications
+                </label>
+                <p style={{
+                  margin: '8px 0 0 30px',
+                  fontSize: '0.9rem',
+                  color: '#6b7280'
+                }}>
+                  Get notified when your store analytics are updated
+                </p>
+              </div>
+
+              {notificationPreferences.enabled && (
+                <>
+                  {/* Frequency */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '1rem',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Update Frequency
+                    </label>
+                    <select
+                      value={notificationPreferences.frequency}
+                      onChange={(e) => setNotificationPreferences(prev => ({
+                        ...prev,
+                        frequency: e.target.value
+                      }))}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        backgroundColor: 'white'
+                      }}
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Bi-weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+
+                  {/* Day of Week (for weekly/biweekly) */}
+                  {(notificationPreferences.frequency === 'weekly' || notificationPreferences.frequency === 'biweekly') && (
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        color: '#374151',
+                        marginBottom: '8px'
+                      }}>
+                        Day of Week
+                      </label>
+                      <select
+                        value={notificationPreferences.dayOfWeek}
+                        onChange={(e) => setNotificationPreferences(prev => ({
+                          ...prev,
+                          dayOfWeek: e.target.value
+                        }))}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '1rem',
+                          backgroundColor: 'white'
+                        }}
+                      >
+                        <option value="monday">Monday</option>
+                        <option value="tuesday">Tuesday</option>
+                        <option value="wednesday">Wednesday</option>
+                        <option value="thursday">Thursday</option>
+                        <option value="friday">Friday</option>
+                        <option value="saturday">Saturday</option>
+                        <option value="sunday">Sunday</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Time of Day */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '1rem',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Time of Day
+                    </label>
+                    <input
+                      type="time"
+                      value={notificationPreferences.timeOfDay}
+                      onChange={(e) => setNotificationPreferences(prev => ({
+                        ...prev,
+                        timeOfDay: e.target.value
+                      }))}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        backgroundColor: 'white'
+                      }}
+                    />
+                  </div>
+
+                  {/* Notification Methods */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '1rem',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Notification Methods
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={notificationPreferences.email}
+                          onChange={(e) => setNotificationPreferences(prev => ({
+                            ...prev,
+                            email: e.target.checked
+                          }))}
+                          style={{
+                            accentColor: '#667eea'
+                          }}
+                        />
+                        <span>📧 Email notifications</span>
+                      </label>
+                      <label style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={notificationPreferences.push}
+                          onChange={(e) => setNotificationPreferences(prev => ({
+                            ...prev,
+                            push: e.target.checked
+                          }))}
+                          style={{
+                            accentColor: '#667eea'
+                          }}
+                        />
+                        <span>📱 Push notifications</span>
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                marginTop: '2rem',
+                paddingTop: '1rem',
+                borderTop: '1px solid #e5e7eb'
+              }}>
+                <button
+                  onClick={() => setShowNotificationSettings(false)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 24px',
+                    background: '#f3f4f6',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    color: '#374151',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#e5e7eb'}
+                  onMouseLeave={(e) => e.target.style.background = '#f3f4f6'}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    const result = await saveNotificationPreferences(notificationPreferences);
+                    if (result.success) {
+                      setShowNotificationSettings(false);
+                      // You could show a success toast here
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                >
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
