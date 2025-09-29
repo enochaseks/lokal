@@ -2550,6 +2550,114 @@ function ExplorePage() {
         </>
       )}
 
+      {/* Your Store Section - Only visible to sellers */}
+      {currentUser && userType === 'seller' && sellerStore && (
+        <>
+          <h2 style={{ 
+            margin: '2rem 0 1rem 1rem', 
+            color: '#007B7F', 
+            fontWeight: '800', 
+            fontSize: '1.8rem', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
+            🏪 Your Store
+          </h2>
+          
+          <div style={{
+            display: 'flex',
+            padding: '0 1rem 1rem',
+            gap: '1rem',
+            marginBottom: '2rem'
+          }}>
+            <div
+              onClick={() => navigate(`/store-preview/${sellerStore.id}`)}
+              style={{
+                minWidth: 200,
+                border: '1px solid #007B7F',
+                borderRadius: 16,
+                background: '#fff',
+                cursor: 'pointer',
+                boxShadow: '0 4px 8px -1px rgba(0, 123, 127, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                transition: 'all 0.3s ease, transform 0.2s ease',
+                overflow: 'hidden'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 16px -1px rgba(0, 123, 127, 0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = '0 4px 8px -1px rgba(0, 123, 127, 0.2)';
+              }}
+            >
+              <div style={{ height: 120, overflow: 'hidden', position: 'relative' }}>
+                {sellerStore.backgroundImg ? (
+                  <img 
+                    src={sellerStore.backgroundImg} 
+                    alt={sellerStore.storeName} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    loading="lazy"
+                  />
+                ) : (
+                  <div style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    background: 'linear-gradient(45deg, #e6f7f8, #dcf2f2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <span style={{ fontSize: '2rem' }}>🏪</span>
+                  </div>
+                )}
+                
+                <div style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '8px',
+                  background: '#007B7F',
+                  color: 'white',
+                  borderRadius: '20px',
+                  padding: '4px 10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 'bold',
+                }}>
+                  MANAGE
+                </div>
+              </div>
+              
+              <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1a202c' }}>
+                  {sellerStore.storeName || 'My Store'}
+                </div>
+                
+                <div style={{ fontSize: '0.875rem', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: '#007B7F', fontSize: '1rem' }}>📍</span>
+                  {sellerStore.storeLocation || sellerStore.storeAddress || (
+                    <span style={{ 
+                      color: '#D92D20', 
+                      fontStyle: 'italic',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      Location not set
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Analytics Section - Only visible to sellers */}
       {currentUser && userType === 'seller' && sellerStore && (
         <>
@@ -4397,19 +4505,20 @@ function ExplorePage() {
         </>
       )}
 
-      <h2 style={{ 
-        margin: '3rem 0 1rem 1rem', 
-        color: '#007B7F', 
-        fontWeight: '800', 
-        fontSize: '1.8rem', 
-        textAlign: 'left',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
-      }}>
-        {(userType === 'buyer' || !currentUser) ? (
-          <>
+      {/* Shops Near You Section - Only visible to buyers and unauthenticated users */}
+      {(userType === 'buyer' || !currentUser) && (
+        <>
+          <h2 style={{ 
+            margin: '3rem 0 1rem 1rem', 
+            color: '#007B7F', 
+            fontWeight: '800', 
+            fontSize: '1.8rem', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
             📍 Shops Near You
             <span style={{ 
               background: '#f0f9f9', 
@@ -4421,107 +4530,9 @@ function ExplorePage() {
             }}>
               {filteredShops.length}
             </span>
-          </>
-        ) : (
-          <>
-            🏪 Your Store
-          </>
-        )}
-      </h2>
+          </h2>
       
-      {userType === 'seller' && sellerStore ? (
-        // Show seller's own store
-        <div style={{
-          display: 'flex',
-          padding: '0 1rem 1rem',
-          gap: '1rem',
-          marginBottom: '2rem'
-        }}>
-          <div
-            onClick={() => navigate(`/store-preview/${sellerStore.id}`)}
-            style={{
-              minWidth: 200,
-              border: '1px solid #007B7F',
-              borderRadius: 16,
-              background: '#fff',
-              cursor: 'pointer',
-              boxShadow: '0 4px 8px -1px rgba(0, 123, 127, 0.2)',
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              transition: 'all 0.3s ease, transform 0.2s ease',
-              overflow: 'hidden'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px -1px rgba(0, 123, 127, 0.3)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '0 4px 8px -1px rgba(0, 123, 127, 0.2)';
-            }}
-          >
-            <div style={{ height: 120, overflow: 'hidden', position: 'relative' }}>
-              {sellerStore.backgroundImg ? (
-                <img 
-                  src={sellerStore.backgroundImg} 
-                  alt={sellerStore.storeName} 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  loading="lazy"
-                />
-              ) : (
-                <div style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  background: 'linear-gradient(45deg, #e6f7f8, #dcf2f2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <span style={{ fontSize: '2rem' }}>🏪</span>
-                </div>
-              )}
-              
-              <div style={{
-                position: 'absolute',
-                top: '8px',
-                right: '8px',
-                background: '#007B7F',
-                color: 'white',
-                borderRadius: '20px',
-                padding: '4px 10px',
-                fontSize: '0.8rem',
-                fontWeight: 'bold',
-              }}>
-                MANAGE
-              </div>
-            </div>
-            
-            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1a202c' }}>
-                {sellerStore.storeName || 'My Store'}
-              </div>
-              
-              <div style={{ fontSize: '0.875rem', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: '#007B7F', fontSize: '1rem' }}>📍</span>
-                {sellerStore.storeLocation || sellerStore.storeAddress || (
-                  <span style={{ 
-                    color: '#D92D20', 
-                    fontStyle: 'italic',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    Location not set
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        // Show filtered shops for buyers
-        filteredShops.length === 0 ? (
+      {filteredShops.length === 0 ? (
           <div style={{
             display: 'flex',
             justifyContent: 'center',
@@ -4773,7 +4784,9 @@ function ExplorePage() {
           );
         })}
         </div>
-      ))}
+      )}
+        </>
+      )}
       
       {/* Spotlight Store Section */}
       <h2 style={{ 
