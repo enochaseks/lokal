@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import QRCodeModal from '../components/QRCodeModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function StoreProfilePage() {
@@ -129,23 +129,59 @@ function StoreProfilePage() {
         // Fetch followers
         const followersCol = collection(db, 'stores', user.uid, 'followers');
         onSnapshot(followersCol, async (snapshot) => {
-          const followersArr = snapshot.docs.map(doc => doc.data());
+          // Get both document IDs and data for each follower
+          const followersArr = snapshot.docs.map(doc => ({
+            docId: doc.id, // Store document ID for deletion if needed
+            ...doc.data()
+          }));
+          
           setFollowers(followersArr);
+          
           // Fetch user details for each follower
           const details = [];
+          
           for (const f of followersArr) {
             if (f.uid) {
               const userDoc = await getDoc(doc(db, 'users', f.uid));
               if (userDoc.exists()) {
-                details.push({ uid: f.uid, ...userDoc.data() });
+                // Check if account is deleted
+                const userData = userDoc.data();
+                if (!userData.deleted && userData.accountStatus !== 'deleted') {
+                  // Valid user, add to followers details
+                  details.push({ uid: f.uid, ...userData });
+                } else {
+                  // User is deleted, remove from followers collection
+                  console.log(`User ${f.uid} has been deleted, removing from followers`);
+                  try {
+                    // Use the stored document ID for precise deletion
+                    const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                    await deleteDoc(followerDocRef);
+                  } catch (err) {
+                    console.error('Error removing deleted follower:', err);
+                  }
+                }
               } else {
-                details.push({ uid: f.uid, name: f.email || f.uid, photoURL: '' });
+                // User document doesn't exist, remove from followers
+                console.log(`User document for ${f.uid} not found, removing from followers`);
+                try {
+                  // Use the stored document ID for precise deletion
+                  const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                  await deleteDoc(followerDocRef);
+                } catch (err) {
+                  console.error('Error removing non-existent follower:', err);
+                }
               }
             }
           }
+          
           setFollowersDetails(details);
-          // Check if current user is following
-          setIsFollowing(followersArr.some(f => f.uid === user.uid));
+          
+          // Check if current user is following (only from valid followers)
+          const currentUserIsFollowing = followersArr.some(f => 
+            f.uid === user.uid && 
+            details.some(d => d.uid === user.uid)
+          );
+          setIsFollowing(currentUserIsFollowing);
         });
       } catch (err) {
         setError(err.message);
@@ -509,18 +545,56 @@ function StoreProfilePage() {
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user || !profile) return;
-    const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
-    await addDoc(collection(db, 'stores', user.uid, 'followers'), { uid: user.uid, email: user.email });
-    setIsFollowing(true);
+    
+    try {
+      // Check if already following to prevent duplicates
+      const followersCol = collection(db, 'stores', user.uid, 'followers');
+      const q = query(followersCol, where('uid', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        // Not following yet, add as follower
+        await addDoc(collection(db, 'stores', user.uid, 'followers'), { 
+          uid: user.uid, 
+          email: user.email,
+          timestamp: new Date()
+        });
+        setIsFollowing(true);
+      } else {
+        console.log('Already following this store');
+        setIsFollowing(true);
+      }
+    } catch (error) {
+      console.error('Error following store:', error);
+    }
   };
 
   const handleUnfollow = async () => {
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user || !profile) return;
-    const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
-    await deleteDoc(followerRef);
-    setIsFollowing(false);
+    
+    try {
+      // Find the follower document with the current user's UID
+      const followersCol = collection(db, 'stores', user.uid, 'followers');
+      const q = query(followersCol, where('uid', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      
+      // Delete all matching documents (should only be one)
+      let deleted = false;
+      querySnapshot.forEach(async (docSnapshot) => {
+        await deleteDoc(docSnapshot.ref);
+        deleted = true;
+      });
+      
+      if (deleted) {
+        setIsFollowing(false);
+      } else {
+        console.log('No follower document found to unfollow');
+      }
+    } catch (error) {
+      console.error('Error unfollowing store:', error);
+    }
   };
 
   const isRestrictedFromChanges = () => {
@@ -695,41 +769,154 @@ function StoreProfilePage() {
             📱 QR
           </button>
 
-          {/* Go live or live/offline button on the right */}
+          {/* Go live or live/offline button on the right - modernized */}
           {profile.live ? (
             <button
-              style={{ position: 'absolute', right: 24, top: 24, background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.2rem', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', zIndex: 2 }}
+              style={{ 
+                position: 'absolute', 
+                right: 24, 
+                top: 24, 
+                background: 'rgba(217, 45, 32, 0.9)', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 12, 
+                padding: '0.7rem 1.4rem', 
+                fontWeight: 600, 
+                fontSize: '0.95rem', 
+                cursor: 'pointer', 
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(217, 45, 32, 0.25)',
+                transition: 'all 0.2s ease'
+              }}
               onClick={handleGoOffline}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(217, 45, 32, 1)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(217, 45, 32, 0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(217, 45, 32, 0.9)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(217, 45, 32, 0.25)';
+              }}
               title="Click to go offline"
             >
-              Store is live (Turn off)
+              <span role="img" aria-label="live" style={{ fontSize: '1rem' }}>🔴</span>
+              Store is Live
             </button>
           ) : (
             <button
-              style={{ position: 'absolute', right: 24, top: 24, background: canGoLive ? '#D92D20' : '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 1.2rem', fontWeight: 700, fontSize: '1rem', cursor: canGoLive ? 'pointer' : 'not-allowed', zIndex: 2 }}
+              style={{ 
+                position: 'absolute', 
+                right: 24, 
+                top: 24, 
+                background: canGoLive ? 'rgba(0, 123, 127, 0.9)' : '#ccc', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 12, 
+                padding: '0.7rem 1.4rem', 
+                fontWeight: 600, 
+                fontSize: '0.95rem', 
+                cursor: canGoLive ? 'pointer' : 'not-allowed', 
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: canGoLive ? '0 4px 12px rgba(0, 123, 127, 0.25)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
               onClick={handleGoLive}
+              onMouseOver={(e) => {
+                if (canGoLive) {
+                  e.currentTarget.style.background = 'rgba(0, 123, 127, 1)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 123, 127, 0.3)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (canGoLive) {
+                  e.currentTarget.style.background = 'rgba(0, 123, 127, 0.9)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 123, 127, 0.25)';
+                }
+              }}
               disabled={!canGoLive}
-              title={canGoLive ? '' : 'Add all required info and at least one item to go live'}
+              title={canGoLive ? 'Make your store available to customers' : 'Add all required info and at least one item to go live'}
             >
-              Go live
+              <span role="img" aria-label="offline" style={{ fontSize: '1rem' }}>⚫</span>
+              Go Live
             </button>
           )}
         </div>
-        {/* Title and details below banner */}
-        <div style={{ width: '100%', maxWidth: 400, background: '#fff', borderRadius: 20, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.2rem 1.2rem 1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: -30, marginBottom: 24, position: 'relative' }}>
-          {/* Title and origin in the same row, title left, origin right */}
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: '1.1rem', color: '#222', letterSpacing: '0.2px' }}>{profile.storeName || 'Store Profile'}</span>
+        {/* Title and details below banner - modernized card */}
+        <div style={{ 
+          width: '100%', 
+          maxWidth: 450, 
+          background: '#fff', 
+          borderRadius: 24, 
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.08)', 
+          padding: '2rem 1.5rem 1.5rem', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'flex-start', 
+          marginTop: -40, 
+          marginBottom: 30, 
+          position: 'relative',
+          border: '1px solid rgba(0, 123, 127, 0.1)'
+        }}>
+          {/* Title and origin in the same row, title left, origin right - modernized */}
+          <div style={{ 
+            width: '100%', 
+            display: 'flex', 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            marginBottom: 14
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 10
+            }}>
+              <span style={{ 
+                fontWeight: 700, 
+                fontSize: '1.3rem', 
+                color: '#1a1a1a', 
+                letterSpacing: '0.2px',
+                fontFamily: 'Inter, system-ui, sans-serif'
+              }}>
+                {profile.storeName || 'Store Profile'}
+              </span>
               <button
                 onClick={handleNameEdit}
                 style={{ 
-                  background: 'none', 
-                  border: 'none', 
+                  background: isRestrictedFromChanges() ? '#f5f5f5' : 'rgba(0, 123, 127, 0.1)', 
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   color: isRestrictedFromChanges() ? '#ccc' : '#007B7F', 
                   cursor: isRestrictedFromChanges() ? 'not-allowed' : 'pointer', 
-                  fontSize: '0.9rem', 
-                  padding: '2px 6px' 
+                  fontSize: '0.9rem',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (!isRestrictedFromChanges()) {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 0.15)';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isRestrictedFromChanges()) {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
                 }}
                 title={isRestrictedFromChanges() ? 'Changes restricted for 4 months' : "Edit store name"}
                 disabled={isRestrictedFromChanges()}
@@ -737,59 +924,148 @@ function StoreProfilePage() {
                 ✏️
               </button>
             </div>
-            {profile.origin && (
-              <span style={{ fontSize: '0.92rem', color: '#888', fontWeight: 500 }}>Origin: {profile.origin}</span>
-            )}
-            {/* Edit Button */}
-            <button
-              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', marginLeft: 10 }}
-              onClick={handleGeneralEdit}
-            >
-              Edit
-            </button>
-            <button
-              style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', marginLeft: 10 }}
-              onClick={() => navigate('/messages')}
-            >
-              Messages
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {profile.origin && (
+                <div style={{ 
+                  fontSize: '0.9rem', 
+                  color: '#555', 
+                  fontWeight: 500,
+                  background: 'rgba(0, 123, 127, 0.08)',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <span role="img" aria-label="origin" style={{ marginRight: '5px', fontSize: '0.9rem' }}>🌍</span> 
+                  {profile.origin}
+                </div>
+              )}
+              
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{ 
+                    background: 'rgba(0, 123, 127, 0.9)',
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 10, 
+                    padding: '0.5rem 1.1rem', 
+                    fontWeight: 600, 
+                    fontSize: '0.9rem', 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 6px rgba(0, 123, 127, 0.15)'
+                  }}
+                  onClick={handleGeneralEdit}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 1)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 123, 127, 0.2)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 0.9)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 123, 127, 0.15)';
+                  }}
+                >
+                  <span role="img" aria-label="edit" style={{ fontSize: '0.85rem' }}>✏️</span> Edit
+                </button>
+              </div>
+            </div>
           </div>
-          {/* Location */}
+          {/* Location - modernized */}
           {(profile.storeLocation || profile.storeAddress) && (
-            <div style={{ width: '100%', textAlign: 'left', fontSize: '0.95rem', color: '#444', marginBottom: 4, wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'column', alignItems: 'flex-start' }}>
-              {/* Show street on its own line if possible */}
-              {(() => {
-                if (profile.storeLocation) {
-                  const parts = profile.storeLocation.split(',');
-                  return (
-                    <>
-                      <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
-                      <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
-                    </>
-                  );
-                } else if (profile.storeAddress) {
-                  const parts = profile.storeAddress.split(',');
-                  return (
-                    <>
-                      <span><span style={{ fontWeight: 500 }}>Address:</span> {parts[0]}</span>
-                      <span style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</span>
-                    </>
-                  );
-                } else {
-                  return (
-                    <span><span style={{ fontWeight: 500 }}>Address:</span> Location not set</span>
-                  );
-                }
-              })()}
+            <div style={{ 
+              width: '100%',
+              background: '#fafafa', 
+              borderRadius: '14px',
+              padding: '12px 16px',
+              marginTop: '8px',
+              marginBottom: '12px',
+              borderLeft: '3px solid #007B7F',
+              position: 'relative'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                marginBottom: '2px' 
+              }}>
+                <span role="img" aria-label="location" style={{ fontSize: '1.1rem' }}>📍</span>
+                <span style={{ 
+                  fontWeight: 600, 
+                  color: '#333',
+                  fontSize: '0.9rem'
+                }}>
+                  Store Address
+                </span>
+              </div>
+              
+              <div style={{ 
+                paddingLeft: '31px',
+                wordBreak: 'break-word',
+                textAlign: 'left',
+                fontSize: '0.95rem',
+                color: '#444'
+              }}>
+                {(() => {
+                  if (profile.storeLocation) {
+                    const parts = profile.storeLocation.split(',');
+                    return (
+                      <>
+                        <div style={{ fontWeight: 500, marginBottom: '2px' }}>{parts[0]}</div>
+                        <div style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</div>
+                      </>
+                    );
+                  } else if (profile.storeAddress) {
+                    const parts = profile.storeAddress.split(',');
+                    return (
+                      <>
+                        <div style={{ fontWeight: 500, marginBottom: '2px' }}>{parts[0]}</div>
+                        <div style={{ color: '#666', fontSize: '0.93rem' }}>{parts.slice(1).join(',').trim()}</div>
+                      </>
+                    );
+                  } else {
+                    return (
+                      <span>Location not set</span>
+                    );
+                  }
+                })()}
+              </div>
+              
               <button
                 onClick={handleLocationEdit}
                 style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  color: isRestrictedFromChanges() ? '#ccc' : '#007B7F', 
-                  cursor: isRestrictedFromChanges() ? 'not-allowed' : 'pointer', 
-                  fontSize: '0.9rem', 
-                  padding: '2px 6px' 
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  background: isRestrictedFromChanges() ? '#f5f5f5' : 'rgba(0, 123, 127, 0.1)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: isRestrictedFromChanges() ? '#ccc' : '#007B7F',
+                  cursor: isRestrictedFromChanges() ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (!isRestrictedFromChanges()) {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 0.15)';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isRestrictedFromChanges()) {
+                    e.currentTarget.style.background = 'rgba(0, 123, 127, 0.1)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
                 }}
                 title={isRestrictedFromChanges() ? 'Changes restricted for 4 months' : "Edit location"}
                 disabled={isRestrictedFromChanges()}
@@ -843,43 +1119,259 @@ function StoreProfilePage() {
           </div>
           {/* Messages and Followers row */}
           <div style={{ width: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0 8px 0' }}>
-            <button style={{ background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <button 
+              onClick={() => navigate('/messages')}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: '#007B7F', 
+                fontWeight: 600, 
+                fontSize: '0.98rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.color = '#00696d';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.color = '#007B7F';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
               <span role="img" aria-label="messages">💬</span> Messages
             </button>
             <button
-              style={{ background: 'none', border: '1.5px solid #007B7F', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+              style={{ 
+                background: '#f8f8ff', 
+                border: '1.5px solid #007B7F', 
+                borderRadius: 12, 
+                padding: '0.6rem 1.4rem', 
+                fontWeight: 600, 
+                fontSize: '1.1rem', 
+                color: '#007B7F', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8, 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 4px rgba(0, 123, 127, 0.1)'
+              }}
               onClick={() => setShowFollowersModal(true)}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#eef8f8';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 123, 127, 0.15)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#f8f8ff';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 123, 127, 0.1)';
+              }}
             >
-              <span role="img" aria-label="followers">👥</span> Followers ({followers.length})
+              <span role="img" aria-label="followers" style={{ fontSize: '1.2rem' }}>👥</span> 
+              Followers ({followers.length})
             </button>
           </div>
-          {/* Store item tab/button */}
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'row', gap: 8, marginTop: 32 }}>
-            <button style={{ flex: 1, background: '#f6f6fa', border: 'none', borderRadius: 12, padding: '1rem', fontSize: '1rem', color: '#007B7F', fontWeight: 600, boxShadow: '0 1px 4px #ececec', cursor: 'pointer', letterSpacing: '0.5px' }}>Store item</button>
-            <button onClick={() => setShowAddModal(true)} style={{ background: '#fff', border: '1.5px solid #007B7F', borderRadius: 12, padding: '1rem 1.2rem', fontSize: '1rem', color: '#007B7F', fontWeight: 600, boxShadow: '0 1px 4px #ececec', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span role="img" aria-label="add">➕</span> Add items
+          {/* Store item tab/button - modernized */}
+          <div style={{ 
+            width: '100%', 
+            display: 'flex', 
+            flexDirection: 'row', 
+            gap: 12, 
+            marginTop: 32 
+          }}>
+            <button style={{ 
+              flex: 1, 
+              background: 'linear-gradient(to right, #f4f9f9, #e8f4f4)', 
+              border: 'none', 
+              borderRadius: 16, 
+              padding: '1.1rem 1rem', 
+              fontSize: '1rem', 
+              color: '#007B7F', 
+              fontWeight: 600, 
+              boxShadow: '0 2px 6px rgba(0, 123, 127, 0.08)', 
+              cursor: 'pointer', 
+              letterSpacing: '0.5px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 10px rgba(0, 123, 127, 0.12)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 123, 127, 0.08)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <span role="img" aria-label="store" style={{ fontSize: '1.2rem' }}>🏪</span>
+                <span>Store Items</span>
+              </div>
+            </button>
+            
+            <button 
+              onClick={() => setShowAddModal(true)} 
+              style={{ 
+                background: '#fff', 
+                border: '1.5px solid #007B7F', 
+                borderRadius: 16, 
+                padding: '1rem 1.2rem', 
+                fontSize: '1rem', 
+                color: '#007B7F', 
+                fontWeight: 600, 
+                boxShadow: '0 2px 6px rgba(0, 123, 127, 0.08)', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 123, 127, 0.04)';
+                e.currentTarget.style.boxShadow = '0 4px 10px rgba(0, 123, 127, 0.12)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = '#fff';
+                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 123, 127, 0.08)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <span role="img" aria-label="add" style={{ fontSize: '1.1rem' }}>➕</span> Add Items
             </button>
           </div>
-          {/* Store items list */}
+          {/* Store items list - modernized */}
           {storeItems.length > 0 && (
-            <div style={{ width: '100%', marginTop: 24 }}>
-              <h4 style={{ fontSize: '1rem', color: '#222', marginBottom: 10 }}>Store Items</h4>
-              {storeItems.map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, background: '#f6f6fa', borderRadius: 10, padding: '0.7rem 1rem' }}>
-                  {item.image && <img src={item.image} alt="item" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.98rem', color: '#222' }}>{item.name}</div>
-                    <div style={{ fontSize: '0.95rem', color: '#444' }}>{item.price} {item.currency}</div>
-                    <div style={{ fontSize: '0.92rem', color: '#666' }}>Quality: {item.quality} | Quantity: {item.quantity}</div>
-                  </div>
+            <div style={{ width: '100%', marginTop: 28 }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginBottom: 16 
+              }}>
+                <h4 style={{ 
+                  fontSize: '1.1rem', 
+                  color: '#1a1a1a', 
+                  margin: 0, 
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span role="img" aria-label="items" style={{ fontSize: '1.1rem' }}>📦</span>
+                  Available Items ({storeItems.length})
+                </h4>
+                
+                <div style={{ 
+                  fontSize: '0.85rem', 
+                  color: '#007B7F', 
+                  background: 'rgba(0, 123, 127, 0.08)',
+                  padding: '4px 10px',
+                  borderRadius: '20px',
+                  fontWeight: 500
+                }}>
+                  {storeItems.length} {storeItems.length === 1 ? 'Item' : 'Items'}
                 </div>
-              ))}
+              </div>
+
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '16px'
+              }}>
+                {storeItems.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 14, 
+                      marginBottom: 4, 
+                      background: '#f9f9f9', 
+                      borderRadius: 14, 
+                      padding: '1rem',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                      border: '1px solid #f0f0f0'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.background = '#fff';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.background = '#f9f9f9';
+                    }}
+                  >
+                    {item.image && 
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        style={{ 
+                          width: 60, 
+                          height: 60, 
+                          borderRadius: 10, 
+                          objectFit: 'cover',
+                          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)'
+                        }} 
+                      />
+                    }
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontWeight: 600, 
+                        fontSize: '1rem', 
+                        color: '#222',
+                        marginBottom: '3px'
+                      }}>
+                        {item.name}
+                      </div>
+                      <div style={{ 
+                        fontSize: '1rem', 
+                        color: '#007B7F',
+                        fontWeight: 700, 
+                        marginBottom: '4px'
+                      }}>
+                        {item.currency} {item.price}
+                      </div>
+                      <div style={{ 
+                        fontSize: '0.85rem', 
+                        color: '#666',
+                        display: 'flex',
+                        gap: '10px'
+                      }}>
+                        <span style={{ 
+                          background: '#f0f0f0', 
+                          padding: '2px 8px', 
+                          borderRadius: '12px'
+                        }}>
+                          {item.quality}
+                        </span>
+                        <span style={{ 
+                          background: '#f0f0f0', 
+                          padding: '2px 8px', 
+                          borderRadius: '12px'
+                        }}>
+                          Qty: {item.quantity}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {/* Delivery Info Box */}
           {profile.deliveryType && (
-            <div style={{ width: '100%', background: '#f6f6fa', borderRadius: 10, padding: '0.7rem 1rem', color: '#007B7F', fontSize: '0.98rem', marginTop: 18, marginBottom: 0 }}>
-              <b>Delivery Type:</b> {profile.deliveryType}
+            <div className="info-card delivery-info">
+              <div className="info-card-icon">🚚</div>
+              <div className="info-card-content">
+                <div className="info-card-title">Delivery Method</div>
+                <div className="info-card-value">{profile.deliveryType}</div>
+              </div>
             </div>
           )}
         </div>
@@ -1292,37 +1784,197 @@ function StoreProfilePage() {
           </div>
         )}
         {showFollowersModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(0,0,0,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000
-          }}>
-            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw', textAlign: 'center' }}>
-              <button
-                onClick={() => setShowFollowersModal(false)}
-                style={{ position: 'absolute', top: 8, right: 8, background: '#eee', border: 'none', borderRadius: '50%', width: 28, height: 28, fontSize: 18, cursor: 'pointer' }}>
-                ×
-              </button>
-              <h3 style={{ marginBottom: 18, color: '#007B7F' }}>Followers ({followersDetails.length})</h3>
-              {followersDetails.length === 0 ? (
-                <div style={{ color: '#888' }}>No followers yet.</div>
-              ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {followersDetails.map(f => (
-                    <li key={f.uid} style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <img src={f.photoURL || 'https://via.placeholder.com/40'} alt={f.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                      <span style={{ fontWeight: 600 }}>{f.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+              backdropFilter: 'blur(5px)',
+              WebkitBackdropFilter: 'blur(5px)'
+            }}
+            onClick={(e) => {
+              // Close when clicking the backdrop
+              if (e.target === e.currentTarget) {
+                setShowFollowersModal(false);
+              }
+            }}
+          >
+            <div style={{ 
+              background: '#fff', 
+              borderRadius: 20, 
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)', 
+              padding: '1.5rem', 
+              minWidth: 320, 
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              width: '400px',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header with title and close button */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+                paddingBottom: '15px',
+                borderBottom: '1px solid #f0f0f0'
+              }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  color: '#007B7F', 
+                  fontSize: '1.2rem',
+                  fontWeight: '600' 
+                }}>
+                  Followers ({followersDetails.length})
+                </h3>
+                
+                <button
+                  onClick={() => setShowFollowersModal(false)}
+                  style={{ 
+                    background: '#f5f5f5', 
+                    border: 'none', 
+                    borderRadius: '50%', 
+                    width: '36px', 
+                    height: '36px', 
+                    fontSize: '18px', 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = '#ebebeb'}
+                  onMouseOut={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                >
+                  ×
+                </button>
+              </div>
+              
+              {/* Content */}
+              <div style={{ 
+                overflowY: 'auto', 
+                flex: 1, 
+                padding: '0 5px'
+              }}>
+                {followersDetails.length === 0 ? (
+                  <div style={{ 
+                    color: '#888', 
+                    padding: '40px 0', 
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '15px'
+                  }}>
+                    <div style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      background: '#f2f8f8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '32px',
+                      color: '#007B7F',
+                      boxShadow: '0 4px 12px rgba(0, 123, 127, 0.1)'
+                    }}>
+                      👥
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 5px 0', fontWeight: '600', fontSize: '1.1rem', color: '#555' }}>No followers yet</p>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#888' }}>Share your store to get followers!</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ul style={{ 
+                    listStyle: 'none', 
+                    padding: 0, 
+                    margin: 0
+                  }}>
+                    {followersDetails.map(f => (
+                      <li key={f.uid} style={{ 
+                        marginBottom: '16px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '14px',
+                        padding: '10px',
+                        borderRadius: '12px',
+                        transition: 'background-color 0.2s ease',
+                        cursor: 'default',
+                        hover: { backgroundColor: '#f9f9f9' }
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <img 
+                          src={f.photoURL || 'https://via.placeholder.com/40'} 
+                          alt={f.name || 'User'} 
+                          style={{ 
+                            width: '48px', 
+                            height: '48px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover',
+                            border: '2px solid #f0f0f0'
+                          }} 
+                        />
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{ 
+                            fontWeight: 600, 
+                            fontSize: '1rem' 
+                          }}>
+                            {f.name || f.email || 'Unknown User'}
+                          </div>
+                          {f.email && f.name && (
+                            <div style={{ 
+                              color: '#777', 
+                              fontSize: '0.85rem' 
+                            }}>
+                              {f.email}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              
+              {/* Footer with dismiss button */}
+              <div style={{
+                marginTop: '20px',
+                paddingTop: '15px',
+                borderTop: '1px solid #f0f0f0',
+                display: 'flex',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={() => setShowFollowersModal(false)}
+                  style={{
+                    background: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    fontSize: '0.9rem',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#00696d'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#007B7F'}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

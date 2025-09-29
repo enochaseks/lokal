@@ -329,6 +329,12 @@ function StorePreviewPage() {
       return;
     }
     
+    // Ensure only sellers can boost stores
+    if (userType !== 'seller') {
+      setBoostError('Only sellers can boost stores');
+      return;
+    }
+    
     if (!store) {
       setBoostError('Store information not available');
       return;
@@ -976,24 +982,10 @@ function StorePreviewPage() {
   }
 
   return (
-    <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
+    <div className="page-container">
       <Navbar />
       {showAdded && (
-        <div style={{
-          position: 'fixed',
-          top: 80,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#28a745',
-          color: '#fff',
-          padding: '1rem 2rem',
-          borderRadius: 12,
-          fontWeight: 700,
-          fontSize: '1.1rem',
-          zIndex: 2000,
-          boxShadow: '0 2px 8px #0002',
-          animation: 'fadeInOut 1.5s',
-        }}>
+        <div className="add-to-cart-notification">
           ✓ Added to cart!
         </div>
       )}
@@ -1004,6 +996,319 @@ function StorePreviewPage() {
           80% { opacity: 1; transform: translateX(-50%) scale(1); }
           100% { opacity: 0; transform: translateX(-50%) scale(0.95); }
         }
+        
+        /* Modern Store Preview Styles */
+        
+        /* Reviews Section Styles */
+        .reviews-tab {
+          margin-top: 16px;
+        }
+        
+        .rating-summary {
+          margin-bottom: 24px;
+          padding: 20px;
+          background: #f8f9fa;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .rating-title {
+          font-weight: 700;
+          font-size: 1.2rem;
+          margin-bottom: 12px;
+          color: #333;
+        }
+        
+        .rating-display {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+        
+        .rating-star {
+          font-size: 2.2rem;
+          color: #FFD700;
+          line-height: 1;
+        }
+        
+        .auth-prompt {
+          margin-bottom: 24px;
+          background: #f0f9ff;
+          border-radius: 12px;
+          padding: 20px;
+          text-align: center;
+          border: 1px dashed #007B7F;
+        }
+        
+        .prompt-heading {
+          font-weight: 600;
+          margin-bottom: 10px;
+          color: #007B7F;
+        }
+        
+        .auth-buttons {
+          display: flex;
+          justify-content: center;
+          gap: 12px;
+        }
+        
+        .login-button, .register-button {
+          padding: 8px 16px;
+          font-weight: 600;
+          cursor: pointer;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+        }
+        
+        .login-button {
+          background: #007B7F;
+          color: #fff;
+          border: none;
+        }
+        
+        .login-button:hover {
+          background: #006366;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .register-button {
+          background: white;
+          color: #007B7F;
+          border: 1px solid #007B7F;
+        }
+        
+        .register-button:hover {
+          background: #f0f9ff;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .review-form {
+          margin-bottom: 24px;
+          background: #f6f6fa;
+          border-radius: 12px;
+          padding: 20px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .review-form-title {
+          font-weight: 600;
+          margin-bottom: 12px;
+          color: #333;
+        }
+        
+        .review-textarea {
+          width: 100%;
+          min-height: 100px;
+          border-radius: 8px;
+          border: 1px solid #ddd;
+          padding: 12px;
+          margin-top: 12px;
+          font-family: inherit;
+          font-size: 1rem;
+          resize: vertical;
+          transition: border-color 0.2s ease;
+        }
+        
+        .review-textarea:focus {
+          outline: none;
+          border-color: #007B7F;
+          box-shadow: 0 0 0 2px rgba(0,123,127,0.2);
+        }
+        
+        .submit-review {
+          background: #007B7F;
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          padding: 8px 16px;
+          font-weight: 600;
+          font-size: 1rem;
+          margin-top: 12px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        
+        .submit-review:hover:not(:disabled) {
+          background: #006366;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .submit-review:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+        }
+        
+        .review-success {
+          color: #3A8E3A;
+          margin-top: 8px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .reviews-list {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        
+        .review-item {
+          background: white;
+          border-radius: 12px;
+          padding: 16px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          border: 1px solid #eee;
+          transition: transform 0.2s ease;
+        }
+        
+        .review-item:hover {
+          transform: translateY(-2px);
+        }
+        
+        .reviewer-info {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+        
+        .reviewer-name {
+          font-weight: 600;
+          color: #333;
+        }
+        
+        .review-date {
+          color: #888;
+          font-size: 0.9rem;
+        }
+        
+        .review-stars {
+          display: flex;
+          gap: 2px;
+          margin-bottom: 8px;
+          color: #FFD700;
+        }
+        
+        .review-text {
+          color: #444;
+          line-height: 1.4;
+        }
+        
+        .no-reviews {
+          color: #888;
+          text-align: center;
+          padding: 3rem 1rem;
+          background: #f9f9f9;
+          border-radius: 12px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .no-reviews-icon {
+          font-size: 2.5rem;
+        }
+        
+        .no-reviews-text {
+          font-size: 1.1rem;
+        }
+        .page-container {
+          background: #F9F5EE;
+          min-height: 100vh;
+          padding-bottom: 2rem;
+        }
+        
+        .add-to-cart-notification {
+          position: fixed;
+          top: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #28a745;
+          color: #fff;
+          padding: 1rem 2rem;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 1.1rem;
+          z-index: 2000;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+          animation: fadeInOut 1.5s;
+        }
+        
+        .store-preview-container {
+          max-width: 800px;
+          margin: 2rem auto;
+          background: #fff;
+          border-radius: 20px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+          padding: 2rem;
+          position: relative;
+        }
+        
+        .help-button {
+          background: #F0F9FF;
+          border: 1px solid #007B7F;
+          border-radius: 50%;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          font-size: 1.2rem;
+          color: #007B7F;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: all 0.2s ease;
+          margin-left: 10px;
+        }
+        
+        .help-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .store-header {
+          display: flex;
+          align-items: flex-start;
+          gap: 24px;
+          margin-bottom: 24px;
+          flex-wrap: wrap;
+        }
+        
+        .store-logo-container {
+          position: relative;
+        }
+        
+        .store-logo {
+          width: 70px;
+          height: 70px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid #fff;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          transition: all 0.3s ease;
+        }
+        
+        .store-closed-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 70px;
+          height: 70px;
+          background: rgba(255,255,255,0.7);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: #D92D20;
+          pointer-events: none;
+        }
+        
         @media (max-width: 600px) {
           .store-action-buttons {
             width: 100%;
@@ -1019,104 +1324,154 @@ function StorePreviewPage() {
           }
         }
       `}</style>
-      <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem', position: 'relative' }}>
-        {/* Help Icon - Show only for authenticated buyers */}
-        {userType === 'buyer' && authUser && !isStoreOwner && (
-          <div style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }}>
-            <button
-              onClick={() => setShowHelpModal(true)}
-              style={{
-                background: '#F0F9FF',
-                border: '1px solid #007B7F',
-                borderRadius: '50%',
-                width: 36,
-                height: 36,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                color: '#007B7F',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              title="Get help or report this store"
-            >
-              ?
-            </button>
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative' }}>
+      <div className="store-preview-container">
+        {/* Help Icon removed from here and moved near Message button */}
+        <div className="store-header">
+          <div className="store-logo-container">
             {store.backgroundImg && (
-              <img src={store.backgroundImg} alt="Store" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', filter: storeIsOpen ? 'none' : 'grayscale(0.7)', opacity: storeIsOpen ? 1 : 0.5, transition: 'opacity 0.3s, filter 0.3s' }} />
+              <img 
+                src={store.backgroundImg} 
+                alt="Store" 
+                className="store-logo"
+                style={{ 
+                  filter: storeIsOpen ? 'none' : 'grayscale(0.7)', 
+                  opacity: storeIsOpen ? 1 : 0.5 
+                }} 
+              />
             )}
             {!storeIsOpen && (
-              <div style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, background: 'rgba(255,255,255,0.55)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.1rem', color: '#D92D20', pointerEvents: 'none' }}>
+              <div className="store-closed-overlay">
                 Closed
               </div>
             )}
           </div>
-          <div className="store-info" style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>{store.storeName}</div>
-              {store.isBoosted && (
-                <div 
-                  style={{ 
-                    backgroundColor: '#FFD700',
-                    color: '#333', 
-                    padding: '4px 10px',
-                    borderRadius: 20,
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    animation: 'pulse 2s infinite'
-                  }}
-                  title="This store is boosted"
-                >
-                  <span style={{ fontSize: '0.9rem' }}>⭐</span> BOOSTED
-                </div>
-              )}
-              <style>{`
-                @keyframes pulse {
-                  0% { transform: scale(1); }
-                  50% { transform: scale(1.05); }
-                  100% { transform: scale(1); }
-                }
-              `}</style>
-            </div>
-            <div style={{ color: '#444', fontSize: '1rem' }}>{store.storeLocation}</div>
-            {store.phoneNumber && (
-              <div style={{ color: '#007B7F', fontSize: '1rem', marginTop: 4 }}>
-                <a 
-                  href={`tel:${store.phoneNumber}`}
-                  style={{ 
-                    color: '#007B7F', 
-                    textDecoration: 'none', 
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontWeight: 600
-                  }}
-                  onMouseOver={(e) => e.target.style.color = '#005a5f'}
-                  onMouseOut={(e) => e.target.style.color = '#007B7F'}
-                >
-                  <span>{store.phoneType === 'personal' ? '📱' : '📞'}</span>
-                  <span>{store.phoneNumber}</span>
-                  <span style={{ fontSize: '0.8rem', opacity: 0.8, marginLeft: 2 }}>
+          <div className="store-info-container">
+            <div className="store-title-section">
+              <div className="store-name-container">
+                <h1 className="store-name">{store.storeName}</h1>
+                {store.isBoosted && (
+                  <div className="boosted-badge" title="This store is boosted">
+                    <span className="boosted-icon">⭐</span> BOOSTED
+                  </div>
+                )}
+              </div>
+              <div className="store-location">{store.storeLocation}</div>
+              {store.phoneNumber && (
+                <a href={`tel:${store.phoneNumber}`} className="phone-link">
+                  <span className="phone-icon">
+                    {store.phoneType === 'personal' ? '📱' : '📞'}
+                  </span>
+                  <span className="phone-number">{store.phoneNumber}</span>
+                  <span className="phone-type">
                     ({store.phoneType === 'personal' ? 'Personal' : 'Work'})
                   </span>
                 </a>
-              </div>
-            )}
-            <div style={{ color: '#007B7F', fontSize: '1rem' }}>
-              ⭐ {avgRating > 0 ? avgRating : 'No ratings'} {ratingCount > 0 && `(${ratingCount} review${ratingCount !== 1 ? 's' : ''})`}
+              )}
             </div>
-            <div style={{ color: '#444', fontSize: '1.05rem', marginTop: 4 }}><b>Origin:</b> {store.origin}</div>
-            <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 2 }}><b>Delivery Type:</b> {store.deliveryType}</div>
+            <style>{`
+              @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+              }
+              
+              .store-info-container {
+                flex: 1;
+              }
+              
+              .store-title-section {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+              }
+              
+              .store-name-container {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+              }
+              
+              .store-name {
+                font-weight: 700;
+                font-size: 1.4rem;
+                margin: 0;
+                color: #222;
+              }
+              
+              .boosted-badge {
+                background-color: #FFD700;
+                color: #333;
+                padding: 4px 10px;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                animation: pulse 2s infinite;
+              }
+              
+              .boosted-icon {
+                font-size: 0.9rem;
+              }
+              
+              .store-location {
+                color: #444;
+                font-size: 1rem;
+              }
+              
+              .phone-link {
+                color: #007B7F;
+                text-decoration: none;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-weight: 600;
+                margin-top: 4px;
+                transition: all 0.2s ease;
+              }
+              
+              .phone-link:hover {
+                color: #005a5f;
+                transform: translateY(-1px);
+              }
+              
+              .phone-icon {
+                font-size: 1rem;
+              }
+              
+              .phone-number {
+                font-size: 1rem;
+              }
+              
+              .phone-type {
+                font-size: 0.8rem;
+                opacity: 0.8;
+                margin-left: 2px;
+              }
+            `}</style>
+            <div className="store-rating">
+              <div className="rating-icon">⭐</div>
+              <div className="rating-text">
+                {avgRating > 0 ? avgRating : 'No ratings'} 
+                {ratingCount > 0 && <span className="review-count">({ratingCount} review{ratingCount !== 1 ? 's' : ''})</span>}
+              </div>
+            </div>
+            
+            <div className="store-details">
+              <div className="detail-item origin">
+                <span className="detail-label">Origin:</span> 
+                <span className="detail-value">{store.origin}</span>
+              </div>
+              
+              <div className="detail-item delivery">
+                <span className="detail-label">Delivery Type:</span>
+                <span className="detail-value delivery-value">{store.deliveryType}</span>
+              </div>
+            </div>
             
             {/* Display fee information */}
             {console.log('Current storeFeeSettings:', storeFeeSettings, 'deliveryEnabled:', storeFeeSettings.deliveryEnabled, 'serviceFeeEnabled:', storeFeeSettings.serviceFeeEnabled)}
@@ -1127,25 +1482,31 @@ function StorePreviewPage() {
               const shouldShowFeeSection = shouldShowDeliveryFee || storeFeeSettings.serviceFeeEnabled;
               
               return shouldShowFeeSection && (
-                <div style={{ marginTop: 8, padding: '8px 12px', background: '#f0f9ff', borderRadius: 6, fontSize: '0.9rem' }}>
-                  <div style={{ fontWeight: 600, color: '#007B7F', marginBottom: 4 }}>📋 Store Fees:</div>
+                <div className="fees-container">
+                  <div className="fees-header">📋 Store Fees:</div>
                   {shouldShowDeliveryFee && (
-                    <div style={{ color: '#444' }}>
-                      • Delivery: {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.deliveryFee, store.currency || 'GBP')}
-                      {storeFeeSettings.freeDeliveryThreshold > 0 && (
-                        <span style={{ color: '#007B7F' }}> (Free over {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.freeDeliveryThreshold, store.currency || 'GBP')})</span>
-                      )}
+                    <div className="fee-item">
+                      <span className="fee-bullet">•</span>
+                      <span className="fee-text">
+                        Delivery: {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.deliveryFee, store.currency || 'GBP')}
+                        {storeFeeSettings.freeDeliveryThreshold > 0 && (
+                          <span className="free-delivery-note"> (Free over {getCurrencySymbol(store.currency || 'GBP')}{formatPrice(storeFeeSettings.freeDeliveryThreshold, store.currency || 'GBP')})</span>
+                        )}
+                      </span>
                     </div>
                   )}
                   {storeFeeSettings.serviceFeeEnabled && (
-                    <div style={{ color: '#444' }}>
-                      • Service fee: {storeFeeSettings.serviceFeeType === 'percentage' 
-                        ? `${storeFeeSettings.serviceFeeRate}%${storeFeeSettings.serviceFeeMax > 0 ? ` (max ${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeMax, store.currency || 'GBP')})` : ''}`
-                        : `${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeAmount, store.currency || 'GBP')}`}
+                    <div className="fee-item">
+                      <span className="fee-bullet">•</span>
+                      <span className="fee-text">
+                        Service fee: {storeFeeSettings.serviceFeeType === 'percentage' 
+                          ? `${storeFeeSettings.serviceFeeRate}%${storeFeeSettings.serviceFeeMax > 0 ? ` (max ${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeMax, store.currency || 'GBP')})` : ''}`
+                          : `${getCurrencySymbol(store.currency || 'GBP')}${formatPrice(storeFeeSettings.serviceFeeAmount, store.currency || 'GBP')}`}
+                      </span>
                     </div>
                   )}
                   {isCollectionStore && storeFeeSettings.deliveryEnabled && (
-                    <div style={{ color: '#666', fontSize: '0.85rem', marginTop: 4, fontStyle: 'italic' }}>
+                    <div className="collection-note">
                       * Delivery fee not applicable for collection orders
                     </div>
                   )}
@@ -1153,11 +1514,98 @@ function StorePreviewPage() {
               );
             })()}
             
+            <style>{`
+              .store-rating {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-top: 8px;
+                color: #007B7F;
+                font-size: 1rem;
+              }
+              
+              .rating-icon {
+                color: #FFD700;
+              }
+              
+              .rating-text {
+                font-weight: 500;
+              }
+              
+              .review-count {
+                margin-left: 4px;
+                font-weight: normal;
+              }
+              
+              .store-details {
+                margin-top: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+              }
+              
+              .detail-item {
+                font-size: 1.05rem;
+              }
+              
+              .detail-label {
+                font-weight: 600;
+                margin-right: 5px;
+              }
+              
+              .detail-value {
+                color: #444;
+              }
+              
+              .delivery-value {
+                color: #007B7F;
+              }
+              
+              .fees-container {
+                margin-top: 12px;
+                padding: 12px 16px;
+                background: #f0f9ff;
+                border-radius: 10px;
+                font-size: 0.9rem;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+              }
+              
+              .fees-header {
+                font-weight: 600;
+                color: #007B7F;
+                margin-bottom: 6px;
+              }
+              
+              .fee-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 6px;
+                color: #444;
+                margin-bottom: 4px;
+              }
+              
+              .fee-bullet {
+                color: #007B7F;
+              }
+              
+              .free-delivery-note {
+                color: #007B7F;
+                font-weight: 500;
+              }
+              
+              .collection-note {
+                color: #666;
+                font-size: 0.85rem;
+                margin-top: 6px;
+                font-style: italic;
+              }
+            `}</style>
+            
             {/* Display refunds policy notification */}
             {!storeFeeSettings.refundsEnabled && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 6, fontSize: '0.9rem', border: '1px solid #f87171' }}>
-                <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: 4 }}>❌ Refund Policy:</div>
-                <div style={{ color: '#7f1d1d' }}>
+              <div className="refunds-notification">
+                <div className="refunds-header">❌ Refund Policy:</div>
+                <div className="refunds-message">
                   This store does not offer refunds. Please review your order carefully before purchasing.
                 </div>
               </div>
@@ -1165,17 +1613,77 @@ function StorePreviewPage() {
             
             {/* Show setup link for store owners */}
             {isStoreOwner && !storeFeeSettings.deliveryEnabled && !storeFeeSettings.serviceFeeEnabled && (
-              <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef3cd', borderRadius: 6, fontSize: '0.9rem', border: '1px solid #fbbf24' }}>
-                <div style={{ color: '#92400e' }}>💡 You can set up delivery and service fees in your Wallet → Fee Settings</div>
+              <div className="setup-notification">
+                <div className="setup-message">💡 You can set up delivery and service fees in your Wallet → Fee Settings</div>
               </div>
             )}
             
             {store.paymentType && (
-              <div style={{ color: '#007B7F', fontSize: '1.05rem', marginTop: 8 }}>
-                <b>Payment Method:</b> {store.paymentType === 'Own Card/Bank Details' ? 'Card Payment' : (store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType)}
-                {/* Removed paymentInfo details for security */}
+              <div className="payment-method">
+                <span className="payment-label">Payment Method:</span> 
+                <span className="payment-value">
+                  {store.paymentType === 'Own Card/Bank Details' ? 'Card Payment' : 
+                   (store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType)}
+                </span>
               </div>
             )}
+            
+            <style>{`
+              .refunds-notification {
+                margin-top: 12px;
+                padding: 12px 16px;
+                background: #fef2f2;
+                border-radius: 10px;
+                font-size: 0.9rem;
+                border: 1px solid #f87171;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+              }
+              
+              .refunds-header {
+                font-weight: 600;
+                color: #dc2626;
+                margin-bottom: 6px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              }
+              
+              .refunds-message {
+                color: #7f1d1d;
+              }
+              
+              .setup-notification {
+                margin-top: 12px;
+                padding: 12px 16px;
+                background: #fef3cd;
+                border-radius: 10px;
+                font-size: 0.9rem;
+                border: 1px solid #fbbf24;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+              }
+              
+              .setup-message {
+                color: #92400e;
+              }
+              
+              .payment-method {
+                color: #007B7F;
+                font-size: 1.05rem;
+                margin-top: 12px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex-wrap: wrap;
+              }
+              
+              .payment-label {
+                font-weight: 600;
+              }
+              
+              .payment-value {
+                font-weight: 500;
+              }
+            `}</style>
           </div>
           {/* Store actions for buyers and sellers */}
           {!isStoreOwner && (
@@ -1183,21 +1691,84 @@ function StorePreviewPage() {
               {/* Follow button - only shown to authenticated buyers */}
               {userType === 'buyer' && authUser && (
                 following ? (
-                  <button onClick={handleUnfollow} style={{ background: '#ccc', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                  <button 
+                    onClick={handleUnfollow} 
+                    className="action-button unfollow-button"
+                  >
                     Unfollow
                   </button>
                 ) : (
-                  <button onClick={handleFollow} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', marginRight: 8, cursor: 'pointer' }}>
+                  <button 
+                    onClick={handleFollow} 
+                    className="action-button follow-button"
+                  >
                     Follow
                   </button>
                 )
               )}
               
+              <style>{`
+                .store-action-buttons {
+                  display: flex;
+                  gap: 10px;
+                }
+                
+                .action-button {
+                  border: none;
+                  border-radius: 8px;
+                  padding: 8px 16px;
+                  font-weight: 600;
+                  font-size: 1rem;
+                  cursor: pointer;
+                  transition: all 0.2s ease;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 6px;
+                }
+                
+                .action-button:hover {
+                  transform: translateY(-2px);
+                  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                }
+                
+                .follow-button {
+                  background: linear-gradient(135deg, #D92D20, #b91c1c);
+                  color: #fff;
+                }
+                
+                .follow-button:hover {
+                  background: linear-gradient(135deg, #b91c1c, #991b1b);
+                }
+                
+                .unfollow-button {
+                  background: #ccc;
+                  color: #555;
+                }
+                
+                .unfollow-button:hover {
+                  background: #bbb;
+                }
+              `}</style>
+              
               {/* Message button - shown to authenticated users (buyers and sellers) */}
               {authUser && (
-                <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
-                  Message
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
+                    Message
+                  </button>
+                  
+                  {/* Help Icon for desktop buyers */}
+                  {userType === 'buyer' && !isStoreOwner && (
+                    <button 
+                      onClick={() => setShowHelpModal(true)}
+                      className="help-button"
+                      title="Get help or report this store"
+                    >
+                      ?
+                    </button>
+                  )}
+                </div>
               )}
               
               {/* Sign-in prompt for unauthenticated users */}
@@ -1212,8 +1783,8 @@ function StorePreviewPage() {
             </div>
           )}
           
-          {/* Small Boost Store Button - Available to all logged in users */}
-          {authUser && (
+          {/* Small Boost Store Button - Available only to sellers */}
+          {authUser && userType === 'seller' && (
             <div style={{ 
               position: 'absolute',
               top: '10px',
@@ -1266,61 +1837,323 @@ function StorePreviewPage() {
             {isClosedToday ? 'Closed Today' : (storeIsOpen ? 'Open' : 'Closed')}
           </span>
           {!isClosedToday && todayOpening && todayClosing && (
-            <span style={{ marginLeft: 16, color: '#007B7F', fontSize: '1rem' }}>
-              {todayOpening} - {todayClosing}
-            </span>
-          )}
-          {store && Array.isArray(store.closedDays) && store.closedDays.length > 0 && (
-            <div style={{ marginTop: 8, color: '#D92D20', fontSize: '1rem', fontWeight: 500 }}>
-              <span>Closed: {store.closedDays.join(', ')}</span>
+            <div className="store-hours">
+              <div className="hours-icon">🕒</div>
+              <div className="hours-text">{todayOpening} - {todayClosing}</div>
             </div>
           )}
+          {store && Array.isArray(store.closedDays) && store.closedDays.length > 0 && (
+            <div className="closed-days">
+              <div className="closed-icon">📅</div>
+              <div className="closed-text">Closed: {store.closedDays.join(', ')}</div>
+            </div>
+          )}
+          
+          <style>{`
+            .store-hours {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin-top: 12px;
+              color: #007B7F;
+              font-size: 1rem;
+              background-color: #e6f7f0;
+              padding: 6px 12px;
+              border-radius: 8px;
+              width: fit-content;
+            }
+            
+            .hours-icon {
+              font-size: 1.1rem;
+            }
+            
+            .hours-text {
+              font-weight: 500;
+            }
+            
+            .closed-days {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin-top: 10px;
+              color: #D92D20;
+              font-size: 1rem;
+              font-weight: 500;
+              background-color: #fef2f2;
+              padding: 6px 12px;
+              border-radius: 8px;
+              width: fit-content;
+            }
+            
+            .closed-icon {
+              font-size: 1.1rem;
+            }
+          `}</style>
         </div>
-        <div style={{ display: 'flex', gap: 32, borderBottom: '1.5px solid #eee', marginBottom: 24 }}>
-          <button onClick={() => setTab('products')} style={{ background: 'none', border: 'none', fontWeight: tab === 'products' ? 700 : 400, fontSize: '1.1rem', color: tab === 'products' ? '#007B7F' : '#444', borderBottom: tab === 'products' ? '2.5px solid #007B7F' : 'none', padding: '0.5rem 0', cursor: 'pointer' }}>Products</button>
-          <button onClick={() => setTab('reviews')} style={{ background: 'none', border: 'none', fontWeight: tab === 'reviews' ? 700 : 400, fontSize: '1.1rem', color: tab === 'reviews' ? '#007B7F' : '#444', borderBottom: tab === 'reviews' ? '2.5px solid #007B7F' : 'none', padding: '0.5rem 0', cursor: 'pointer' }}>Reviews</button>
+        
+        <div className="tab-navigation">
+          <button 
+            onClick={() => setTab('products')} 
+            className={`tab-button ${tab === 'products' ? 'active' : ''}`}
+          >
+            Products
+          </button>
+          <button 
+            onClick={() => setTab('reviews')} 
+            className={`tab-button ${tab === 'reviews' ? 'active' : ''}`}
+          >
+            Reviews
+          </button>
         </div>
+        
+        <style>{`
+          .tab-navigation {
+            display: flex;
+            gap: 16px;
+            border-bottom: 1.5px solid #eee;
+            margin: 24px 0;
+            padding-bottom: 2px;
+          }
+          
+          .tab-button {
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            padding: 0.6rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 3px solid transparent;
+          }
+          
+          .tab-button:hover:not(.active) {
+            background-color: #f6f6fa;
+            border-radius: 8px 8px 0 0;
+          }
+          
+          .tab-button.active {
+            font-weight: 700;
+            color: #007B7F;
+            border-bottom: 3px solid #007B7F;
+          }
+        `}</style>
         {tab === 'products' && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 24 }}>
+          <div className="product-grid">
             {items.length === 0 ? (
-              <div style={{ color: '#888' }}>No items added yet.</div>
+              <div className="no-items-message">
+                <div className="no-items-icon">📦</div>
+                <div className="no-items-text">No items added yet</div>
+              </div>
             ) : (
               items.map(item => (
-                <div key={item.id} style={{ width: 220, border: '1px solid #eee', borderRadius: 8, padding: 12, background: storeIsOpen ? '#f6f6fa' : '#f6f6fa', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: storeIsOpen ? 1 : 0.5, filter: storeIsOpen ? 'none' : 'grayscale(0.7)', transition: 'opacity 0.3s, filter 0.3s' }}>
-                  {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8 }} />}
-                  <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 8 }}>{item.name}</div>
-                  <div style={{ color: '#007B7F', fontWeight: 500 }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}</div>
-                  <div style={{ color: '#666', fontSize: '0.95rem' }}>Quality: {item.quality} | Qty: {item.quantity}</div>
-                  {/* Show these buttons for buyers and unauthenticated users who are not the store owner */}
-                  {(userType === 'buyer' || !authUser) && !isStoreOwner && storeIsOpen && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button
-                        style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 1rem', fontWeight: 600, cursor: 'pointer' }}
-                        onClick={() => {
-                          if (!authUser) {
-                            // Redirect to login page if not signed in
-                            alert('Please sign in to add items to your cart');
-                            navigate('/login');
-                          } else {
-                            handleAddToCart(item);
-                          }
-                        }}
-                      >
-                        Add to Cart
-                      </button>
+                <div 
+                  key={item.id} 
+                  className="product-card"
+                  style={{ 
+                    opacity: storeIsOpen ? 1 : 0.5, 
+                    filter: storeIsOpen ? 'none' : 'grayscale(0.7)'
+                  }}
+                >
+                  {item.image && 
+                    <div className="product-image-container">
+                      <img src={item.image} alt={item.name} className="product-image" />
                     </div>
-                  )}
+                  }
+                  <div className="product-details">
+                    <div className="product-name">{item.name}</div>
+                    <div className="product-price">
+                      {getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}
+                    </div>
+                    <div className="product-meta">
+                      <span className="product-quality">Quality: {item.quality}</span> 
+                      <span className="product-divider">|</span>
+                      <span className="product-quantity">Qty: {item.quantity}</span>
+                    </div>
+                    
+                    {/* Show these buttons for buyers and unauthenticated users who are not the store owner */}
+                    {(userType === 'buyer' || !authUser) && !isStoreOwner && storeIsOpen && (
+                      <div className="product-actions">
+                        <button
+                          className="add-to-cart-button"
+                          onClick={() => {
+                            if (!authUser) {
+                              // Redirect to login page if not signed in
+                              alert('Please sign in to add items to your cart');
+                              navigate('/login');
+                            } else {
+                              handleAddToCart(item);
+                            }
+                          }}
+                        >
+                          Add to Cart
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))
             )}
+            
+            <style>{`
+              .product-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: 16px;
+                margin-top: 16px;
+              }
+              
+              .no-items-message {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 3rem 1rem;
+                background: #f9f9f9;
+                border-radius: 12px;
+                color: #888;
+              }
+              
+              .no-items-icon {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+              }
+              
+              .no-items-text {
+                font-size: 1.1rem;
+              }
+              
+              .product-card {
+                display: flex;
+                flex-direction: column;
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                background: #fff;
+                transition: all 0.3s ease;
+                height: 100%;
+                border: 1px solid #eee;
+              }
+              
+              .product-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+              }
+              
+              .product-image-container {
+                height: 140px;
+                width: 100%;
+                overflow: hidden;
+              }
+              
+              .product-image {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                transition: transform 0.3s ease;
+              }
+              
+              .product-card:hover .product-image {
+                transform: scale(1.05);
+              }
+              
+              .product-details {
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+              }
+              
+              .product-name {
+                font-weight: 600;
+                font-size: 1rem;
+                color: #333;
+                margin-bottom: 4px;
+              }
+              
+              .product-price {
+                color: #007B7F;
+                font-weight: 600;
+                font-size: 1.1rem;
+                margin-bottom: 6px;
+              }
+              
+              .product-meta {
+                color: #666;
+                font-size: 0.9rem;
+                display: flex;
+                gap: 6px;
+                margin-bottom: 12px;
+              }
+              
+              .product-divider {
+                color: #ddd;
+              }
+              
+              .product-actions {
+                margin-top: auto;
+              }
+              
+              .add-to-cart-button {
+                width: 100%;
+                background: #007B7F;
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                padding: 8px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+              }
+              
+              .add-to-cart-button:hover {
+                background: #006366;
+                transform: translateY(-2px);
+              }
+            `}</style>
             {userType === 'buyer' && selectedItems.length > 0 && storeIsOpen && (
-              <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec' }}>
-                Total: {getCurrencySymbol(selectedItems[0].currency)}{selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
+              <div className="cart-total-floating">
+                <div className="cart-total-amount">
+                  Total: {getCurrencySymbol(selectedItems[0].currency)}
+                  {selectedItems.reduce((sum, item) => sum + parseFloat(item.price || 0), 0).toFixed(2)}
+                </div>
               </div>
             )}
             {!authUser && storeIsOpen && (
-              <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#fff', border: '2px solid #007B7F', borderRadius: 12, padding: '1rem 2rem', fontWeight: 600, fontSize: '1.1rem', color: '#007B7F', zIndex: 1000, boxShadow: '0 2px 8px #ececec', cursor: 'pointer' }} 
-                   onClick={() => {
+              <div className="cart-total-floating sign-in-prompt" onClick={() => {
+                
+              <style>{`
+                .cart-total-floating {
+                  position: fixed;
+                  bottom: 24px;
+                  right: 24px;
+                  background: white;
+                  border-radius: 16px;
+                  padding: 12px 24px;
+                  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                  z-index: 1000;
+                  transition: all 0.3s ease;
+                  border: 2px solid #007B7F;
+                }
+                
+                .cart-total-amount {
+                  font-weight: 600;
+                  font-size: 1.1rem;
+                  color: #007B7F;
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                }
+                
+                .sign-in-prompt {
+                  cursor: pointer;
+                }
+                
+                .sign-in-prompt:hover {
+                  background: #f0f9ff;
+                  transform: translateY(-4px);
+                  box-shadow: 0 8px 24px rgba(0,123,127,0.15);
+                }
+              `}</style>
                      alert('Please sign in to view your cart and make purchases');
                      navigate('/login');
                    }}>
@@ -1330,12 +2163,12 @@ function StorePreviewPage() {
           </div>
         )}
         {tab === 'reviews' && (
-          <div style={{ marginTop: 24 }}>
+          <div className="reviews-tab">
             {/* Display overall rating summary */}
-            <div style={{ marginBottom: 24, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: '1.2rem', marginBottom: 8 }}>Customer Reviews</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ fontSize: '2rem', color: '#FFD700' }}>★</div>
+            <div className="rating-summary">
+              <div className="rating-title">Customer Reviews</div>
+              <div className="rating-display">
+                <div className="rating-star">★</div>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>
                     {avgRating > 0 ? `${avgRating} out of 5` : 'No ratings yet'}
@@ -1349,35 +2182,149 @@ function StorePreviewPage() {
 
             {/* Show message for unauthenticated users */}
             {!authUser && !isStoreOwner && (
-              <div style={{ marginBottom: 24, background: '#f8f9fa', borderRadius: 8, padding: 16, textAlign: 'center', border: '1px dashed #007B7F' }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#007B7F' }}>Want to leave a review?</div>
+              <div className="auth-prompt">
+                <div className="prompt-heading">Want to leave a review?</div>
                 <p style={{ marginBottom: 16 }}>Please log in or register to share your experience with this store.</p>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+                <div className="auth-buttons">
                   <button 
                     onClick={() => navigate('/login')} 
-                    style={{ 
-                      background: '#007B7F', 
-                      color: '#fff', 
-                      border: 'none', 
-                      borderRadius: 6, 
-                      padding: '0.5rem 1.2rem', 
-                      fontWeight: 600, 
-                      cursor: 'pointer' 
-                    }}
+                    className="login-button"
                   >
                     Sign In
                   </button>
                   <button 
                     onClick={() => navigate('/register')} 
-                    style={{ 
-                      background: '#fff', 
-                      color: '#007B7F', 
-                      border: '1px solid #007B7F', 
-                      borderRadius: 6, 
-                      padding: '0.5rem 1.2rem', 
-                      fontWeight: 600, 
-                      cursor: 'pointer' 
-                    }}
+                    className="register-button"
+                  >
+                    Register
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <style>{`
+              .reviews-container {
+                margin-top: 16px;
+              }
+              
+              .rating-summary {
+                margin-bottom: 24px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+              }
+              
+              .rating-heading {
+                font-weight: 700;
+                font-size: 1.2rem;
+                margin-bottom: 12px;
+                color: #333;
+              }
+              
+              .rating-display {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+              }
+              
+              .rating-star {
+                font-size: 2.2rem;
+                color: #FFD700;
+                line-height: 1;
+              }
+              
+              .rating-info {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              }
+              
+              .rating-value {
+                font-weight: 600;
+                font-size: 1.1rem;
+                color: #333;
+              }
+              
+              .rating-count {
+                color: #666;
+                font-size: 0.9rem;
+              }
+              
+              .auth-prompt {
+                margin-bottom: 24px;
+                background: #f0f9ff;
+                border-radius: 12px;
+                padding: 20px;
+                text-align: center;
+                border: 1px dashed #007B7F;
+                box-shadow: 0 2px 8px rgba(0,123,127,0.08);
+              }
+              
+              .prompt-heading {
+                font-weight: 600;
+                margin-bottom: 10px;
+                color: #007B7F;
+                font-size: 1.1rem;
+              }
+              
+              .prompt-text {
+                margin-bottom: 16px;
+                color: #444;
+              }
+              
+              .auth-actions {
+                display: flex;
+                justify-content: center;
+                gap: 12px;
+              }
+              
+              .login-button, .register-button {
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+              }
+              
+              .login-button {
+                background: #007B7F;
+                color: #fff;
+                border: none;
+              }
+              
+              .login-button:hover {
+                background: #006366;
+                transform: translateY(-2px);
+              }
+              
+              .register-button {
+                background: #fff;
+                color: #007B7F;
+                border: 1px solid #007B7F;
+              }
+              
+              .register-button:hover {
+                background: #f0f9ff;
+                transform: translateY(-2px);
+              }
+            `}</style>
+            
+            {/* Show message for unauthenticated users */}
+            {!authUser && !isStoreOwner && (
+              <div className="auth-prompt">
+                <div className="prompt-heading">Want to leave a review?</div>
+                <p style={{ marginBottom: 16 }}>Please log in or register to share your experience with this store.</p>
+                <div className="auth-buttons">
+                  <button 
+                    onClick={() => navigate('/login')} 
+                    className="login-button"
+                  >
+                    Sign In
+                  </button>
+                  <button 
+                    onClick={() => navigate('/register')} 
+                    className="register-button"
                   >
                     Register
                   </button>
@@ -1387,45 +2334,25 @@ function StorePreviewPage() {
             
             {/* Only show review form for authenticated buyers who are not the store owner */}
             {userType === 'buyer' && authUser && !isStoreOwner && (
-              <div style={{ marginBottom: 24, background: '#f6f6fa', borderRadius: 8, padding: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Leave a review:</div>
+              <div className="review-form">
+                <div className="review-form-title">Leave a review:</div>
                 <StarRating value={userRating} onChange={setUserRating} />
                 <textarea 
                   value={userReview} 
                   onChange={e => setUserReview(e.target.value)} 
                   placeholder="Share your experience with this store..." 
-                  style={{ 
-                    width: '100%', 
-                    minHeight: 80, 
-                    borderRadius: 4, 
-                    border: '1px solid #ccc', 
-                    padding: 12, 
-                    marginTop: 12,
-                    fontFamily: 'inherit',
-                    fontSize: '1rem',
-                    resize: 'vertical'
-                  }} 
+                  className="review-textarea"
                 />
                 <button 
                   onClick={handleSubmitReview} 
                   disabled={userRating === 0}
-                  style={{ 
-                    background: userRating === 0 ? '#ccc' : '#007B7F', 
-                    color: '#fff', 
-                    border: 'none', 
-                    borderRadius: 6, 
-                    padding: '0.5rem 1.2rem', 
-                    fontWeight: 600, 
-                    fontSize: '1rem', 
-                    marginTop: 12, 
-                    cursor: userRating === 0 ? 'not-allowed' : 'pointer' 
-                  }}
+                  className="submit-review"
                 >
                   Submit Review
                 </button>
                 {reviewSent && (
-                  <div style={{ color: '#3A8E3A', marginTop: 8, fontWeight: 600 }}>
-                    ✓ Review submitted successfully!
+                  <div className="review-success">
+                    <span>✓</span> Review submitted successfully!
                   </div>
                 )}
               </div>
@@ -1434,11 +2361,12 @@ function StorePreviewPage() {
             {/* Reviews list */}
             <div>
               {reviews.length === 0 ? (
-                <div style={{ color: '#888', textAlign: 'center', padding: '2rem' }}>
-                  No reviews yet. Be the first to review this store!
+                <div className="no-reviews">
+                  <div className="no-reviews-icon">💬</div>
+                  <div className="no-reviews-text">No reviews yet. Be the first to review this store!</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="reviews-list">
                   {reviews
                     .sort((a, b) => {
                       // Sort by creation date, newest first
@@ -1448,15 +2376,7 @@ function StorePreviewPage() {
                       return 0;
                     })
                     .map(r => (
-                      <div key={r.id} style={{ 
-                        display: 'flex', 
-                        gap: 12, 
-                        padding: 16, 
-                        border: '1px solid #eee', 
-                        borderRadius: 8,
-                        background: '#fafafa',
-                        alignItems: 'flex-start'
-                      }}>
+                      <div key={r.id} className="review-item">
                         <img
                           src={r.userPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.userName || 'Anonymous')}&background=007B7F&color=fff&size=40`}
                           alt={r.userName || 'Anonymous'}
@@ -1465,7 +2385,9 @@ function StorePreviewPage() {
                             height: 40, 
                             borderRadius: '50%', 
                             objectFit: 'cover', 
-                            flexShrink: 0 
+                            flexShrink: 0,
+                            float: 'left',
+                            marginRight: '12px'
                           }}
                           onError={(e) => {
                             // Prevent infinite loop by checking if already using fallback
@@ -1474,33 +2396,30 @@ function StorePreviewPage() {
                             }
                           }}
                         />
-                        <div style={{ flex: 1, textAlign: 'left' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>
+                        <div style={{ flex: 1 }}>
+                          <div className="reviewer-info">
+                            <span className="reviewer-name">
                               {r.userName || 'Anonymous'}
                             </span>
-                            <div style={{ display: 'flex', gap: 2 }}>
-                              {[...Array(5)].map((_, i) => (
-                                <span 
-                                  key={i} 
-                                  style={{ 
-                                    color: i < r.rating ? '#FFD700' : '#ddd',
-                                    fontSize: '1rem'
-                                  }}
-                                >
-                                  ★
-                                </span>
-                              ))}
-                            </div>
+                            {r.createdAt && (
+                              <span className="review-date">
+                                {new Date(r.createdAt.toMillis()).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="review-stars">
+                            {[...Array(5)].map((_, i) => (
+                              <span 
+                                key={i} 
+                                style={{ color: i < r.rating ? '#FFD700' : '#ddd' }}
+                              >
+                                ★
+                              </span>
+                            ))}
                           </div>
                           {r.text && (
-                            <div style={{ color: '#444', fontSize: '0.95rem', lineHeight: 1.4, textAlign: 'left' }}>
+                            <div className="review-text">
                               {r.text}
-                            </div>
-                          )}
-                          {r.createdAt && (
-                            <div style={{ color: '#888', fontSize: '0.8rem', marginTop: 8, textAlign: 'left' }}>
-                              {new Date(r.createdAt.toMillis()).toLocaleDateString()}
                             </div>
                           )}
                         </div>
@@ -1775,7 +2694,7 @@ function StorePreviewPage() {
       )}
 
       {/* Boost Store Modal */}
-      {showBoostModal && (
+      {showBoostModal && userType === 'seller' && (
         <div style={{
           position: 'fixed',
           top: 0,

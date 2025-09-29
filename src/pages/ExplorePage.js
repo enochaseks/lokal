@@ -2199,7 +2199,48 @@ function ExplorePage() {
                   )
                   // Limit to 10 shops max
                   .slice(0, 10)
-                  .map(shop => (
+                  .map(shop => {
+                    // Check if store is currently open
+                    function isStoreOpenForToday(shop) {
+                      if (!shop) return false;
+                      
+                      const today = daysOfWeek[new Date().getDay()];
+                      
+                      // Check if store is closed today
+                      if (shop.closedDays && shop.closedDays.includes(today)) {
+                        return false;
+                      }
+                      
+                      // Get today's opening and closing times
+                      const todayOpening = shop.openingTimes && shop.openingTimes[today];
+                      const todayClosing = shop.closingTimes && shop.closingTimes[today];
+                      
+                      // If no specific times set for today, fall back to general opening/closing times
+                      const opening = todayOpening || shop.openingTime;
+                      const closing = todayClosing || shop.closingTime;
+                      
+                      if (!opening || !closing) return false;
+                      
+                      const now = new Date();
+                      const [openH, openM] = opening.split(':').map(Number);
+                      const [closeH, closeM] = closing.split(':').map(Number);
+                      
+                      const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+                      const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+                      
+                      // Handle overnight hours (e.g., 10 PM to 6 AM)
+                      if (closeH < openH || (closeH === openH && closeM < openM)) {
+                        const nextDayClose = new Date(closeDate);
+                        nextDayClose.setDate(nextDayClose.getDate() + 1);
+                        return now >= openDate || now <= nextDayClose;
+                      }
+                      
+                      return now >= openDate && now <= closeDate;
+                    }
+                    
+                    const storeIsOpen = isStoreOpenForToday(shop);
+                    
+                    return (
                     <div 
                       key={shop.id}
                       onClick={() => handleStoreClick(shop.id)}
@@ -2211,9 +2252,11 @@ function ExplorePage() {
                         overflow: 'hidden',
                         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
                         cursor: 'pointer',
-                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        transition: 'transform 0.2s, box-shadow 0.2s, opacity 0.3s, filter 0.3s',
                         position: 'relative',
-                        flex: '0 0 auto'
+                        flex: '0 0 auto',
+                        opacity: storeIsOpen ? 1 : 0.5,
+                        filter: storeIsOpen ? 'none' : 'grayscale(0.7)'
                       }}
                       onMouseOver={(e) => {
                         e.currentTarget.style.transform = 'translateY(-4px)';
@@ -2225,7 +2268,7 @@ function ExplorePage() {
                       }}
                     >
                       {/* Shop image or placeholder */}
-                      <div style={{ height: '120px', background: '#f4f4f4', overflow: 'hidden' }}>
+                      <div style={{ height: '120px', background: '#f4f4f4', overflow: 'hidden', position: 'relative' }}>
                         {shop.backgroundImg ? (
                           <img 
                             src={shop.backgroundImg} 
@@ -2268,6 +2311,26 @@ function ExplorePage() {
                           {shop.storeLocation || 'Location not available'}
                         </div>
                         
+                        {!storeIsOpen && (
+                          <div style={{ 
+                            position: 'absolute',
+                            top: '8px',
+                            left: '8px',
+                            background: '#fbe8e8',
+                            color: '#D92D20',
+                            borderRadius: '20px',
+                            padding: '2px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            zIndex: 2
+                          }}>
+                            <span>⏱️</span> CLOSED
+                          </div>
+                        )}
+                        
                         {shop.isBoosted && (
                           <div style={{ 
                             position: 'absolute',
@@ -2308,7 +2371,8 @@ function ExplorePage() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 
                 {/* Display purchased items if available */}
                 {previouslyPurchasedItems.length > 0 && previouslyPurchasedItems
