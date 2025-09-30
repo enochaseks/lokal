@@ -87,6 +87,18 @@ function StoreProfilePage() {
   const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [editWebsiteLinks, setEditWebsiteLinks] = useState([]);
 
+  // Item management states
+  const [showItemMenu, setShowItemMenu] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
+  const [showEditItemModal, setShowEditItemModal] = useState(false);
+  const [editItemName, setEditItemName] = useState('');
+  const [editItemPrice, setEditItemPrice] = useState('');
+  const [editItemCurrency, setEditItemCurrency] = useState('GBP');
+  const [editItemQuality, setEditItemQuality] = useState('');
+  const [editItemQuantity, setEditItemQuantity] = useState('');
+  const [editItemImage, setEditItemImage] = useState(null);
+  const [editItemStock, setEditItemStock] = useState('in-stock');
+
   // Add at the top, after other useState hooks
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const [closedDays, setClosedDays] = useState(profile?.closedDays || []);
@@ -228,6 +240,26 @@ function StoreProfilePage() {
     return () => unsubscribe();
   }, []);
 
+  // Close dropdown menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Don't close if clicking inside the dropdown
+      if (event.target.closest('.dropdown-menu')) {
+        return;
+      }
+      if (showItemMenu !== null) {
+        setShowItemMenu(null);
+      }
+    };
+
+    if (showItemMenu !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showItemMenu]);
+
   // Social media and website link management functions
   const addSocialLink = () => {
     setEditSocialLinks([...editSocialLinks, {
@@ -265,6 +297,109 @@ function StoreProfilePage() {
     ));
   };
 
+  // Item management functions
+  const handleEditItem = (item) => {
+    setEditingItem(item);
+    setEditItemName(item.name || '');
+    setEditItemPrice(item.price || '');
+    setEditItemCurrency(item.currency || 'GBP');
+    setEditItemQuality(item.quality || '');
+    setEditItemQuantity(item.quantity || '');
+    setEditItemStock(item.stock || 'in-stock');
+    setEditItemImage(null);
+    setShowEditItemModal(true);
+    setShowItemMenu(null);
+  };
+
+  const handleUpdateItem = async (e) => {
+    e.preventDefault();
+    if (!editingItem || !editItemName || !editItemPrice || !editItemQuality || !editItemQuantity) return;
+    
+    setLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+
+      let imageUrl = editingItem.image;
+      if (editItemImage) {
+        const imgRef = ref(storage, `storeItems/${user.uid}_${Date.now()}_${editItemImage.name}`);
+        await uploadBytes(imgRef, editItemImage);
+        imageUrl = await getDownloadURL(imgRef);
+      }
+
+      const itemData = {
+        name: editItemName,
+        price: editItemPrice,
+        currency: editItemCurrency,
+        quality: editItemQuality,
+        quantity: editItemQuantity,
+        stock: editItemStock,
+        image: imageUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      const itemRef = doc(db, 'stores', user.uid, 'items', editingItem.id);
+      await updateDoc(itemRef, itemData);
+
+      // Update local state
+      setStoreItems(storeItems.map(item => 
+        item.id === editingItem.id ? { ...item, ...itemData } : item
+      ));
+
+      setShowEditItemModal(false);
+      setEditingItem(null);
+    } catch (err) {
+      alert('Error updating item: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteItem = async (item) => {
+    if (!window.confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+    
+    setLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+
+      const itemRef = doc(db, 'stores', user.uid, 'items', item.id);
+      await deleteDoc(itemRef);
+
+      // Update local state
+      setStoreItems(storeItems.filter(i => i.id !== item.id));
+      setShowItemMenu(null);
+    } catch (err) {
+      alert('Error deleting item: ' + err.message);
+    }
+    setLoading(false);
+  };
+
+  const handleStockUpdate = async (item, newStock) => {
+    setLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+
+      const itemRef = doc(db, 'stores', user.uid, 'items', item.id);
+      await updateDoc(itemRef, { 
+        stock: newStock,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update local state
+      setStoreItems(storeItems.map(i => 
+        i.id === item.id ? { ...i, stock: newStock } : i
+      ));
+      setShowItemMenu(null);
+    } catch (err) {
+      alert('Error updating stock: ' + err.message);
+    }
+    setLoading(false);
+  };
+
   const handleAddItem = async (e) => {
     e.preventDefault();
     if (!itemName || !itemPrice || !itemQuality || !itemQuantity) return;
@@ -285,6 +420,7 @@ function StoreProfilePage() {
         currency: itemCurrency,
         quality: itemQuality,
         quantity: itemQuantity,
+        stock: 'in-stock', // Default to in-stock for new items
         image: imageUrl,
         createdAt: new Date().toISOString(),
       };
@@ -1440,24 +1576,230 @@ function StoreProfilePage() {
                       alignItems: 'center', 
                       gap: 14, 
                       marginBottom: 4, 
-                      background: '#f9f9f9', 
+                      background: item.stock === 'out-of-stock' ? '#ffebee' : item.stock === 'low-stock' ? '#fff8e1' : '#f9f9f9', 
                       borderRadius: 14, 
                       padding: '1rem',
                       transition: 'all 0.2s ease',
                       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                      border: '1px solid #f0f0f0'
+                      border: item.stock === 'out-of-stock' ? '1px solid #ffcdd2' : item.stock === 'low-stock' ? '1px solid #ffecb3' : '1px solid #f0f0f0',
+                      position: 'relative',
+                      zIndex: showItemMenu === item.id ? 1000000 : 1
                     }}
                     onMouseOver={(e) => {
                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
                       e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.background = '#fff';
+                      if (item.stock === 'out-of-stock') {
+                        e.currentTarget.style.background = '#ffcdd2';
+                      } else if (item.stock === 'low-stock') {
+                        e.currentTarget.style.background = '#ffecb3';
+                      } else {
+                        e.currentTarget.style.background = '#fff';
+                      }
                     }}
                     onMouseOut={(e) => {
                       e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
                       e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.background = '#f9f9f9';
+                      if (item.stock === 'out-of-stock') {
+                        e.currentTarget.style.background = '#ffebee';
+                      } else if (item.stock === 'low-stock') {
+                        e.currentTarget.style.background = '#fff8e1';
+                      } else {
+                        e.currentTarget.style.background = '#f9f9f9';
+                      }
                     }}
                   >
+                    {/* Stock status overlay */}
+                    {item.stock !== 'in-stock' && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 8,
+                        left: 8,
+                        background: item.stock === 'out-of-stock' ? '#f44336' : '#ff9800',
+                        color: 'white',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        zIndex: 1
+                      }}>
+                        {item.stock === 'out-of-stock' ? 'OUT OF STOCK' : 'LOW STOCK'}
+                      </div>
+                    )}
+
+                    {/* 3-dot menu */}
+                    <div 
+                      id={`menu-button-${item.id}`}
+                      style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        color: '#666',
+                        padding: '4px',
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.8)',
+                        transition: 'all 0.2s ease',
+                        zIndex: 1000
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowItemMenu(showItemMenu === item.id ? null : item.id);
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,1)';
+                        e.currentTarget.style.color = '#333';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.8)';
+                        e.currentTarget.style.color = '#666';
+                      }}
+                    >
+                      ⋮
+                    </div>
+
+                    {/* Dropdown menu */}
+                    {showItemMenu === item.id && (
+                      <div 
+                        className="dropdown-menu"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          right: 40,
+                          background: 'white',
+                          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                          borderRadius: 12,
+                          zIndex: 999999,
+                          minWidth: 200,
+                          border: '2px solid #007B7F'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div style={{
+                          padding: '12px 16px',
+                          borderBottom: '1px solid #f0f0f0',
+                          background: '#f8f9fa',
+                          borderRadius: '12px 12px 0 0',
+                          fontWeight: 600,
+                          color: '#333',
+                          fontSize: '0.9rem'
+                        }}>
+                          {item.name}
+                        </div>
+                        
+                        <button
+                          onClick={() => handleEditItem(item)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            border: 'none',
+                            background: 'none',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            borderBottom: '1px solid #f0f0f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                          onMouseOut={(e) => e.currentTarget.style.background = 'none'}
+                        >
+                          <span>✏️</span> Edit Item
+                        </button>
+                        
+                        <div style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                          <div style={{ padding: '0 16px', fontSize: '0.8rem', color: '#666', fontWeight: 500, marginBottom: '4px' }}>
+                            Stock Status:
+                          </div>
+                          <button
+                            onClick={() => handleStockUpdate(item, 'in-stock')}
+                            style={{
+                              width: '100%',
+                              padding: '8px 16px',
+                              border: 'none',
+                              background: item.stock === 'in-stock' ? '#e8f5e8' : 'none',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              color: item.stock === 'in-stock' ? '#4caf50' : '#666',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = item.stock === 'in-stock' ? '#e8f5e8' : '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = item.stock === 'in-stock' ? '#e8f5e8' : 'none'}
+                          >
+                            <span>✅</span> In Stock
+                          </button>
+                          <button
+                            onClick={() => handleStockUpdate(item, 'low-stock')}
+                            style={{
+                              width: '100%',
+                              padding: '8px 16px',
+                              border: 'none',
+                              background: item.stock === 'low-stock' ? '#fff8e1' : 'none',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              color: item.stock === 'low-stock' ? '#ff9800' : '#666',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = item.stock === 'low-stock' ? '#fff8e1' : '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = item.stock === 'low-stock' ? '#fff8e1' : 'none'}
+                          >
+                            <span>⚠️</span> Low Stock
+                          </button>
+                          <button
+                            onClick={() => handleStockUpdate(item, 'out-of-stock')}
+                            style={{
+                              width: '100%',
+                              padding: '8px 16px',
+                              border: 'none',
+                              background: item.stock === 'out-of-stock' ? '#ffebee' : 'none',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              color: item.stock === 'out-of-stock' ? '#f44336' : '#666',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = item.stock === 'out-of-stock' ? '#ffebee' : '#f5f5f5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = item.stock === 'out-of-stock' ? '#ffebee' : 'none'}
+                          >
+                            <span>❌</span> Out of Stock
+                          </button>
+                        </div>
+                        
+                        <button
+                          onClick={() => handleDeleteItem(item)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            border: 'none',
+                            background: 'none',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            color: '#f44336',
+                            borderRadius: '0 0 12px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.background = '#ffebee'}
+                          onMouseOut={(e) => e.currentTarget.style.background = 'none'}
+                        >
+                          <span>🗑️</span> Delete Item
+                        </button>
+                      </div>
+                    )}
+
+
+
                     {item.image && 
                       <img 
                         src={item.image} 
@@ -1467,7 +1809,8 @@ function StoreProfilePage() {
                           height: 60, 
                           borderRadius: 10, 
                           objectFit: 'cover',
-                          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)'
+                          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                          opacity: item.stock === 'out-of-stock' ? 0.6 : 1
                         }} 
                       />
                     }
@@ -1475,14 +1818,14 @@ function StoreProfilePage() {
                       <div style={{ 
                         fontWeight: 600, 
                         fontSize: '1rem', 
-                        color: '#222',
+                        color: item.stock === 'out-of-stock' ? '#999' : '#222',
                         marginBottom: '3px'
                       }}>
                         {item.name}
                       </div>
                       <div style={{ 
                         fontSize: '1rem', 
-                        color: '#007B7F',
+                        color: item.stock === 'out-of-stock' ? '#999' : '#007B7F',
                         fontWeight: 700, 
                         marginBottom: '4px'
                       }}>
@@ -1492,7 +1835,8 @@ function StoreProfilePage() {
                         fontSize: '0.85rem', 
                         color: '#666',
                         display: 'flex',
-                        gap: '10px'
+                        gap: '10px',
+                        opacity: item.stock === 'out-of-stock' ? 0.6 : 1
                       }}>
                         <span style={{ 
                           background: '#f0f0f0', 
@@ -1591,6 +1935,99 @@ function StoreProfilePage() {
             </div>
           </div>
         )}
+
+        {/* Edit Item Modal */}
+        {showEditItemModal && editingItem && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #B8B8B8', padding: '2rem 1.5rem', minWidth: 320, maxWidth: '90vw' }}>
+              <h3 style={{ marginBottom: 18, color: '#007B7F', fontWeight: 700, fontSize: '1.2rem' }}>Edit Item: {editingItem.name}</h3>
+              <form onSubmit={handleUpdateItem}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Image (optional)</label>
+                  <input type="file" accept="image/*" onChange={e => setEditItemImage(e.target.files[0])} />
+                  {editingItem.image && !editItemImage && (
+                    <div style={{ marginTop: 8 }}>
+                      <img src={editingItem.image} alt="Current" style={{ width: 60, height: 60, borderRadius: 8, objectFit: 'cover' }} />
+                      <small style={{ display: 'block', color: '#666', marginTop: 4 }}>Current image (upload new to replace)</small>
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Item Name</label>
+                  <input type="text" value={editItemName} onChange={e => setEditItemName(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                </div>
+                <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Price</label>
+                    <input type="number" value={editItemPrice} onChange={e => setEditItemPrice(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required min="0" step="0.01" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Currency</label>
+                    <select value={editItemCurrency} onChange={e => setEditItemCurrency(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
+                      <option value="GBP">GBP</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="NGN">NGN</option>
+                      <option value="CAD">CAD</option>
+                      <option value="AUD">AUD</option>
+                      <option value="ZAR">ZAR</option>
+                      <option value="GHS">GHS</option>
+                      <option value="KES">KES</option>
+                      <option value="XOF">XOF</option>
+                      <option value="XAF">XAF</option>
+                      <option value="INR">INR</option>
+                      <option value="JPY">JPY</option>
+                      <option value="CNY">CNY</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Quality</label>
+                  <select value={editItemQuality} onChange={e => setEditItemQuality(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
+                    <option value="">Select Quality</option>
+                    <option value="New">New</option>
+                    <option value="Like New">Like New</option>
+                    <option value="Very Good">Very Good</option>
+                    <option value="Good">Good</option>
+                    <option value="Acceptable">Acceptable</option>
+                  </select>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Quantity Available</label>
+                  <input type="number" value={editItemQuantity} onChange={e => setEditItemQuantity(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required min="0" />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Stock Status</label>
+                  <select value={editItemStock} onChange={e => setEditItemStock(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}>
+                    <option value="in-stock">✅ In Stock</option>
+                    <option value="low-stock">⚠️ Low Stock</option>
+                    <option value="out-of-stock">❌ Out of Stock</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowEditItemModal(false);
+                      setEditingItem(null);
+                    }} 
+                    style={{ background: '#eee', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#444', fontWeight: 500, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    style={{ background: '#007B7F', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
+                  >
+                    {loading ? 'Updating...' : 'Update Item'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {showEditProfile && profile && (
           <div style={{ 
             position: 'fixed', 

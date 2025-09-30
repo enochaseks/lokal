@@ -2235,24 +2235,80 @@ function StorePreviewPage() {
                   key={item.id} 
                   className="product-card"
                   style={{ 
-                    opacity: storeIsOpen ? 1 : 0.5, 
-                    filter: storeIsOpen ? 'none' : 'grayscale(0.7)'
+                    opacity: storeIsOpen && (!item.stock || item.stock === 'in-stock') ? 1 : 0.5, 
+                    filter: storeIsOpen && (!item.stock || item.stock === 'in-stock') ? 'none' : 'grayscale(0.7)',
+                    background: item.stock === 'out-of-stock' ? '#ffebee' : item.stock === 'low-stock' ? '#fff8e1' : '',
+                    border: item.stock === 'out-of-stock' ? '1px solid #ffcdd2' : item.stock === 'low-stock' ? '1px solid #ffecb3' : '',
+                    position: 'relative'
                   }}
                 >
+                  {/* Stock status overlay */}
+                  {item.stock && item.stock !== 'in-stock' && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      background: item.stock === 'out-of-stock' ? '#f44336' : '#ff9800',
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold',
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      zIndex: 1,
+                      textTransform: 'uppercase'
+                    }}>
+                      {item.stock === 'out-of-stock' ? 'Out of Stock' : 'Low Stock'}
+                    </div>
+                  )}
+
                   {item.image && 
                     <div className="product-image-container">
-                      <img src={item.image} alt={item.name} className="product-image" />
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="product-image"
+                        style={{
+                          opacity: item.stock === 'out-of-stock' ? 0.6 : 1
+                        }}
+                      />
                     </div>
                   }
                   <div className="product-details">
-                    <div className="product-name">{item.name}</div>
-                    <div className="product-price">
+                    <div 
+                      className="product-name"
+                      style={{
+                        color: item.stock === 'out-of-stock' ? '#999' : ''
+                      }}
+                    >
+                      {item.name}
+                    </div>
+                    <div 
+                      className="product-price"
+                      style={{
+                        color: item.stock === 'out-of-stock' ? '#999' : ''
+                      }}
+                    >
                       {getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)}
                     </div>
                     <div className="product-meta">
                       <span className="product-quality">Quality: {item.quality}</span> 
                       <span className="product-divider">|</span>
                       <span className="product-quantity">Qty: {item.quantity}</span>
+                      {/* Stock status in meta */}
+                      {item.stock && item.stock !== 'in-stock' && (
+                        <>
+                          <span className="product-divider">|</span>
+                          <span 
+                            style={{
+                              color: item.stock === 'out-of-stock' ? '#f44336' : '#ff9800',
+                              fontWeight: 'bold',
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            {item.stock === 'out-of-stock' ? 'Out of Stock' : 'Low Stock'}
+                          </span>
+                        </>
+                      )}
                     </div>
                     
                     {/* Show these buttons for buyers and unauthenticated users who are not the store owner */}
@@ -2260,7 +2316,17 @@ function StorePreviewPage() {
                       <div className="product-actions">
                         <button
                           className="add-to-cart-button"
+                          disabled={item.stock === 'out-of-stock'}
+                          style={{
+                            opacity: item.stock === 'out-of-stock' ? 0.5 : 1,
+                            cursor: item.stock === 'out-of-stock' ? 'not-allowed' : 'pointer',
+                            background: item.stock === 'out-of-stock' ? '#ccc' : ''
+                          }}
                           onClick={() => {
+                            if (item.stock === 'out-of-stock') {
+                              alert('This item is currently out of stock');
+                              return;
+                            }
                             if (!authUser) {
                               // Redirect to login page if not signed in
                               alert('Please sign in to add items to your cart');
@@ -2270,7 +2336,7 @@ function StorePreviewPage() {
                             }
                           }}
                         >
-                          Add to Cart
+                          {item.stock === 'out-of-stock' ? 'Out of Stock' : 'Add to Cart'}
                         </button>
                       </div>
                     )}
