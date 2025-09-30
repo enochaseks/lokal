@@ -966,7 +966,7 @@ function ExplorePage() {
         dailyViews = [];
       }
 
-      // Fetch orders data
+      // Fetch orders data from multiple sources to ensure pay-at-store orders are included
       const ordersQuery = query(
         collection(db, 'orders'),
         where('storeId', '==', storeId),
@@ -974,48 +974,116 @@ function ExplorePage() {
         orderBy('createdAt', 'desc')
       );
       
+      // Also fetch completed orders from reports collection (includes pay-at-store)
+      const reportsQuery = query(
+        collection(db, 'reports'),
+        where('sellerId', '==', storeId),
+        where('status', '==', 'completed'),
+        where('completedAt', '>=', startDate),
+        orderBy('completedAt', 'desc')
+      );
+
+      // Fetch completed transactions (pay-at-store orders)
+      const transactionsQuery = query(
+        collection(db, 'transactions'),
+        where('sellerId', '==', storeId),
+        where('pickupStatus', '==', 'collected'),
+        where('collectedAt', '>=', startDate),
+        orderBy('collectedAt', 'desc')
+      );
+      
       let totalOrders = 0;
       let totalRevenue = 0;
       let productSales = {};
       let customerAnalytics = [];
+      let processedOrderIds = new Set(); // To avoid counting orders twice
       
-      const ordersSnapshot = await getDocs(ordersQuery);
-      
-      if (!ordersSnapshot.empty) {
-        totalOrders = ordersSnapshot.size;
+      // Helper function to process order data
+      const processOrderData = (orderData, orderDate) => {
+        const orderId = orderData.orderId || orderData.id;
         
+        // Skip if we've already processed this order
+        if (orderId && processedOrderIds.has(orderId)) {
+          return;
+        }
+        
+        if (orderId) {
+          processedOrderIds.add(orderId);
+        }
+        
+        totalOrders++;
+        const amount = parseFloat(orderData.totalAmount || orderData.amount || 0);
+        totalRevenue += amount;
+        
+        // Track product sales
+        if (orderData.items && Array.isArray(orderData.items)) {
+          orderData.items.forEach(item => {
+            const productName = item.name || 'Unknown Product';
+            const quantity = parseInt(item.quantity || 1);
+            
+            if (!productSales[productName]) {
+              productSales[productName] = {
+                name: productName,
+                totalSold: 0,
+                revenue: 0
+              };
+            }
+            productSales[productName].totalSold += quantity;
+            productSales[productName].revenue += (parseFloat(item.price || 0) * quantity);
+          });
+        }
+        
+        // Track customer data
+        const buyerId = orderData.buyerId || orderData.customerId;
+        if (buyerId) {
+          customerAnalytics.push({
+            buyerId: buyerId,
+            orderValue: amount,
+            orderDate: orderDate,
+            items: orderData.items || []
+          });
+        }
+      };
+
+      try {
+        // Fetch from all sources in parallel
+        const [ordersSnapshot, reportsSnapshot, transactionsSnapshot] = await Promise.all([
+          getDocs(ordersQuery),
+          getDocs(reportsQuery),
+          getDocs(transactionsQuery)
+        ]);
+        
+        // Process regular orders
         ordersSnapshot.forEach(doc => {
           const orderData = doc.data();
-          const amount = parseFloat(orderData.totalAmount || 0);
-          totalRevenue += amount;
-          
-          // Track product sales
-          if (orderData.items && Array.isArray(orderData.items)) {
-            orderData.items.forEach(item => {
-              const productName = item.name || 'Unknown Product';
-              const quantity = parseInt(item.quantity || 1);
-              
-              if (!productSales[productName]) {
-                productSales[productName] = {
-                  name: productName,
-                  totalSold: 0,
-                  revenue: 0
-                };
-              }
-              productSales[productName].totalSold += quantity;
-              productSales[productName].revenue += (parseFloat(item.price || 0) * quantity);
-            });
-          }
-          
-          // Track customer data
-          if (orderData.buyerId) {
-            customerAnalytics.push({
-              buyerId: orderData.buyerId,
-              orderValue: amount,
-              orderDate: orderData.createdAt?.toDate() || new Date(),
-              items: orderData.items || []
-            });
-          }
+          const orderDate = orderData.createdAt?.toDate() || new Date();
+          processOrderData(orderData, orderDate);
+        });
+        
+        // Process completed reports (includes pay-at-store)
+        reportsSnapshot.forEach(doc => {
+          const reportData = doc.data();
+          const orderDate = reportData.completedAt?.toDate() || reportData.createdAt?.toDate() || new Date();
+          processOrderData(reportData, orderDate);
+        });
+        
+        // Process completed transactions (pay-at-store specifically)
+        transactionsSnapshot.forEach(doc => {
+          const transactionData = doc.data();
+          const orderDate = transactionData.collectedAt?.toDate() || transactionData.createdAt?.toDate() || new Date();
+          processOrderData(transactionData, orderDate);
+        });
+        
+        console.log(`📊 Analytics processed: ${totalOrders} orders, £${totalRevenue.toFixed(2)} revenue from ${processedOrderIds.size} unique orders`);
+        
+      } catch (error) {
+        console.error('Error fetching comprehensive order data:', error);
+        // Fallback to just orders collection
+        const ordersSnapshot = await getDocs(ordersQuery);
+        ordersSnapshot.forEach(doc => {
+          const orderData = doc.data();
+          const orderDate = orderData.createdAt?.toDate() || new Date();
+          processOrderData(orderData, orderDate);
         });
       }
 

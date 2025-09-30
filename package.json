@@ -15,7 +15,7 @@
     "crypto-browserify": "^3.12.1",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
-    "firebase": "^11.9.1",
+    "firebase": "^11.10.0",
     "firebase-admin": "^13.4.0",
     "jspdf": "^3.0.3",
     "node-fetch": "^3.3.2",

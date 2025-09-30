@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import EmailReceiptModal from '../components/EmailReceiptModal';
+import NotificationToast from '../components/NotificationToast';
+import MessageModal from '../components/MessageModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs } from 'firebase/firestore';
+import { sendManualReceipt, sendCustomReceipt } from '../utils/stripeReceipts';
 
 function ReceiptsPage() {
   const navigate = useNavigate();
@@ -12,6 +16,256 @@ function ReceiptsPage() {
   const [receipts, setReceipts] = useState([]);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  
+  // Email receipt modal states
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [receiptForEmail, setReceiptForEmail] = useState(null);
+  
+  // Notification states
+  const [notification, setNotification] = useState(null);
+  const [messageModal, setMessageModal] = useState(null);
+  
+  // Function to refresh receipts and scout for new information
+  const refreshReceipts = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (!user) {
+      console.log('No user logged in for refresh');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      console.log("Refreshing receipts and scouting for new information...");
+      
+      // Create queries for different receipt sources
+      const receiptsQuery = query(
+        collection(db, 'receipts'),
+        where('userId', '==', user.uid),
+        orderBy('timestamp', 'desc')
+      );
+      
+      const buyerReceiptsQuery = query(
+        collection(db, 'receipts'),
+        where('buyerId', '==', user.uid),
+        orderBy('timestamp', 'desc')
+      );
+      
+      const refundReceiptsQuery = query(
+        collection(db, 'receipts'),
+        where('refundUserId', '==', user.uid),
+        orderBy('timestamp', 'desc')
+      );
+      
+      const regeneratedReceiptsQuery = query(
+        collection(db, 'receipts'),
+        where('buyerId', '==', user.uid),
+        where('isRegenerated', '==', true),
+        orderBy('timestamp', 'desc')
+      );
+      
+      // Execute all queries
+      const [
+        receiptsSnapshot,
+        buyerReceiptsSnapshot,
+        refundReceiptsSnapshot,
+        regeneratedReceiptsSnapshot
+      ] = await Promise.all([
+        getDocs(receiptsQuery),
+        getDocs(buyerReceiptsQuery),
+        getDocs(refundReceiptsQuery),
+        getDocs(regeneratedReceiptsQuery)
+      ]);
+      
+      console.log(`Refresh found - Primary: ${receiptsSnapshot.size}, ` +
+                  `Buyer: ${buyerReceiptsSnapshot.size}, ` +
+                  `Refund: ${refundReceiptsSnapshot.size}, ` + 
+                  `Regenerated: ${regeneratedReceiptsSnapshot.size}`);
+      
+      // Process all receipts
+      const allReceipts = [];
+      
+      const processReceipt = (doc) => {
+        if (allReceipts.some(r => r.id === doc.id)) return;
+        
+        const data = doc.data();
+        
+        if (data.userId !== user.uid && data.buyerId !== user.uid && data.refundUserId !== user.uid) return;
+        
+        const receiptData = {
+          id: doc.id,
+          ...data,
+          orderId: data.orderId || doc.id,
+          storeName: data.storeName || data.businessName || data.storeData?.businessName || data.storeData?.storeName || data.sellerName || 'Store',
+          storeId: data.storeId || data.sellerId,
+          amount: data.amount || data.totalAmount || data.total || 0,
+          currency: data.currency || 'GBP',
+          timestamp: data.timestamp || data.createdAt || new Date(),
+          source: 'receipts',
+          subtotal: data.subtotal || (data.breakdown?.subtotal) || null,
+          serviceFee: data.serviceFee || (data.breakdown?.serviceFee) || 0,
+          deliveryFee: data.deliveryFee || (data.breakdown?.deliveryFee) || 0,
+          platformFee: data.platformFee || (data.breakdown?.platformFee) || 0,
+          receiptType: data.receiptType || (data.isRefund ? 'refund_receipt' : 'order_receipt')
+        };
+        
+        allReceipts.push(receiptData);
+      };
+      
+      // Process receipts from each query
+      receiptsSnapshot.forEach(doc => processReceipt(doc));
+      buyerReceiptsSnapshot.forEach(doc => processReceipt(doc));
+      refundReceiptsSnapshot.forEach(doc => processReceipt(doc));
+      regeneratedReceiptsSnapshot.forEach(doc => processReceipt(doc));
+      
+      // Sort by timestamp descending (newest first)
+      allReceipts.sort((a, b) => {
+        const timestampA = a.timestamp || a.createdAt;
+        const timestampB = b.timestamp || b.createdAt;
+        
+        if (!timestampA) return 1;
+        if (!timestampB) return -1;
+        
+        const timeA = timestampA.toMillis ? timestampA.toMillis() : new Date(timestampA).getTime();
+        const timeB = timestampB.toMillis ? timestampB.toMillis() : new Date(timestampB).getTime();
+        
+        return timeB - timeA;
+      });
+      
+      // Process receipts to extract key information
+      const processedReceipts = allReceipts.map(receipt => {
+        let storeName = receipt.storeName || 
+                       receipt.businessName || 
+                       receipt.sellerName;
+                       
+        if (!storeName && receipt.storeData) {
+          storeName = receipt.storeData.storeName || 
+                     receipt.storeData.businessName || 
+                     receipt.storeData.name || 
+                     receipt.storeData.displayName;
+        }
+        
+        if (!storeName && (receipt.storeId || receipt.sellerId)) {
+          const storeId = receipt.storeId || receipt.sellerId;
+          storeName = `Store ${storeId.substring(0, 6)}`;
+        } else if (!storeName) {
+          storeName = 'Unknown Store';
+        }
+        
+        const orderId = receipt.orderId || receipt.orderID || receipt.id || '';
+        let amount = 0;
+        if (receipt.amount !== undefined && receipt.amount !== null) {
+          amount = typeof receipt.amount === 'number' ? Math.abs(receipt.amount) : 0;
+        } else if (receipt.totalAmount !== undefined && receipt.totalAmount !== null) {
+          amount = typeof receipt.totalAmount === 'number' ? Math.abs(receipt.totalAmount) : 0;
+        }
+        
+        const currency = receipt.currency || 'GBP';
+        const timestamp = receipt.timestamp || receipt.createdAt || new Date();
+        const items = receipt.items || [];
+        const paymentMethod = receipt.paymentMethod || 'Card';
+        const deliveryMethod = receipt.deliveryMethod || 'Not specified';
+        const refundReason = receipt.refundReason || receipt.reason || '';
+        const receiptContent = receipt.receiptContent || receipt.content || receipt.message || '';
+        const isRegenerated = receipt.isRegenerated || false;
+        
+        return {
+          id: receipt.id,
+          orderId,
+          storeName,
+          amount,
+          currency,
+          timestamp,
+          items,
+          paymentMethod,
+          deliveryMethod,
+          refundReason,
+          receiptType: receipt.receiptType || (receipt.isRefund ? 'refund_receipt' : 'order_receipt'),
+          receiptContent,
+          isRegenerated,
+          rawData: receipt
+        };
+      });
+      
+      // Better deduplication
+      const receiptsByOrderId = {};
+      
+      processedReceipts.forEach(receipt => {
+        if (!receipt) return;
+        
+        const orderId = receipt.orderId || receipt.id || 'Unknown';
+        
+        if (!receiptsByOrderId[orderId]) {
+          receiptsByOrderId[orderId] = receipt;
+          return;
+        }
+        
+        const existing = receiptsByOrderId[orderId];
+        
+        // Always prioritize regenerated receipts
+        if (receipt.isRegenerated && !existing.isRegenerated) {
+          receiptsByOrderId[orderId] = receipt;
+          return;
+        }
+        
+        // Prioritize receipts with more information
+        const existingInfoScore = calculateInfoScore(existing);
+        const newInfoScore = calculateInfoScore(receipt);
+        
+        if (newInfoScore > existingInfoScore) {
+          receiptsByOrderId[orderId] = receipt;
+        }
+      });
+      
+      function calculateInfoScore(receipt) {
+        let score = 0;
+        if (receipt.items && receipt.items.length) score += 3;
+        if (receipt.amount && receipt.amount > 0) score += 2;
+        if (receipt.storeName && receipt.storeName !== 'Store') score += 1;
+        if (receipt.timestamp) score += 1;
+        if (receipt.paymentMethod) score += 1;
+        if (receipt.deliveryMethod) score += 1;
+        if (receipt.receiptContent) score += 2;
+        if (receipt.isRegenerated) score += 5;
+        return score;
+      }
+      
+      // Convert back to array
+      const finalReceipts = Object.values(receiptsByOrderId).map(receipt => {
+        let finalStoreName = receipt.storeName || receipt.sellerName;
+        
+        if (!finalStoreName && (receipt.storeId || receipt.sellerId)) {
+          const id = receipt.storeId || receipt.sellerId;
+          finalStoreName = `Store ID: ${id.substring(0, 8)}`;
+        } else if (!finalStoreName) {
+          finalStoreName = receipt.orderId ? 
+            `Order ${receipt.orderId.substring(0, 8)}` : 
+            'Unknown Store';
+        }
+        
+        return {
+          ...receipt,
+          storeName: finalStoreName,
+          orderId: receipt.orderId || receipt.id || 'Unknown',
+          amount: receipt.amount || 0,
+          currency: receipt.currency || 'GBP',
+          items: Array.isArray(receipt.items) ? receipt.items : [],
+          receiptType: receipt.receiptType || 'order_receipt'
+        };
+      });
+      
+      console.log(`Refresh complete: Found ${finalReceipts.length} receipts after deduplication`);
+      setReceipts(finalReceipts);
+      
+    } catch (error) {
+      console.error("Error refreshing receipts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Add CSS for loading spinner animation
   useEffect(() => {
@@ -89,6 +343,429 @@ function ReceiptsPage() {
     setSelectedReceipt(null);
   };
 
+  // Download receipt as PDF function
+  const downloadReceipt = (receipt) => {
+    if (!receipt) return;
+
+    // Create receipt date
+    const receiptDate = receipt.timestamp 
+      ? (receipt.timestamp.toDate ? receipt.timestamp.toDate() : new Date(receipt.timestamp))
+      : new Date();
+    
+    const formattedDate = receiptDate.toLocaleDateString('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Get store address and phone info
+    let storeAddress = 'Not available';
+    let storePhone = 'Not available';
+    
+    if (receipt.storeData) {
+      storeAddress = receipt.storeData.storeLocation || 
+                     receipt.storeData.storeAddress || 
+                     receipt.storeData.address || 
+                     'Not available';
+      
+      storePhone = receipt.storeData.phoneNumber || 
+                   receipt.storeData.phone || 
+                   'Not available';
+    }
+
+    // Generate filename
+    const receiptType = receipt.receiptType === 'refund_receipt' ? 'Refund' : 'Receipt';
+    const storeName = (receipt.storeName || 'Store').replace(/[^a-zA-Z0-9]/g, '_');
+    const orderId = (receipt.orderId || receipt.id || 'Unknown').substring(0, 8);
+    const dateStr = receiptDate.toISOString().split('T')[0];
+    const filename = `${receiptType}_${storeName}_${orderId}_${dateStr}`;
+
+    // Create HTML content for PDF
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${filename}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          .receipt-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .logo-container {
+            margin-bottom: 15px;
+          }
+          .receipt-logo {
+            height: 60px;
+            width: auto;
+            max-width: 200px;
+            object-fit: contain;
+          }
+          .header h1 {
+            margin: 10px 0 0 0;
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+          }
+          .header .receipt-type {
+            font-size: 18px;
+            color: #666;
+            margin-top: 10px;
+          }
+          .section {
+            margin-bottom: 30px;
+          }
+          .section h2 {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            border-left: 4px solid #4f46e5;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+          }
+          .info-label {
+            font-weight: 500;
+            color: #666;
+          }
+          .info-value {
+            font-weight: 600;
+            color: #333;
+          }
+          .total-row {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border-left: 4px solid #10b981;
+          }
+          .total-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #10b981;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            color: #666;
+          }
+          .full-receipt {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            border: 1px solid #ddd;
+          }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .receipt-container { 
+              box-shadow: none; 
+              border-radius: 0;
+              padding: 20px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <div class="header">
+            <div class="logo-container">
+              <img src="/images/logo png.png" alt="Lokal Logo" class="receipt-logo" />
+            </div>
+            <h1>🧾 DIGITAL RECEIPT</h1>
+            <div class="receipt-type">
+              ${receipt.receiptType === 'refund_receipt' ? '💸 REFUND RECEIPT' : '🛒 ORDER RECEIPT'}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>🏪 Store Information</h2>
+            <div class="info-row">
+              <span class="info-label">Store Name:</span>
+              <span class="info-value">${receipt.storeName || 'Unknown Store'}</span>
+            </div>
+            ${storeAddress !== 'Not available' ? `
+            <div class="info-row">
+              <span class="info-label">Address:</span>
+              <span class="info-value">${storeAddress}</span>
+            </div>
+            ` : ''}
+            ${storePhone !== 'Not available' ? `
+            <div class="info-row">
+              <span class="info-label">Phone:</span>
+              <span class="info-value">${storePhone}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="section">
+            <h2>📋 Order Details</h2>
+            <div class="info-row">
+              <span class="info-label">Order ID:</span>
+              <span class="info-value">${receipt.orderId || receipt.id}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Date & Time:</span>
+              <span class="info-value">${formattedDate}</span>
+            </div>
+            ${receipt.paymentMethod ? `
+            <div class="info-row">
+              <span class="info-label">Payment Method:</span>
+              <span class="info-value">${receipt.paymentMethod}</span>
+            </div>
+            ` : ''}
+            ${receipt.deliveryType ? `
+            <div class="info-row">
+              <span class="info-label">Delivery Type:</span>
+              <span class="info-value">${receipt.deliveryType}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="section">
+            <h2>�️ Items Purchased</h2>
+            ${(() => {
+              const items = receipt.items || [];
+              return items.length > 0 
+                ? items.map(item => `
+                    <div class="info-row">
+                      <span class="info-label">${item.name || item.productName || 'Item'} ${item.quantity ? `(${item.quantity})` : ''}</span>
+                      <span class="info-value">${receipt.currency || 'GBP'} ${Number(item.price || item.amount || 0).toFixed(2)}</span>
+                    </div>
+                  `).join('')
+                : '<div class="info-row"><span class="info-label">No items available</span><span class="info-value">-</span></div>';
+            })()}
+          </div>
+
+          <div class="section">
+            <h2>�💰 Payment Summary</h2>
+            ${receipt.subtotal ? `
+            <div class="info-row">
+              <span class="info-label">Subtotal:</span>
+              <span class="info-value">£${Number(receipt.subtotal).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${receipt.serviceFee ? `
+            <div class="info-row">
+              <span class="info-label">Service Fee:</span>
+              <span class="info-value">£${Number(receipt.serviceFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${receipt.deliveryFee ? `
+            <div class="info-row">
+              <span class="info-label">Delivery Fee:</span>
+              <span class="info-value">£${Number(receipt.deliveryFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${receipt.platformFee ? `
+            <div class="info-row">
+              <span class="info-label">Platform Fee:</span>
+              <span class="info-value">£${Number(receipt.platformFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            
+            <div class="total-row">
+              <div class="info-row" style="border: none; margin: 0;">
+                <span class="info-label" style="font-size: 18px;">Total Amount:</span>
+                <span class="total-amount">£${Number(receipt.amount || 0).toFixed(2)}</span>
+              </div>
+              <div style="text-align: right; margin-top: 5px; color: #666; font-size: 14px;">
+                Currency: ${receipt.currency || 'GBP'}
+              </div>
+            </div>
+          </div>
+
+          ${receipt.receiptType === 'refund_receipt' && receipt.refundReason ? `
+          <div class="section">
+            <h2>💸 Refund Details</h2>
+            <div class="info-row">
+              <span class="info-label">Refund Reason:</span>
+              <span class="info-value">${receipt.refundReason}</span>
+            </div>
+          </div>
+          ` : ''}
+
+          ${receipt.receiptContent ? `
+          <div class="section">
+            <h2>📄 Full Receipt</h2>
+            <div class="full-receipt">${receipt.receiptContent}</div>
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            <p><strong>Thank you for your order!</strong></p>
+            <p>Generated on: ${new Date().toLocaleDateString('en-GB', {
+              year: 'numeric',
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create a new window with the HTML content
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = function() {
+      // Set the document title for the PDF filename
+      printWindow.document.title = filename;
+      
+      // Use setTimeout to ensure everything is rendered
+      setTimeout(() => {
+        printWindow.print();
+        // Don't close the window automatically - let user decide
+      }, 500);
+    };
+  };
+
+  // Send receipt via email
+  const sendReceiptViaEmail = (receipt) => {
+    if (!receipt) return;
+
+    // Get current user's email
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (!user || !user.email) {
+      setMessageModal({
+        type: 'warning',
+        title: 'Authentication Required',
+        message: 'Please make sure you are logged in with an email address to send receipts.',
+        primaryButtonText: 'OK'
+      });
+      return;
+    }
+
+    // Check if receipt has payment intent ID for Stripe receipts
+    const paymentIntentId = receipt.paymentIntentId || receipt.paymentId || receipt.chargeId;
+    
+    if (!paymentIntentId) {
+      // Show message for non-Stripe receipts with items
+      const items = receipt.items || [];
+      const itemsDetails = items.length > 0 
+        ? items.map(item => `• ${item.name || item.productName || 'Item'} ${item.quantity ? `(${item.quantity})` : ''} - ${receipt.currency || 'GBP'} ${item.price || item.amount || 0}`)
+        : ['• No items available'];
+
+      setMessageModal({
+        type: 'info',
+        title: 'Non-Stripe Receipt',
+        message: 'This receipt is from a non-Stripe payment and cannot be emailed automatically.',
+        details: [
+          `Order ID: ${receipt.orderId || receipt.orderID || receipt.id || 'Unknown'}`,
+          `Amount: ${receipt.currency || 'GBP'} ${receipt.amount || receipt.totalAmount || 0}`,
+          `Store: ${receipt.storeName || receipt.businessName || 'Store'}`,
+          '',
+          'Items Purchased:',
+          ...itemsDetails
+        ],
+        primaryButtonText: 'Download PDF Instead',
+        secondaryButtonText: 'OK',
+        onPrimaryAction: () => {
+          setMessageModal(null);
+          downloadReceipt(receipt);
+        },
+        onSecondaryAction: () => {
+          setMessageModal(null);
+        }
+      });
+      return;
+    }
+
+    // Show email modal for Stripe receipts
+    setReceiptForEmail(receipt);
+    setShowEmailModal(true);
+  };
+
+  // Handle email send from modal
+  const handleEmailSend = async (email) => {
+    if (!receiptForEmail) return;
+
+    try {
+      setEmailLoading(true);
+      
+      const receiptData = {
+        paymentIntentId: receiptForEmail.paymentIntentId || receiptForEmail.paymentId || receiptForEmail.chargeId,
+        orderId: receiptForEmail.orderId || receiptForEmail.orderID || receiptForEmail.id || 'Unknown',
+        amount: receiptForEmail.amount || receiptForEmail.totalAmount || 0,
+        currency: receiptForEmail.currency || 'GBP',
+        customerEmail: email,
+        customerName: receiptForEmail.customerName || 'Customer',
+        storeName: receiptForEmail.storeName || receiptForEmail.businessName || 'Store',
+        items: receiptForEmail.items || [],
+        receiptData: {
+          ...receiptForEmail,
+          formattedDate: receiptForEmail.timestamp 
+            ? (receiptForEmail.timestamp.toDate ? receiptForEmail.timestamp.toDate() : new Date(receiptForEmail.timestamp)).toLocaleDateString('en-GB', {
+                year: 'numeric',
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            : new Date().toLocaleDateString('en-GB')
+        }
+      };
+
+      const result = await sendManualReceipt(receiptData);
+      
+      if (result.success) {
+        setShowEmailModal(false);
+        setNotification({
+          type: 'success',
+          title: 'Receipt Sent!',
+          message: `Professional receipt has been sent successfully to ${email}`
+        });
+      } else {
+        throw new Error(result.error || 'Failed to send receipt');
+      }
+    } catch (error) {
+      console.error('Error sending receipt via email:', error);
+      setNotification({
+        type: 'error',
+        title: 'Send Failed',
+        message: 'Failed to send receipt via email. Please try again.'
+      });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   // View receipt details
   const viewReceiptDetails = async (receipt) => {
     // Make a copy of the receipt to avoid modifying the original
@@ -106,7 +783,9 @@ function ReceiptsPage() {
           
           if (storeDoc.exists()) {
             const storeData = storeDoc.data();
+            console.log('✅ FOUND STORE DATA IN STORES COLLECTION');
             console.log('Store data from Firestore:', storeData);
+            console.log('Available store fields:', Object.keys(storeData));
             
             // Get store name from store data - force finding the actual store name
             const storeName = storeData.storeName || 
@@ -115,39 +794,101 @@ function ReceiptsPage() {
             
             if (!storeName) {
               console.warn(`No store name found in store document for ID: ${storeId}`);
+            } else {
+              console.log(`✅ Store name found: "${storeName}"`);
             }
             
-            // Update receipt with store information using proper field names
+            // TEMP DEBUG: Log all fields and values to see what's actually in the store document
+            console.log('=== DEBUGGING STORE DOCUMENT ===');
+            console.log('Full storeData object:', storeData);
+            console.log('All field names:', Object.keys(storeData));
+            console.log('Store name fields:', {
+              storeName: storeData.storeName,
+              businessName: storeData.businessName,
+              name: storeData.name
+            });
+            console.log('Address fields:', {
+              storeLocation: storeData.storeLocation,
+              address: storeData.address,
+              businessAddress: storeData.businessAddress,
+              location: storeData.location
+            });
+            console.log('Phone fields:', {
+              phoneNumber: storeData.phoneNumber,
+              phone: storeData.phone,
+              contactNumber: storeData.contactNumber,
+              mobile: storeData.mobile
+            });
+            console.log('=== END DEBUG ===');
+            
+            // Update receipt with store information using EXACT field names from Firestore
             receiptWithStoreInfo = {
               ...receiptWithStoreInfo,
               // Only use actual store data - NEVER fallback to 'Store'
               storeName: storeName || 'Store ID: ' + storeId.substring(0, 8),
-              // Enhanced address detection with multiple field checks
-              storeAddress: storeData.storeLocation || 
-                          storeData.address || 
-                          (storeData.location?.address) || 
-                          storeData.businessAddress ||
-                          '',
-              // Enhanced phone detection with multiple field checks
-              storePhone: storeData.phoneNumber || 
-                         storeData.phone || 
-                         storeData.contactNumber || 
-                         storeData.businessPhone ||
-                         '',
+              // Use storeLocation first since that's where the address actually is
+              storeAddress: storeData.storeLocation || storeData.storeAddress || '',
+              // Use exact Firestore field name - phoneNumber (though it may be empty)
+              storePhone: storeData.phoneNumber || '',
               phoneType: storeData.phoneType || 'work',
-              storeEmail: storeData.email || '',
+              storeEmail: storeData.email || storeData.contactEmail || storeData.businessEmail || '',
               // Include store owner info for better connectivity
               storeOwnerId: storeData.ownerId || storeId,
               storeData: storeData
             };
+            
+            // Debug logging to see what address and phone values were found
+            console.log('Address field check results:', {
+              storeLocation: storeData.storeLocation,
+              address: storeData.address,
+              businessAddress: storeData.businessAddress,
+              storeAddress: storeData.storeAddress,
+              shopAddress: storeData.shopAddress,
+              finalAddress: receiptWithStoreInfo.storeAddress
+            });
+            
+            console.log('Phone field check results:', {
+              phoneNumber: storeData.phoneNumber,
+              phone: storeData.phone,
+              contactNumber: storeData.contactNumber,
+              businessPhone: storeData.businessPhone,
+              storePhone: storeData.storePhone,
+              finalPhone: receiptWithStoreInfo.storePhone
+            });
           } else {
             // If no store document, try to get user profile
             // The storeId might be the user ID of the store owner
+            console.log('❌ NO STORE DOCUMENT FOUND, trying users collection');
             const userDoc = await getDoc(doc(db, 'users', storeId));
             
             if (userDoc.exists()) {
               const userData = userDoc.data();
+              console.log('✅ FOUND USER DATA IN USERS COLLECTION');
               console.log('Store owner data from Firestore:', userData);
+              console.log('User data fields:', Object.keys(userData));
+              
+              const userStoreName = userData.storeName || 
+                                   userData.businessName || 
+                                   userData.displayName;
+              
+              if (userStoreName) {
+                console.log(`✅ Store name from user data: "${userStoreName}"`);
+              } else {
+                console.log('❌ No store name found in user data');
+              }
+              
+              console.log('User address fields:', {
+                storeLocation: userData.storeLocation,
+                address: userData.address,
+                businessAddress: userData.businessAddress,
+                location: userData.location
+              });
+              console.log('User phone fields:', {
+                phoneNumber: userData.phoneNumber,
+                phone: userData.phone,
+                contactNumber: userData.contactNumber,
+                mobile: userData.mobile
+              });
               
               // Update receipt with user information - no fallbacks to 'Store'
               receiptWithStoreInfo = {
@@ -157,18 +898,10 @@ function ReceiptsPage() {
                            userData.businessName || 
                            userData.displayName || 
                            'Seller ID: ' + storeId.substring(0, 8),
-                storeAddress: userData.storeLocation || 
-                           userData.address || 
-                           userData.businessAddress || 
-                           (userData.location?.address) || 
-                           '',
-                storePhone: userData.phoneNumber || 
-                          userData.phone || 
-                          userData.contactNumber || 
-                          userData.businessPhone ||
-                          '',
+                storeAddress: userData.storeLocation || userData.storeAddress || '',
+                storePhone: userData.phoneNumber || '',
                 phoneType: userData.phoneType || 'work',
-                storeEmail: userData.email || '',
+                storeEmail: userData.email || userData.contactEmail || userData.businessEmail || '',
                 storeOwnerId: storeId
               };
             }
@@ -191,25 +924,36 @@ function ReceiptsPage() {
           if (!userStoresSnapshot.empty) {
             // User is a store owner - get their store information
             const storeData = userStoresSnapshot.docs[0].data();
-            console.log('Found store owned by user:', storeData);
+            console.log('✅ FOUND STORE BY USER OWNERSHIP:', storeData);
+            console.log('Store owned by user fields:', Object.keys(storeData));
+            
+            const ownedStoreName = storeData.storeName || storeData.businessName || storeData.name;
+            if (ownedStoreName) {
+              console.log(`✅ Store name from owned store: "${ownedStoreName}"`);
+            }
+            
+            console.log('Owned store address fields:', {
+              storeLocation: storeData.storeLocation,
+              address: storeData.address,
+              businessAddress: storeData.businessAddress,
+              location: storeData.location
+            });
+            console.log('Owned store phone fields:', {
+              phoneNumber: storeData.phoneNumber,
+              phone: storeData.phone,
+              contactNumber: storeData.contactNumber,
+              mobile: storeData.mobile
+            });
             
             // Use the store information to enhance the receipt - no fallbacks
             receiptWithStoreInfo = {
               ...receiptWithStoreInfo,
               storeId: userStoresSnapshot.docs[0].id,
               storeName: storeData.storeName || storeData.businessName || storeData.name || 'Store ID: ' + userStoresSnapshot.docs[0].id.substring(0, 8),
-              storeAddress: storeData.storeLocation || 
-                           storeData.address || 
-                           storeData.businessAddress || 
-                           (storeData.location?.address) || 
-                           '',
-              storePhone: storeData.phoneNumber || 
-                         storeData.phone || 
-                         storeData.contactNumber || 
-                         storeData.businessPhone ||
-                         '',
+              storeAddress: storeData.storeLocation || storeData.storeAddress || '',
+              storePhone: storeData.phoneNumber || '',
               phoneType: storeData.phoneType || 'work',
-              storeEmail: storeData.email || '',
+              storeEmail: storeData.email || storeData.contactEmail || storeData.businessEmail || '',
               storeData: storeData
             };
           } else {
@@ -226,19 +970,10 @@ function ReceiptsPage() {
                 receiptWithStoreInfo = {
                   ...receiptWithStoreInfo,
                   storeName: userData.storeName || userData.businessName || userData.displayName || 'User ID: ' + userId.substring(0, 8),
-                  storeAddress: userData.storeLocation || 
-                               userData.address || 
-                               userData.businessAddress || 
-                               (userData.location?.address) || 
-                               (typeof userData.location === 'string' ? userData.location : '') || 
-                               '',
-                  storePhone: userData.phoneNumber || 
-                             userData.phone || 
-                             userData.contactNumber || 
-                             userData.businessPhone ||
-                             '',
+                  storeAddress: userData.storeLocation || userData.storeAddress || '',
+                  storePhone: userData.phoneNumber || '',
                   phoneType: userData.phoneType || 'personal',
-                  storeEmail: userData.email || ''
+                  storeEmail: userData.email || userData.contactEmail || userData.businessEmail || ''
                 };
               }
             }
@@ -338,6 +1073,26 @@ function ReceiptsPage() {
     receiptWithStoreInfo.deliveryFee = Number(receiptWithStoreInfo.deliveryFee || 0);
     receiptWithStoreInfo.platformFee = Number(receiptWithStoreInfo.platformFee || 0);
     receiptWithStoreInfo.subtotal = Number(receiptWithStoreInfo.subtotal || 0);
+    
+    // DEBUG: Log the actual store data from Firestore to see what fields are available
+    if (receiptWithStoreInfo.storeData) {
+      console.log("=== ACTUAL STORE DATA FROM FIRESTORE ===");
+      console.log("Full store document:", receiptWithStoreInfo.storeData);
+      console.log("Available fields:", Object.keys(receiptWithStoreInfo.storeData));
+      console.log("=== ADDRESS FIELD VALUES ===");
+      Object.keys(receiptWithStoreInfo.storeData).forEach(key => {
+        if (key.toLowerCase().includes('address') || key.toLowerCase().includes('location')) {
+          console.log(`${key}:`, receiptWithStoreInfo.storeData[key]);
+        }
+      });
+      console.log("=== PHONE FIELD VALUES ===");
+      Object.keys(receiptWithStoreInfo.storeData).forEach(key => {
+        if (key.toLowerCase().includes('phone') || key.toLowerCase().includes('mobile') || key.toLowerCase().includes('tel')) {
+          console.log(`${key}:`, receiptWithStoreInfo.storeData[key]);
+        }
+      });
+      console.log("=== END DEBUG ===");
+    }
     
     // Log the final store information to verify we have the data
     console.log("Final receipt store information:", {
@@ -769,36 +1524,36 @@ function ReceiptsPage() {
           </h1>
           
           <button 
-            onClick={() => {
-              setLoading(true);
-              setTimeout(async () => {
-                try {
-                  // Reload the page to ensure fresh data
-                  window.location.reload();
-                } catch (error) {
-                  console.error("Error refreshing receipts:", error);
-                  setLoading(false);
-                }
-              }, 100);
-            }}
+            onClick={refreshReceipts}
+            disabled={loading}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               padding: '0.5rem 0.75rem',
-              backgroundColor: '#4f46e5',
+              backgroundColor: loading ? '#9ca3af' : '#4f46e5',
               color: 'white',
               border: 'none',
               borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+              opacity: loading ? 0.7 : 1
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="16" 
+              height="16" 
+              fill="currentColor" 
+              viewBox="0 0 16 16"
+              style={{
+                animation: loading ? 'spin 1s linear infinite' : 'none'
+              }}
+            >
               <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
               <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
             </svg>
-            Refresh Receipts
+            {loading ? 'Refreshing...' : 'Refresh Receipts'}
           </button>
         </div>
         
@@ -1178,58 +1933,12 @@ function ReceiptsPage() {
                       fontSize: '1.3rem', 
                       fontWeight: '700',
                       color: '#111827',
-                      marginBottom: '0.5rem',
+                      marginBottom: '0.75rem',
                       borderBottom: '1px solid #e5e7eb',
                       paddingBottom: '0.5rem'
                     }}>
                       {/* Only display actual store name, no fallbacks */}
                       {selectedReceipt.storeName}
-                    </div>
-                    
-                    {/* Store Contact Details - Always show section, with message if no details */}
-                    <div style={{
-                      fontSize: '0.9rem',
-                      color: '#4b5563'
-                    }}>
-                      {selectedReceipt.storeAddress ? (
-                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                          <span role="img" aria-label="address" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📍</span>
-                          <span>{selectedReceipt.storeAddress}</span>
-                        </div>
-                      ) : (
-                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af' }}>
-                          <span role="img" aria-label="no address" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📍</span>
-                          <span>Address not provided</span>
-                        </div>
-                      )}
-                      
-                      {selectedReceipt.storePhone ? (
-                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span role="img" aria-label="phone" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>
-                            {selectedReceipt.phoneType === 'personal' ? '📱' : '📞'}
-                          </span>
-                          <span>
-                            {selectedReceipt.storePhone} 
-                            {selectedReceipt.phoneType && (
-                              <span style={{ fontSize: '0.85rem', color: '#6b7280', marginLeft: '0.5rem' }}>
-                                ({selectedReceipt.phoneType === 'personal' ? 'Personal' : 'Work'})
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      ) : (
-                        <div style={{ marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af' }}>
-                          <span role="img" aria-label="no phone" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📞</span>
-                          <span>No phone number available</span>
-                        </div>
-                      )}
-                      
-                      {selectedReceipt.storeEmail && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span role="img" aria-label="email" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>✉️</span>
-                          <span>{selectedReceipt.storeEmail}</span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Business Information Section */}
@@ -1279,6 +1988,80 @@ function ReceiptsPage() {
               </div>
               <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                 Order #{selectedReceipt.orderId}
+              </div>
+              
+              {/* Store Contact Details - Display after store information */}
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.75rem',
+                backgroundColor: '#f9fafb',
+                borderRadius: '0.375rem',
+                fontSize: '0.9rem',
+                color: '#4b5563'
+              }}>
+                {/* Address - Primary field is storeLocation, fallback to storeAddress */}
+                {(() => {
+                  const storeData = selectedReceipt.storeData;
+                  let address = '';
+                  
+                  // Check direct receipt fields first
+                  if (selectedReceipt.storeAddress) {
+                    address = selectedReceipt.storeAddress;
+                  }
+                  
+                  // If no address in receipt, check storeData (which comes from actual store document)
+                  if (!address && storeData) {
+                    address = storeData.storeLocation || storeData.storeAddress || '';
+                  }
+                  
+                  return address ? (
+                    <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                      <span role="img" aria-label="address" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>📍</span>
+                      <span>{address}</span>
+                    </div>
+                  ) : null;
+                })()}
+                
+                {/* Phone - Primary field is phoneNumber */}
+                {(() => {
+                  const storeData = selectedReceipt.storeData;
+                  let phone = '';
+                  let phoneType = 'work';
+                  
+                  // Check direct receipt fields first
+                  if (selectedReceipt.storePhone) {
+                    phone = selectedReceipt.storePhone;
+                    phoneType = selectedReceipt.phoneType || 'work';
+                  }
+                  
+                  // If no phone in receipt, check storeData (which comes from actual store document)
+                  if (!phone && storeData) {
+                    phone = storeData.phoneNumber || '';
+                    phoneType = storeData.phoneType || 'work';
+                  }
+                  
+                  return phone ? (
+                    <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span role="img" aria-label="phone" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>
+                        {phoneType === 'personal' ? '📱' : '📞'}
+                      </span>
+                      <span>
+                        {phone}
+                        <span style={{ fontSize: '0.85rem', color: '#6b7280', marginLeft: '0.5rem' }}>
+                          ({phoneType === 'personal' ? 'Personal' : 'Work'})
+                        </span>
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
+                
+                {/* Email */}
+                {selectedReceipt.storeEmail && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span role="img" aria-label="email" style={{ fontSize: '1rem', minWidth: '1.2rem' }}>✉️</span>
+                    <span>{selectedReceipt.storeEmail}</span>
+                  </div>
+                )}
               </div>
               
               {selectedReceipt.isRegenerated && (
@@ -1482,7 +2265,46 @@ function ReceiptsPage() {
               </div>
             )}
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => downloadReceipt(selectedReceipt)}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <span>�</span>
+                Download PDF
+              </button>
+              <button
+                onClick={() => sendReceiptViaEmail(selectedReceipt)}
+                disabled={loading}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  backgroundColor: loading ? '#9ca3af' : '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <span>📧</span>
+                {loading ? 'Sending...' : 'Send via Email'}
+              </button>
               <button
                 onClick={closeReceiptModal}
                 style={{
@@ -1501,6 +2323,52 @@ function ReceiptsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Email Receipt Modal */}
+      <EmailReceiptModal
+        isOpen={showEmailModal}
+        onClose={() => {
+          setShowEmailModal(false);
+          setReceiptForEmail(null);
+          setEmailLoading(false);
+        }}
+        onSend={handleEmailSend}
+        isLoading={emailLoading}
+        defaultEmail={currentUser?.email || ''}
+        receiptDetails={receiptForEmail ? {
+          orderId: receiptForEmail.orderId || receiptForEmail.orderID || receiptForEmail.id || 'Unknown',
+          storeName: receiptForEmail.storeName || receiptForEmail.businessName || 'Store',
+          amount: receiptForEmail.amount || receiptForEmail.totalAmount || 0,
+          currency: receiptForEmail.currency || 'GBP'
+        } : {}}
+      />
+
+      {/* Message Modal */}
+      {messageModal && (
+        <MessageModal
+          isOpen={true}
+          onClose={() => setMessageModal(null)}
+          type={messageModal.type}
+          title={messageModal.title}
+          message={messageModal.message}
+          details={messageModal.details}
+          primaryButtonText={messageModal.primaryButtonText}
+          secondaryButtonText={messageModal.secondaryButtonText}
+          onPrimaryAction={messageModal.onPrimaryAction}
+          onSecondaryAction={messageModal.onSecondaryAction}
+        />
+      )}
+
+      {/* Notification Toast */}
+      {notification && (
+        <NotificationToast
+          isVisible={true}
+          onClose={() => setNotification(null)}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+        />
       )}
     </div>
   );

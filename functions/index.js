@@ -11,12 +11,12 @@ const {setGlobalOptions} = require("firebase-functions/v2");
 const {onRequest} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 
-// Set global options for v2 functions
-setGlobalOptions({
-  maxInstances: 10,
-  timeoutSeconds: 60,
-  memory: "256MiB"
-});
+// Set global options for v2 functions - temporarily commented out
+// setGlobalOptions({
+//   maxInstances: 10,
+//   timeoutSeconds: 60,
+//   memory: "256MiB"
+// });
 
 // Create and deploy your first functions
 // https://firebase.google.com/docs/functions/get-started
@@ -34,19 +34,14 @@ exports.helloWorld = onRequest((request, response) => {
 
 // Import the boost store functions
 const boostStoreFunctions = require('./boost-store-function');
-
-// Import the delete user functions
-const deleteUserFunctions = require('./delete-user-function');
-
-// Import the store buyer receipt functions
-const storeBuyerReceiptFunction = require('./store-buyer-receipt');
+const stripeReceiptFunctions = require('./stripe-receipt-function');
 
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
 exports.expireStoreBoosts = boostStoreFunctions.expireStoreBoosts;
 
-// Export the delete user functions
-exports.deleteUserAccount = deleteUserFunctions.deleteUserAccount;
-
-// Export the store buyer receipt functions
-exports.storeBuyerReceipt = storeBuyerReceiptFunction.storeBuyerReceipt;
+// Export Stripe receipt functions
+exports.createPaymentIntentWithReceipt = stripeReceiptFunctions.createPaymentIntentWithReceipt;
+exports.sendStripeReceipt = stripeReceiptFunctions.sendStripeReceipt;
+exports.sendCustomReceipt = stripeReceiptFunctions.sendCustomReceipt;
+exports.handleStripeWebhook = stripeReceiptFunctions.handleStripeWebhook;

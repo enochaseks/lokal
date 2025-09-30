@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 
 // Initialize admin if not already initialized
@@ -108,10 +109,8 @@ exports.updateStoreBoostStatus = functions.https.onCall(async (data, context) =>
  * Function to expire store boosts automatically
  * This is triggered on a schedule (daily at midnight)
  */
-exports.expireStoreBoosts = functions.pubsub.schedule('0 0 * * *') // Run at midnight every day
-  .timeZone('UTC')
-  .onRun(async (context) => {
-    try {
+exports.expireStoreBoosts = onSchedule('0 0 * * *', async (event) => {
+  try {
       const now = admin.firestore.Timestamp.now();
       
       // Query for all stores with expired boosts
@@ -138,9 +137,9 @@ exports.expireStoreBoosts = functions.pubsub.schedule('0 0 * * *') // Run at mid
         console.log(`Successfully expired ${expiredBoostsSnapshot.size} store boosts`);
       }
       
-      return null;
-    } catch (error) {
-      console.error('Error expiring store boosts:', error);
-      return null;
-    }
-  });
+    return null;
+  } catch (error) {
+    console.error('Error expiring store boosts:', error);
+    return null;
+  }
+});

@@ -4,14 +4,39 @@ import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, addDoc, serverTimestamp, getDocs, limit } from 'firebase/firestore';
+import { sendManualReceipt, sendCustomReceipt } from '../utils/stripeReceipts';
+import EmailReceiptModal from '../components/EmailReceiptModal';
+import NotificationToast from '../components/NotificationToast';
+import MessageModal from '../components/MessageModal';
 
 function ReportsPage() {
-  // Define CSS animation for the spinner
+  // Define CSS animation for the spinner and responsive styles
   const spinnerStyle = document.createElement('style');
   spinnerStyle.textContent = `
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+    
+    /* Responsive table styles */
+    @media (max-width: 768px) {
+      .reports-table th, .reports-table td {
+        padding: 0.5rem !important;
+        font-size: 0.75rem !important;
+      }
+      .reports-table {
+        font-size: 0.75rem !important;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .reports-table th, .reports-table td {
+        padding: 0.375rem !important;
+        font-size: 0.7rem !important;
+      }
+      .reports-table th:nth-child(n+5), .reports-table td:nth-child(n+5) {
+        display: none; /* Hide non-essential columns on very small screens */
+      }
     }
   `;
   document.head.appendChild(spinnerStyle);
@@ -26,6 +51,13 @@ function ReportsPage() {
   const [loadingRefunds, setLoadingRefunds] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [storeRefundsEnabled, setStoreRefundsEnabled] = useState(false);
+  
+  // Modal states for email receipt functionality
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [receiptForEmail, setReceiptForEmail] = useState(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [messageModal, setMessageModal] = useState(null);
   const [regeneratedReceipts, setRegeneratedReceipts] = useState(() => {
     // Initialize from localStorage if available
     try {
@@ -77,13 +109,132 @@ function ReportsPage() {
       // Set receipt type accordingly
       setReceiptType(isRefund ? 'refund' : 'order');
       
+      // Get items using the same comprehensive fetching logic as regenerateReceipt
+      const orderId = transaction.orderId || transaction.id || 'Unknown';
+      console.log('Preview - Working with orderId:', orderId, 'transaction:', transaction);
+      
+      // Enhanced function to fetch items from multiple sources (same as regenerateReceipt)
+      const fetchOrderItemsForPreview = async (orderId, transactionItems) => {
+        // If we already have items, return them
+        if (transactionItems && transactionItems.length > 0) {
+          console.log('Preview - Using items from transaction:', transactionItems.length);
+          return transactionItems;
+        }
+
+        if (!orderId || orderId === 'Unknown') {
+          console.log('Preview - No valid orderId for item fetching');
+          return [];
+        }
+
+        console.log('Preview - Fetching items for orderId:', orderId);
+
+        // Try multiple sources for items
+        try {
+          // 1. Check transactions collection
+          const transactionQuery = query(
+            collection(db, 'transactions'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const transactionSnapshot = await getDocs(transactionQuery);
+          if (!transactionSnapshot.empty) {
+            const transactionDoc = transactionSnapshot.docs[0].data();
+            if (transactionDoc.items && transactionDoc.items.length > 0) {
+              console.log('Preview - Found items in transactions collection:', transactionDoc.items.length);
+              return transactionDoc.items;
+            }
+          }
+
+          // 2. Check payments collection
+          const paymentsQuery = query(
+            collection(db, 'payments'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const paymentsSnapshot = await getDocs(paymentsQuery);
+          if (!paymentsSnapshot.empty) {
+            const paymentDoc = paymentsSnapshot.docs[0].data();
+            if (paymentDoc.items && paymentDoc.items.length > 0) {
+              console.log('Preview - Found items in payments collection:', paymentDoc.items.length);
+              return paymentDoc.items;
+            }
+          }
+
+          // 3. Check messages collection for payment_completed messages
+          const messagesQuery = query(
+            collection(db, 'messages'),
+            where('orderId', '==', orderId),
+            where('messageType', 'in', ['payment_completed', 'payment_notification']),
+            limit(1)
+          );
+          
+          const messagesSnapshot = await getDocs(messagesQuery);
+          if (!messagesSnapshot.empty) {
+            const messageDoc = messagesSnapshot.docs[0].data();
+            if (messageDoc.orderData?.items && messageDoc.orderData.items.length > 0) {
+              console.log('Preview - Found items in messages.orderData:', messageDoc.orderData.items.length);
+              return messageDoc.orderData.items;
+            }
+            if (messageDoc.paymentData?.items && messageDoc.paymentData.items.length > 0) {
+              console.log('Preview - Found items in messages.paymentData:', messageDoc.paymentData.items.length);
+              return messageDoc.paymentData.items;
+            }
+          }
+
+          // 4. Check orders collection
+          const ordersQuery = query(
+            collection(db, 'orders'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const ordersSnapshot = await getDocs(ordersQuery);
+          if (!ordersSnapshot.empty) {
+            const orderDoc = ordersSnapshot.docs[0].data();
+            if (orderDoc.items && orderDoc.items.length > 0) {
+              console.log('Preview - Found items in orders collection:', orderDoc.items.length);
+              return orderDoc.items;
+            }
+          }
+
+          // 5. Check orderStates collection
+          const orderStatesQuery = query(
+            collection(db, 'orderStates'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const orderStatesSnapshot = await getDocs(orderStatesQuery);
+          if (!orderStatesSnapshot.empty) {
+            const orderStateDoc = orderStatesSnapshot.docs[0].data();
+            if (orderStateDoc.items && orderStateDoc.items.length > 0) {
+              console.log('Preview - Found items in orderStates collection:', orderStateDoc.items.length);
+              return orderStateDoc.items;
+            }
+          }
+
+          console.log('Preview - No items found in any collection for orderId:', orderId);
+          return [];
+          
+        } catch (error) {
+          console.error('Preview - Error fetching order items:', error);
+          return [];
+        }
+      };
+
+      // Fetch items before creating preview
+      const previewItems = await fetchOrderItemsForPreview(orderId, transaction.items);
+      console.log('Preview - Final previewItems result:', previewItems.length, 'items:', previewItems);
+      
       // Set initial preview data, ensuring no undefined values
       const preview = {
         id: transaction.id,
-        orderId: transaction.orderId || transaction.id,
+        orderId: orderId,
         customerId: transaction.customerId,
         customerName: transaction.customerName || 'Unknown Customer',
-        items: transaction.items || [],
+        items: previewItems,
         currency: transaction.currency || 'GBP',
         amount: transaction.amount || transaction.totalAmount || 0,
         totalAmount: transaction.totalAmount || transaction.amount || 0,
@@ -185,61 +336,6 @@ function ReportsPage() {
           }
         } catch (error) {
           console.error('Error fetching order items from orders collection:', error);
-        }
-        
-        // If still no items, try transactions collection
-        if (!preview.items || preview.items.length === 0) {
-          try {
-            console.log("No items found in orders, trying transactions collection");
-            const transactionQuery = query(
-              collection(db, 'transactions'),
-              where('orderId', '==', transaction.orderId),
-              where('type', '==', 'payment'),
-              limit(1)
-            );
-            
-            const transactionSnapshot = await getDocs(transactionQuery);
-            if (!transactionSnapshot.empty) {
-              const transactionData = transactionSnapshot.docs[0].data();
-              console.log("Found transaction with orderId:", transaction.orderId);
-              
-              if (transactionData.items && transactionData.items.length > 0) {
-                console.log("Retrieved items from transactions collection:", transactionData.items.length);
-                preview.items = transactionData.items;
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching order items from transactions collection:', error);
-          }
-        }
-        
-        // If still no items, try messages collection
-        if (!preview.items || preview.items.length === 0) {
-          try {
-            console.log("Still no items, checking messages collection");
-            const messagesQuery = query(
-              collection(db, 'messages'),
-              where('orderData.orderId', '==', transaction.orderId),
-              where('messageType', 'in', ['payment_completed', 'payment_notification', 'order_confirmed']),
-              limit(1)
-            );
-            
-            const messagesSnapshot = await getDocs(messagesQuery);
-            if (!messagesSnapshot.empty) {
-              const messageData = messagesSnapshot.docs[0].data();
-              console.log("Found message with order data");
-              
-              if (messageData.orderData && messageData.orderData.items && messageData.orderData.items.length > 0) {
-                console.log("Retrieved items from message.orderData:", messageData.orderData.items.length);
-                preview.items = messageData.orderData.items;
-              } else if (messageData.paymentData && messageData.paymentData.items && messageData.paymentData.items.length > 0) {
-                console.log("Retrieved items from message.paymentData:", messageData.paymentData.items.length);
-                preview.items = messageData.paymentData.items;
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching order items from messages collection:', error);
-          }
         }
       }
       
@@ -461,9 +557,14 @@ function ReportsPage() {
         // Log store name from custom data for debugging
         console.log("Store name from custom data:", storeName);
         
-        // Add to orderData when using custom data
+        // Add comprehensive store information to orderData when using custom data
         orderData.storeName = storeName;
         orderData.storePhone = storePhone;
+        orderData.storeAddress = editableReceiptData.storeAddress || "";
+        orderData.storeEmail = editableReceiptData.storeEmail || "";
+        orderData.storeBusinessId = editableReceiptData.storeBusinessId || "";
+        orderData.storeRegistrationNumber = editableReceiptData.storeRegistrationNumber || "";
+        orderData.storeVatNumber = editableReceiptData.storeVatNumber || "";
         
         console.log("Using custom store name:", storeName);
         console.log("Using custom delivery method:", deliveryMethod);
@@ -483,7 +584,10 @@ function ReportsPage() {
             storePhone = storeData.phone || 
                         storeData.phoneNumber || 
                         storeData.contactNumber || 
-                        storeData.businessPhone || 
+                        storeData.businessPhone ||
+                        storeData.storePhone ||
+                        storeData.contactPhone ||
+                        storeData.mobile ||
                         "";
             
             console.log("Successfully fetched store name from Firestore:", storeName);
@@ -493,15 +597,18 @@ function ReportsPage() {
             let storeRegistrationNumber = '';
             let storeVatNumber = '';
             
-            // Enhanced address detection with multiple field paths
+            // Enhanced address detection with comprehensive field paths
             let storeAddress = storeData.storeLocation || 
                              storeData.address || 
                              storeData.businessAddress || 
+                             storeData.storeAddress ||
                              (storeData.location?.address) || 
                              (typeof storeData.location === 'string' ? storeData.location : '') ||
+                             storeData.fullAddress ||
+                             storeData.streetAddress ||
                              '';
                              
-            let storeEmail = storeData.email || storeData.businessEmail || '';
+            let storeEmail = storeData.email || storeData.contactEmail || storeData.businessEmail || '';
             
             // Extract registration/VAT numbers if they exist in the business ID format
             if (storeBusinessId) {
@@ -602,6 +709,125 @@ function ReportsPage() {
           .replace(/\b\w/g, c => c.toUpperCase());
       };
       
+      // Enhanced function to fetch items from multiple sources
+      const fetchOrderItems = async (orderId, transactionItems) => {
+        // If we already have items, return them
+        if (transactionItems && transactionItems.length > 0) {
+          console.log('Using items from transaction:', transactionItems.length);
+          return transactionItems;
+        }
+
+        if (!orderId || orderId === 'Unknown') {
+          console.log('No valid orderId for item fetching');
+          return [];
+        }
+
+        console.log('Fetching items for orderId:', orderId);
+
+        // Try multiple sources for items
+        try {
+          // 1. Check transactions collection
+          const transactionQuery = query(
+            collection(db, 'transactions'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const transactionSnapshot = await getDocs(transactionQuery);
+          if (!transactionSnapshot.empty) {
+            const transactionDoc = transactionSnapshot.docs[0].data();
+            if (transactionDoc.items && transactionDoc.items.length > 0) {
+              console.log('Found items in transactions collection:', transactionDoc.items.length);
+              return transactionDoc.items;
+            }
+          }
+
+          // 2. Check payments collection
+          const paymentsQuery = query(
+            collection(db, 'payments'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const paymentsSnapshot = await getDocs(paymentsQuery);
+          if (!paymentsSnapshot.empty) {
+            const paymentDoc = paymentsSnapshot.docs[0].data();
+            if (paymentDoc.items && paymentDoc.items.length > 0) {
+              console.log('Found items in payments collection:', paymentDoc.items.length);
+              return paymentDoc.items;
+            }
+          }
+
+          // 3. Check messages collection for payment_completed messages
+          const messagesQuery = query(
+            collection(db, 'messages'),
+            where('orderId', '==', orderId),
+            where('messageType', 'in', ['payment_completed', 'payment_notification']),
+            limit(1)
+          );
+          
+          const messagesSnapshot = await getDocs(messagesQuery);
+          if (!messagesSnapshot.empty) {
+            const messageDoc = messagesSnapshot.docs[0].data();
+            if (messageDoc.orderData?.items && messageDoc.orderData.items.length > 0) {
+              console.log('Found items in messages.orderData:', messageDoc.orderData.items.length);
+              return messageDoc.orderData.items;
+            }
+            if (messageDoc.paymentData?.items && messageDoc.paymentData.items.length > 0) {
+              console.log('Found items in messages.paymentData:', messageDoc.paymentData.items.length);
+              return messageDoc.paymentData.items;
+            }
+          }
+
+          // 4. Check orders collection
+          const ordersQuery = query(
+            collection(db, 'orders'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const ordersSnapshot = await getDocs(ordersQuery);
+          if (!ordersSnapshot.empty) {
+            const orderDoc = ordersSnapshot.docs[0].data();
+            if (orderDoc.items && orderDoc.items.length > 0) {
+              console.log('Found items in orders collection:', orderDoc.items.length);
+              return orderDoc.items;
+            }
+          }
+
+          // 5. Check orderStates collection
+          const orderStatesQuery = query(
+            collection(db, 'orderStates'),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          
+          const orderStatesSnapshot = await getDocs(orderStatesQuery);
+          if (!orderStatesSnapshot.empty) {
+            const orderStateDoc = orderStatesSnapshot.docs[0].data();
+            if (orderStateDoc.items && orderStateDoc.items.length > 0) {
+              console.log('Found items in orderStates collection:', orderStateDoc.items.length);
+              return orderStateDoc.items;
+            }
+          }
+
+          console.log('No items found in any collection for orderId:', orderId);
+          return [];
+          
+        } catch (error) {
+          console.error('Error fetching order items:', error);
+          return [];
+        }
+      };
+
+      // Get the orderId for item fetching
+      const orderId = transaction.orderId || transaction.id || 'Unknown';
+      console.log('RegenerateReceipt - Working with orderId:', orderId, 'transaction:', transaction);
+      
+      // Fetch items before creating orderData
+      const orderItems = await fetchOrderItems(orderId, transaction.items);
+      console.log('Final orderItems result:', orderItems.length, 'items:', orderItems);
+      
       // Initial order data from the transaction or edited data
       let orderData;
       
@@ -609,10 +835,10 @@ function ReportsPage() {
         // Use the custom edited data provided by the user
         orderData = {
           // Order details
-          orderId: editableReceiptData.orderId || transaction.orderId || transaction.id || 'Unknown',
+          orderId: editableReceiptData.orderId || orderId,
           customerId: editableReceiptData.customerId || transaction.customerId || 'Unknown',
           customerName: editableReceiptData.customerName || transaction.customerName || 'Customer',
-          items: editableReceiptData.items || transaction.items || [],
+          items: editableReceiptData.items || orderItems,
           totalAmount: Math.abs(editableReceiptData.amount || editableReceiptData.totalAmount || 
                               transaction.amount || transaction.totalAmount) || 0,
           currency: editableReceiptData.currency || transaction.currency || 'GBP',
@@ -642,10 +868,10 @@ function ReportsPage() {
         // Use transaction data with Firestore enrichment
         orderData = {
           // Order details
-          orderId: transaction.orderId || transaction.id || 'Unknown',
+          orderId: orderId,
           customerId: transaction.customerId || 'Unknown',
           customerName: transaction.customerName || 'Customer',
-          items: transaction.items || [],
+          items: orderItems,
           totalAmount: Math.abs(transaction.amount || transaction.totalAmount) || 0,
           currency: transaction.currency || 'GBP',
           refundReason: isRefund ? (transaction.refundReason || 'Not specified') : null,
@@ -692,9 +918,6 @@ function ReportsPage() {
             // Get customer information
             orderData.customerId = orderDoc.customerId || orderData.customerId;
             orderData.customerName = orderDoc.customerName || orderData.customerName;
-            
-            // Get order items
-            orderData.items = orderDoc.items && orderDoc.items.length > 0 ? orderDoc.items : orderData.items;
             
             // Get delivery details - only update address, keep our already fetched delivery method
             orderData.deliveryAddress = orderDoc.deliveryAddress || orderDoc.shippingAddress || orderData.deliveryAddress;
@@ -802,8 +1025,6 @@ function ReportsPage() {
           const transactionSnapshot = await getDocs(transactionQuery);
           if (!transactionSnapshot.empty) {
             const transactionDoc = transactionSnapshot.docs[0].data();
-            // Get order items
-            orderData.items = transactionDoc.items && transactionDoc.items.length > 0 ? transactionDoc.items : orderData.items;
             
             // Get pricing details
             orderData.subtotal = transactionDoc.subtotal || orderData.subtotal;
@@ -834,9 +1055,6 @@ function ReportsPage() {
               // Get data from orderData if it exists
               if (messageDoc.orderData) {
                 // Get items
-                orderData.items = messageDoc.orderData.items && messageDoc.orderData.items.length > 0 ? 
-                    messageDoc.orderData.items : orderData.items;
-                
                 // Keep storeId if needed but don't override our Firestore-fetched store name
                 orderData.storeId = orderData.storeId || messageDoc.orderData.storeId || messageDoc.orderData.sellerId || 
                     messageDoc.orderData.sellerUid;
@@ -855,10 +1073,6 @@ function ReportsPage() {
               } 
               // Try paymentData as an alternative
               else if (messageDoc.paymentData) {
-                // Get items
-                orderData.items = messageDoc.paymentData.items && messageDoc.paymentData.items.length > 0 ? 
-                    messageDoc.paymentData.items : orderData.items;
-                
                 // Keep storeId if needed but don't override our Firestore-fetched store name
                 orderData.storeId = orderData.storeId || messageDoc.paymentData.storeId || messageDoc.paymentData.sellerId || 
                     messageDoc.paymentData.sellerUid;
@@ -1166,24 +1380,37 @@ For any questions regarding this order, please contact the seller.`,
         messageRef: docRef.id,
         // Store information with comprehensive data
         storeName: orderData.storeName || storeName || currentUser.displayName || "",
-        // Ensure address is included by checking all possible fields
+        // Ensure address is included by checking all possible fields with comprehensive fallbacks
         storeAddress: orderData.storeAddress || 
                      orderData.sellerAddress || 
                      orderData.businessAddress || 
+                     orderData.storeLocation ||
                      (orderData.storeData?.address) || 
-                     (orderData.storeData?.storeLocation) || 
+                     (orderData.storeData?.storeLocation) ||
+                     (orderData.storeData?.businessAddress) ||
+                     (orderData.storeData?.location?.address) ||
+                     (typeof orderData.storeData?.location === 'string' ? orderData.storeData.location : '') ||
+                     (orderData.storeData?.fullAddress) ||
+                     (orderData.storeData?.streetAddress) ||
                      null,
-        // Ensure phone number is included by checking all possible fields
+        // Ensure phone number is included by checking all possible fields with comprehensive fallbacks
         storePhone: orderData.storePhone || 
                    orderData.sellerPhone || 
                    orderData.businessPhone || 
                    orderData.contactNumber || 
                    (orderData.storeData?.phone) || 
-                   (orderData.storeData?.phoneNumber) || 
+                   (orderData.storeData?.phoneNumber) ||
+                   (orderData.storeData?.contactNumber) ||
+                   (orderData.storeData?.businessPhone) ||
+                   (orderData.storeData?.storePhone) ||
+                   (orderData.storeData?.contactPhone) ||
+                   (orderData.storeData?.mobile) ||
                    null,
         storeEmail: orderData.storeEmail || 
                    orderData.sellerEmail || 
                    (orderData.storeData?.email) || 
+                   (orderData.storeData?.contactEmail) ||
+                   (orderData.storeData?.businessEmail) ||
                    null,
         storeRegistrationNumber: orderData.storeRegistrationNumber || null,
         storeVatNumber: orderData.storeVatNumber || null,
@@ -1302,6 +1529,425 @@ For any questions regarding this order, please contact the seller.`,
     } catch (error) {
       console.error('Error generating receipt:', error);
       alert('Failed to generate receipt. Please try again.');
+    }
+  };
+
+  // Download receipt as PDF
+  const downloadReceipt = (transaction) => {
+    if (!transaction) return;
+
+    // Create receipt date
+    const receiptDate = transaction.timestamp 
+      ? (transaction.timestamp.toDate ? transaction.timestamp.toDate() : new Date(transaction.timestamp))
+      : new Date();
+    
+    const formattedDate = receiptDate.toLocaleDateString('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Get store address and phone info
+    let storeAddress = 'Not available';
+    let storePhone = 'Not available';
+    
+    if (transaction.storeData) {
+      storeAddress = transaction.storeData.storeLocation || 
+                     transaction.storeData.storeAddress || 
+                     transaction.storeData.address || 
+                     'Not available';
+      
+      storePhone = transaction.storeData.phoneNumber || 
+                   transaction.storeData.phone || 
+                   'Not available';
+    }
+
+    // Generate filename
+    const receiptType = transaction.receiptType === 'refund_receipt' ? 'Refund' : 'Receipt';
+    const storeName = (transaction.storeName || transaction.businessName || 'Store').replace(/[^a-zA-Z0-9]/g, '_');
+    const orderId = (transaction.orderId || transaction.orderID || transaction.id || 'Unknown').substring(0, 8);
+    const dateStr = receiptDate.toISOString().split('T')[0];
+    const filename = `${receiptType}_${storeName}_${orderId}_${dateStr}`;
+
+    // Prepare items section
+    const items = transaction.items || [];
+    const itemsHtml = items.length > 0 
+      ? items.map(item => `
+          <div class="info-row">
+            <span class="info-label">${item.name || item.productName || 'Item'} ${item.quantity ? `(${item.quantity})` : ''}</span>
+            <span class="info-value">${transaction.currency || 'GBP'} ${Number(item.price || item.amount || 0).toFixed(2)}</span>
+          </div>
+        `).join('')
+      : '<div class="info-row"><span class="info-label">No items available</span><span class="info-value">-</span></div>';
+
+    // Create HTML content for PDF
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${filename}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          .receipt-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .logo-container {
+            margin-bottom: 15px;
+          }
+          .receipt-logo {
+            height: 60px;
+            width: auto;
+            max-width: 200px;
+            object-fit: contain;
+          }
+          .header h1 {
+            margin: 10px 0 0 0;
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+          }
+          .header .receipt-type {
+            font-size: 18px;
+            color: #666;
+            margin-top: 10px;
+          }
+          .section {
+            margin-bottom: 30px;
+          }
+          .section h2 {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            border-left: 4px solid #4f46e5;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+          }
+          .info-label {
+            font-weight: 500;
+            color: #666;
+          }
+          .info-value {
+            font-weight: 600;
+            color: #333;
+          }
+          .total-row {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border-left: 4px solid #10b981;
+          }
+          .total-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #10b981;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            color: #666;
+          }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .receipt-container { 
+              box-shadow: none; 
+              border-radius: 0;
+              padding: 20px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <div class="header">
+            <div class="logo-container">
+              <img src="/images/logo png.png" alt="Lokal Logo" class="receipt-logo" />
+            </div>
+            <h1>🧾 DIGITAL RECEIPT</h1>
+            <div class="receipt-type">
+              ${transaction.receiptType === 'refund_receipt' ? '💸 REFUND RECEIPT' : '🛒 ORDER RECEIPT'}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>🏪 Store Information</h2>
+            <div class="info-row">
+              <span class="info-label">Store Name:</span>
+              <span class="info-value">${transaction.storeName || transaction.businessName || 'Unknown Store'}</span>
+            </div>
+            ${storeAddress !== 'Not available' ? `
+            <div class="info-row">
+              <span class="info-label">Address:</span>
+              <span class="info-value">${storeAddress}</span>
+            </div>
+            ` : ''}
+            ${storePhone !== 'Not available' ? `
+            <div class="info-row">
+              <span class="info-label">Phone:</span>
+              <span class="info-value">${storePhone}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="section">
+            <h2>📋 Order Details</h2>
+            <div class="info-row">
+              <span class="info-label">Order ID:</span>
+              <span class="info-value">${transaction.orderId || transaction.orderID || transaction.id}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Date & Time:</span>
+              <span class="info-value">${formattedDate}</span>
+            </div>
+            ${transaction.paymentMethod ? `
+            <div class="info-row">
+              <span class="info-label">Payment Method:</span>
+              <span class="info-value">${transaction.paymentMethod}</span>
+            </div>
+            ` : ''}
+            ${transaction.deliveryType ? `
+            <div class="info-row">
+              <span class="info-label">Delivery Type:</span>
+              <span class="info-value">${transaction.deliveryType}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="section">
+            <h2>🛍️ Items Purchased</h2>
+            ${itemsHtml}
+          </div>
+
+          <div class="section">
+            <h2>💰 Payment Summary</h2>
+            ${transaction.subtotal ? `
+            <div class="info-row">
+              <span class="info-label">Subtotal:</span>
+              <span class="info-value">£${Number(transaction.subtotal).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${transaction.serviceFee ? `
+            <div class="info-row">
+              <span class="info-label">Service Fee:</span>
+              <span class="info-value">£${Number(transaction.serviceFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${transaction.deliveryFee ? `
+            <div class="info-row">
+              <span class="info-label">Delivery Fee:</span>
+              <span class="info-value">£${Number(transaction.deliveryFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            ${transaction.platformFee ? `
+            <div class="info-row">
+              <span class="info-label">Platform Fee:</span>
+              <span class="info-value">£${Number(transaction.platformFee).toFixed(2)}</span>
+            </div>
+            ` : ''}
+            
+            <div class="total-row">
+              <div class="info-row" style="border: none; margin: 0;">
+                <span class="info-label" style="font-size: 18px;">Total Amount:</span>
+                <span class="total-amount">£${Number(transaction.totalAmount || transaction.amount || 0).toFixed(2)}</span>
+              </div>
+              <div style="text-align: right; margin-top: 5px; color: #666; font-size: 14px;">
+                Currency: ${transaction.currency || 'GBP'}
+              </div>
+            </div>
+          </div>
+
+          ${transaction.receiptType === 'refund_receipt' && transaction.refundReason ? `
+          <div class="section">
+            <h2>💸 Refund Details</h2>
+            <div class="info-row">
+              <span class="info-label">Refund Reason:</span>
+              <span class="info-value">${transaction.refundReason}</span>
+            </div>
+          </div>
+          ` : ''}
+
+          ${transaction.receiptContent ? `
+          <div class="section">
+            <h2>📄 Full Receipt</h2>
+            <div style="background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 5px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border: 1px solid #ddd;">${transaction.receiptContent}</div>
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            <p><strong>Thank you for your order!</strong></p>
+            <p>Generated on: ${new Date().toLocaleDateString('en-GB', {
+              year: 'numeric',
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create a new window with the HTML content
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = function() {
+      // Set the document title for the PDF filename
+      printWindow.document.title = filename;
+      
+      // Use setTimeout to ensure everything is rendered
+      setTimeout(() => {
+        printWindow.print();
+        // Don't close the window automatically - let user decide
+      }, 500);
+    };
+  };
+
+  // Send receipt via email using custom modal
+  const sendReceiptViaEmail = async (transaction) => {
+    if (!transaction) return;
+
+    // Get current user's email
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (!user || !user.email) {
+      setMessageModal({
+        type: 'error',
+        title: 'Authentication Required',
+        message: 'Please make sure you are logged in with an email address to send receipts.',
+        primaryButtonText: 'OK'
+      });
+      return;
+    }
+
+    // Check if transaction has payment intent ID for Stripe receipts
+    const paymentIntentId = transaction.paymentIntentId || transaction.paymentId || transaction.chargeId;
+    
+    if (!paymentIntentId) {
+      // For non-Stripe receipts, show informative modal with items
+      const items = transaction.items || [];
+      const itemsDetails = items.length > 0 
+        ? items.map(item => `• ${item.name || item.productName || 'Item'} ${item.quantity ? `(${item.quantity})` : ''} - ${transaction.currency || 'GBP'} ${item.price || item.amount || 0}`)
+        : ['• No items available'];
+
+      setMessageModal({
+        type: 'info',
+        title: 'Email Not Available',
+        message: 'This receipt is from a non-Stripe payment and cannot be emailed automatically.',
+        details: [
+          `Order ID: ${transaction.orderId || transaction.orderID || transaction.id || 'Unknown'}`,
+          `Amount: ${transaction.currency || 'GBP'} ${transaction.totalAmount || transaction.amount || 0}`,
+          `Store: ${transaction.storeName || transaction.businessName || 'Store'}`,
+          '',
+          'Items Purchased:',
+          ...itemsDetails
+        ],
+        primaryButtonText: 'Download PDF Instead',
+        secondaryButtonText: 'OK',
+        onPrimaryAction: () => {
+          setMessageModal(null);
+          downloadReceipt(transaction);
+        },
+        onSecondaryAction: () => {
+          setMessageModal(null);
+        }
+      });
+      return;
+    }
+
+    // For Stripe receipts, open email modal
+    setReceiptForEmail(transaction);
+    setShowEmailModal(true);
+  };
+
+  // Handle email send from modal
+  const handleEmailSend = async (email) => {
+    if (!receiptForEmail || !email) return;
+
+    setEmailLoading(true);
+    
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      // Prepare receipt data for email
+      const receiptData = {
+        orderId: receiptForEmail.orderId || receiptForEmail.orderID || receiptForEmail.id || 'Unknown',
+        amount: receiptForEmail.totalAmount || receiptForEmail.amount || 0,
+        currency: receiptForEmail.currency || 'GBP',
+        customerEmail: email,
+        customerName: user.displayName || user.email || 'Customer',
+        storeName: receiptForEmail.storeName || receiptForEmail.businessName || 'Store',
+        items: receiptForEmail.items || [],
+        paymentIntentId: receiptForEmail.paymentIntentId || receiptForEmail.paymentId || receiptForEmail.chargeId,
+        receiptData: {
+          ...receiptForEmail,
+          formattedDate: receiptForEmail.timestamp 
+            ? (receiptForEmail.timestamp.toDate ? receiptForEmail.timestamp.toDate() : new Date(receiptForEmail.timestamp)).toLocaleDateString('en-GB', {
+                year: 'numeric',
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            : new Date().toLocaleDateString('en-GB')
+        }
+      };
+
+      const result = await sendManualReceipt(receiptData);
+      
+      if (result.success) {
+        setNotification({
+          type: 'success',
+          title: 'Receipt Sent!',
+          message: `Receipt sent successfully to ${email}`
+        });
+        setShowEmailModal(false);
+        setReceiptForEmail(null);
+      } else {
+        throw new Error(result.error || 'Failed to send receipt');
+      }
+    } catch (error) {
+      console.error('Error sending receipt via email:', error);
+      setNotification({
+        type: 'error',
+        title: 'Send Failed',
+        message: 'Failed to send receipt via email. Please try again.'
+      });
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -1424,22 +2070,33 @@ For any questions regarding this order, please contact the seller.`,
               orderBy('createdAt', 'desc'),
               limit(100)
             );
+
+            // 5. Check completed transactions collection (pay-at-store orders)
+            const completedTransactionsQuery = query(
+              collection(db, 'transactions'),
+              where('sellerId', '==', user.uid),
+              where('pickupStatus', '==', 'collected'),
+              orderBy('collectedAt', 'desc'),
+              limit(100)
+            );
             
             try {
               // Execute all queries in parallel
-              const [transactionsSnapshot, paymentsSnapshot, reportsSnapshot, receiptsSnapshot] = 
+              const [transactionsSnapshot, paymentsSnapshot, reportsSnapshot, receiptsSnapshot, completedTransactionsSnapshot] = 
                 await Promise.all([
                   getDocs(transactionsQuery),
                   getDocs(paymentsQuery),
                   getDocs(reportsQuery),
-                  getDocs(receiptsQuery)
+                  getDocs(receiptsQuery),
+                  getDocs(completedTransactionsQuery)
                 ]);
               
               console.log('📊 Order source counts:', {
                 transactions: transactionsSnapshot.size,
                 payments: paymentsSnapshot.size,
                 reports: reportsSnapshot.size,
-                receipts: receiptsSnapshot.size
+                receipts: receiptsSnapshot.size,
+                completedTransactions: completedTransactionsSnapshot.size
               });
               
               // Process transactions
@@ -1473,13 +2130,39 @@ For any questions regarding this order, please contact the seller.`,
                 transactionType: 'order',
                 ...doc.data()
               }));
+
+              // Process completed transactions (pay-at-store orders)
+              const completedTransactionOrders = completedTransactionsSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  source: 'completed_transactions',
+                  transactionType: 'order',
+                  // Normalize field names for consistency
+                  orderId: data.orderId,
+                  totalAmount: data.amount || data.totalAmount,
+                  paymentMethod: data.paymentMethod || 'Pay at Store',
+                  deliveryType: data.deliveryType || 'Collection',
+                  customerId: data.customerId,
+                  customerName: data.customerName,
+                  items: data.items || [],
+                  currency: data.currency || 'GBP',
+                  status: 'completed',
+                  createdAt: data.collectedAt || data.createdAt,
+                  completedAt: data.collectedAt,
+                  payAtStore: true,
+                  pickupCode: data.pickupCode,
+                  ...data
+                };
+              });
               
               // Combine all orders
               const allFetchedOrders = [
                 ...transactionOrders, 
                 ...paymentOrders,
                 ...reportOrders,
-                ...receiptOrders
+                ...receiptOrders,
+                ...completedTransactionOrders
               ];
               
               // Deduplicate orders by orderId
@@ -2254,7 +2937,7 @@ For any questions regarding this order, please contact the seller.`,
                   border: '1px solid #E5E7EB',
                   borderRadius: '6px'
                 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <table className="reports-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
                         <th style={{ padding: '0.75rem', fontSize: '0.75rem', color: '#4B5563', textAlign: 'left' }}>Time</th>
@@ -2454,29 +3137,48 @@ For any questions regarding this order, please contact the seller.`,
                 border: '1px solid #E5E7EB',
                 overflow: 'hidden'
               }}>
-                <table style={{
-                  width: '100%',
-                  borderCollapse: 'collapse'
+                {/* Mobile hint */}
+                {window.innerWidth <= 768 && (
+                  <div style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#F0F9FF',
+                    color: '#1E40AF',
+                    fontSize: '0.75rem',
+                    textAlign: 'center',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    👈 Scroll horizontally to see all columns
+                  </div>
+                )}
+                <div style={{
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  maxWidth: '100%'
                 }}>
-                  <thead>
-                    <tr style={{
-                      backgroundColor: '#F9FAFB',
-                      borderBottom: '1px solid #E5E7EB'
-                    }}>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>
-                        {receiptType === 'refund' ? 'Refund ID' : 'Order ID'}
-                      </th>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Date</th>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Customer</th>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Amount</th>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Status</th>
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Payment Method</th>
-                      {receiptType === 'refund' && (
-                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Reason</th>
-                      )}
-                      <th style={{ padding: '0.75rem 1rem', textAlign: 'center', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Actions</th>
-                    </tr>
-                  </thead>
+                  <table className="reports-table" style={{
+                    width: '100%',
+                    minWidth: '800px',
+                    borderCollapse: 'collapse'
+                  }}>
+                    <thead>
+                      <tr style={{
+                        backgroundColor: '#F9FAFB',
+                        borderBottom: '1px solid #E5E7EB'
+                      }}>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>
+                          {receiptType === 'refund' ? 'Refund ID' : 'Order ID'}
+                        </th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Date</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Customer</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Amount</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Status</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Payment Method</th>
+                        {receiptType === 'refund' && (
+                          <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Reason</th>
+                        )}
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'center', color: '#4B5563', fontWeight: '600', fontSize: '0.875rem' }}>Actions</th>
+                      </tr>
+                    </thead>
                   <tbody>
                     {(receiptType === 'refund' ? refundTransactions : allOrders).map((transaction) => (
                       <tr 
@@ -2570,9 +3272,30 @@ For any questions regarding this order, please contact the seller.`,
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Reports & Complaints Section */}
+          <div style={{ 
+            backgroundColor: '#FFFFFF', 
+            borderRadius: '8px', 
+            border: '1px solid #E5E7EB', 
+            padding: '1.5rem',
+            marginTop: '2rem'
+          }}>
+            <h2 style={{ 
+              fontSize: '1.25rem', 
+              fontWeight: '600', 
+              color: '#1F2937', 
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              📋 Reports & Complaints
+            </h2>
 
         {complaints.length === 0 ? (
           <div style={{
@@ -2949,6 +3672,26 @@ For any questions regarding this order, please contact the seller.`,
                 Cancel
               </button>
               <button
+                onClick={() => sendReceiptViaEmail(selectedTransaction)}
+                disabled={receiptLoading}
+                style={{
+                  padding: '0.75rem 1.25rem',
+                  backgroundColor: receiptLoading ? '#9ca3af' : '#f59e0b',
+                  color: 'white',
+                  border: '1px solid #d97706',
+                  borderRadius: '0.375rem',
+                  fontWeight: '600',
+                  cursor: receiptLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  opacity: receiptLoading ? 0.7 : 1
+                }}
+              >
+                <span>📧</span>
+                <span>{receiptLoading ? 'Sending...' : 'Send via Email'}</span>
+              </button>
+              <button
                 onClick={handleSendReceipt}
                 disabled={receiptLoading}
                 style={{
@@ -2987,7 +3730,54 @@ For any questions regarding this order, please contact the seller.`,
           </div>
         </div>
       )}
+
+      {/* Email Receipt Modal */}
+      <EmailReceiptModal
+        isOpen={showEmailModal}
+        onClose={() => {
+          setShowEmailModal(false);
+          setReceiptForEmail(null);
+          setEmailLoading(false);
+        }}
+        onSend={handleEmailSend}
+        isLoading={emailLoading}
+        defaultEmail={currentUser?.email || ''}
+        receiptDetails={receiptForEmail ? {
+          orderId: receiptForEmail.orderId || receiptForEmail.orderID || receiptForEmail.id || 'Unknown',
+          storeName: receiptForEmail.storeName || receiptForEmail.businessName || 'Store',
+          amount: receiptForEmail.amount || receiptForEmail.totalAmount || 0,
+          currency: receiptForEmail.currency || 'GBP'
+        } : {}}
+      />
+
+      {/* Message Modal */}
+      {messageModal && (
+        <MessageModal
+          isOpen={true}
+          onClose={() => setMessageModal(null)}
+          type={messageModal.type}
+          title={messageModal.title}
+          message={messageModal.message}
+          details={messageModal.details}
+          primaryButtonText={messageModal.primaryButtonText}
+          secondaryButtonText={messageModal.secondaryButtonText}
+          onPrimaryAction={messageModal.onPrimaryAction}
+          onSecondaryAction={messageModal.onSecondaryAction}
+        />
+      )}
+
+      {/* Notification Toast */}
+      {notification && (
+        <NotificationToast
+          isVisible={true}
+          onClose={() => setNotification(null)}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+        />
+      )}
       
+      </div>
     </div>
   );
 }

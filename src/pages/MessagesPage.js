@@ -1112,11 +1112,11 @@ function MessagesPage() {
           orderBy('timestamp', 'desc')
         );
 
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+    const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
       const conversationMap = new Map();
       
-      snapshot.docs.forEach(doc => {
-        const message = { id: doc.id, ...doc.data() };
+      for (const docSnapshot of snapshot.docs) {
+        const message = { id: docSnapshot.id, ...docSnapshot.data() };
         
         // For sellers, include conversations where they are either sender or receiver
         // For customers, only include conversations where they are the sender
@@ -1166,10 +1166,27 @@ function MessagesPage() {
           if (!existingConversation || 
               !existingConversation.lastMessageTime || 
               message.timestamp > existingConversation.lastMessageTime) {
+            
+            // For customers talking to sellers, try to get the actual store name
+            let storeName = otherUserName;
+            if (!isSeller && otherUserId) {
+              // Try to get store name from the store document
+              try {
+                const storeDoc = await getDoc(doc(db, 'stores', otherUserId));
+                if (storeDoc.exists()) {
+                  const storeData = storeDoc.data();
+                  storeName = storeData.businessName || storeData.storeName || storeData.displayName || otherUserName;
+                }
+              } catch (error) {
+                console.log('Could not fetch store name for conversation:', error);
+              }
+            }
+            
             conversationMap.set(conversationId, {
               id: conversationId,
               otherUserId,
               otherUserName,
+              storeName, // Add store name field
               otherUserEmail,
               lastMessage: message.message,
               lastMessageTime: message.timestamp,
@@ -1178,7 +1195,7 @@ function MessagesPage() {
             });
           }
         }
-      });
+      }
 
       setConversations(Array.from(conversationMap.values()));
     }, (error) => {
@@ -1786,6 +1803,22 @@ function MessagesPage() {
     }
   };
 
+  // Handle mobile tap-to-delete (long press)
+  const handleMessageLongPress = (messageId, messageText) => {
+    // Only allow deletion for messages sent by current user
+    const message = messages.find(msg => msg.id === messageId);
+    if (!message || message.senderId !== currentUser.uid) return;
+
+    // Show mobile-friendly confirmation
+    const shouldDelete = window.confirm(
+      `Delete this message?\n\n"${messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText}"\n\nThis action cannot be undone.`
+    );
+    
+    if (shouldDelete) {
+      deleteMessage(messageId);
+    }
+  };
+
   // Calculate cart totals
   const getCartTotal = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
@@ -2034,6 +2067,52 @@ function MessagesPage() {
       }
 
       await addDoc(collection(db, 'messages'), messageData);
+
+      // Create initial order tracking record for pay-at-store orders
+      const orderTrackingData = {
+        orderId: orderId,
+        sellerId: selectedConversation.otherUserId,
+        sellerName: selectedConversation.otherUserName,
+        buyerId: currentUser.uid,
+        buyerName: currentUser.displayName || currentUser.email,
+        customerId: currentUser.uid,
+        customerName: currentUser.displayName || currentUser.email,
+        items: items,
+        totalAmount: paymentDetails.total,
+        currency: paymentDetails.currency,
+        paymentMethod: 'Pay at Store',
+        deliveryType: 'Collection',
+        status: 'pending',
+        type: 'pay_at_store',
+        subtotal: paymentDetails.subtotal,
+        serviceFee: paymentDetails.serviceFee,
+        createdAt: serverTimestamp(),
+        payAtStore: true,
+        awaitingSellerConfirmation: true,
+        storeId: selectedConversation.otherUserId
+      };
+
+      try {
+        // Add to orders collection for tracking
+        await addDoc(collection(db, 'orders'), orderTrackingData);
+        
+        // Also add a preliminary transaction record
+        const transactionData = {
+          ...orderTrackingData,
+          transactionType: 'pay_at_store_request',
+          amount: paymentDetails.total,
+          grossAmount: paymentDetails.total,
+          pickupStatus: 'pending',
+          // No pickup code yet - will be generated when seller accepts
+        };
+        
+        await addDoc(collection(db, 'transactions'), transactionData);
+        
+        console.log('✅ Created tracking records for pay-at-store order:', orderId);
+      } catch (trackingError) {
+        console.error('Error creating tracking records:', trackingError);
+        // Don't block the main flow if tracking fails
+      }
 
       // Clear cart and close any modals
       setCart([]);
@@ -2373,6 +2452,26 @@ function MessagesPage() {
         sellerId: selectedConversation.otherUserId,
         sellerName: selectedConversation.otherUserName,
         storeName: displayedStoreName,
+        // Include store contact information at top level for easier access
+        storeAddress: storeInfo?.storeLocation || 
+                     storeInfo?.address || 
+                     storeInfo?.businessAddress || 
+                     storeInfo?.storeAddress ||
+                     (storeInfo?.location?.address) || 
+                     (typeof storeInfo?.location === 'string' ? storeInfo.location : '') ||
+                     storeInfo?.fullAddress ||
+                     storeInfo?.streetAddress ||
+                     selectedConversation?.storeAddress ||
+                     '',
+        storePhone: storeInfo?.phoneNumber || 
+                   storeInfo?.phone || 
+                   storeInfo?.contactNumber || 
+                   storeInfo?.businessPhone ||
+                   storeInfo?.storePhone ||
+                   storeInfo?.contactPhone ||
+                   storeInfo?.mobile ||
+                   '',
+        storeEmail: storeInfo?.email || storeInfo?.contactEmail || storeInfo?.businessEmail || '',
         storeData: {
           ...storeInfo,
           storeName: displayedStoreName
@@ -2880,7 +2979,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
         await addDoc(collection(db, 'messages'), receiptOfferMessage);
       }
 
-      // Add or update this transaction in the reports collection
+      // Add or update this transaction in the reports collection - Enhanced for Pay at Store
       try {
         const reportData = {
           orderId: transactionData.orderId,
@@ -2889,37 +2988,105 @@ Please arrive at your scheduled time and bring this code for verification.`;
           buyerId: transactionData.customerId,
           buyerName: transactionData.customerName,
           totalAmount: transactionData.amount || transactionData.grossAmount,
-          currency: transactionData.currency,
+          currency: transactionData.currency || 'GBP',
           items: transactionData.items || [],
           status: 'completed',
-          paymentMethod: transactionData.paymentMethod || 'unknown',
+          paymentMethod: transactionData.paymentMethod || (transactionData.type === 'pay_at_store' ? 'Pay at Store' : 'unknown'),
           deliveryType: transactionData.deliveryType || 'Collection',
           completedAt: serverTimestamp(),
           pickupCode: inputCode.toUpperCase(),
           reported: true,
           transactionType: 'order',
-          reportingTimestamp: serverTimestamp()
+          reportingTimestamp: serverTimestamp(),
+          type: 'order', // Ensure consistent type field
+          createdAt: transactionData.createdAt || serverTimestamp(),
+          // Add fields specifically for pay at store validation
+          payAtStore: transactionData.type === 'pay_at_store',
+          validatedAt: serverTimestamp(),
+          validatedBy: currentUser.uid,
+          // Additional analytics data
+          customerEmail: transactionData.customerEmail,
+          storeId: currentUser.uid,
+          storeName: currentUser.displayName || currentUser.email
         };
 
         // Check if this order is already in reports
         const reportsQuery = query(
           collection(db, 'reports'),
-          where('orderId', '==', transactionData.orderId)
+          where('orderId', '==', transactionData.orderId),
+          where('sellerId', '==', currentUser.uid)
         );
         
         const reportSnap = await getDocs(reportsQuery);
         if (reportSnap.empty) {
           // Create a new report entry
-          await addDoc(collection(db, 'reports'), reportData);
+          const reportRef = await addDoc(collection(db, 'reports'), reportData);
+          console.log('✅ Added new report entry for pay at store order:', reportRef.id);
         } else {
-          // Update existing report entry
+          // Update existing report entry with completion data
           const reportDoc = reportSnap.docs[0];
           await updateDoc(doc(db, 'reports', reportDoc.id), {
             status: 'completed',
             completedAt: serverTimestamp(),
-            reported: true
+            reported: true,
+            payAtStore: transactionData.type === 'pay_at_store',
+            validatedAt: serverTimestamp(),
+            validatedBy: currentUser.uid,
+            pickupCode: inputCode.toUpperCase()
           });
+          console.log('✅ Updated existing report entry for pay at store order:', reportDoc.id);
         }
+
+        // Also ensure the transaction is properly recorded for analytics
+        // Update store analytics by triggering an analytics refresh
+        try {
+          const storeAnalyticsRef = doc(db, 'storeAnalytics', currentUser.uid);
+          const analyticsDoc = await getDoc(storeAnalyticsRef);
+          
+          const now = new Date();
+          const todayKey = now.toISOString().split('T')[0];
+          
+          if (analyticsDoc.exists()) {
+            const analyticsData = analyticsDoc.data();
+            const currentOrders = analyticsData.totalOrders || 0;
+            const currentRevenue = analyticsData.totalRevenue || 0;
+            const dailyData = analyticsData.dailyData || {};
+            
+            // Update daily data
+            if (!dailyData[todayKey]) {
+              dailyData[todayKey] = { orders: 0, revenue: 0 };
+            }
+            dailyData[todayKey].orders += 1;
+            dailyData[todayKey].revenue += parseFloat(transactionData.amount || 0);
+            
+            await updateDoc(storeAnalyticsRef, {
+              totalOrders: currentOrders + 1,
+              totalRevenue: currentRevenue + parseFloat(transactionData.amount || 0),
+              dailyData: dailyData,
+              lastUpdated: serverTimestamp()
+            });
+          } else {
+            // Create new analytics entry
+            const dailyData = {};
+            dailyData[todayKey] = { 
+              orders: 1, 
+              revenue: parseFloat(transactionData.amount || 0) 
+            };
+            
+            await setDoc(storeAnalyticsRef, {
+              totalOrders: 1,
+              totalRevenue: parseFloat(transactionData.amount || 0),
+              dailyData: dailyData,
+              lastUpdated: serverTimestamp(),
+              storeId: currentUser.uid
+            });
+          }
+          console.log('✅ Updated store analytics for pay at store completion');
+        } catch (analyticsError) {
+          console.error('Error updating store analytics:', analyticsError);
+          // Don't block the main flow if analytics update fails
+        }
+
       } catch (reportError) {
         console.error('Error updating reports:', reportError);
         // Don't block the main flow if reports update fails
@@ -5319,9 +5486,82 @@ Please arrive at your scheduled time with this code and payment method.`;
 
       await addDoc(collection(db, 'messages'), messageData);
 
+      // Update order tracking records when seller confirms pay-at-store order
+      try {
+        // Generate pickup code for the confirmed order
+        const pickupCode = generatePickupCode();
+        
+        // Update orders collection
+        const ordersQuery = query(
+          collection(db, 'orders'),
+          where('orderId', '==', orderData.orderId),
+          where('sellerId', '==', currentUser.uid)
+        );
+        
+        const ordersSnapshot = await getDocs(ordersQuery);
+        if (!ordersSnapshot.empty) {
+          const orderDoc = ordersSnapshot.docs[0];
+          await updateDoc(doc(db, 'orders', orderDoc.id), {
+            status: 'confirmed',
+            confirmedAt: serverTimestamp(),
+            pickupCode: pickupCode,
+            awaitingSellerConfirmation: false,
+            readyForCollection: true
+          });
+        }
+
+        // Update transactions collection
+        const transactionsQuery = query(
+          collection(db, 'transactions'),
+          where('orderId', '==', orderData.orderId),
+          where('sellerId', '==', currentUser.uid)
+        );
+        
+        const transactionsSnapshot = await getDocs(transactionsQuery);
+        if (!transactionsSnapshot.empty) {
+          const transactionDoc = transactionsSnapshot.docs[0];
+          await updateDoc(doc(db, 'transactions', transactionDoc.id), {
+            status: 'confirmed',
+            confirmedAt: serverTimestamp(),
+            pickupCode: pickupCode,
+            pickupStatus: 'pending'
+          });
+        }
+
+        // Send pickup code to customer
+        const pickupCodeMessage = {
+          conversationId: conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          senderEmail: currentUser.email,
+          receiverId: selectedConversation.otherUserId,
+          receiverName: selectedConversation.otherUserName,
+          message: `🎫 PICKUP CODE FOR YOUR ORDER\n\nOrder ID: ${orderData.orderId}\nPickup Code: ${pickupCode}\n\n⚠️ IMPORTANT:\n• Present this code when collecting your order\n• You will pay ${getCurrencySymbol(orderData.currency)}${formatPrice(orderData.totalAmount, orderData.currency)} at the store\n• Keep this code safe - it's required for collection\n\nYour order is ready for collection at the store!`,
+          messageType: 'pickup_code_delivery',
+          timestamp: serverTimestamp(),
+          isRead: false,
+          orderData: {
+            ...orderData,
+            pickupCode: pickupCode,
+            status: 'confirmed'
+          }
+        };
+
+        if (selectedConversation.otherUserEmail) {
+          pickupCodeMessage.receiverEmail = selectedConversation.otherUserEmail;
+        }
+
+        await addDoc(collection(db, 'messages'), pickupCodeMessage);
+        
+        console.log('✅ Updated pay-at-store order tracking and generated pickup code:', pickupCode);
+      } catch (updateError) {
+        console.error('Error updating order tracking:', updateError);
+        // Don't block the main flow
+      }
+
       // Show success notification
       const notification = document.createElement('div');
-      notification.innerHTML = `✅ Pay At Store order confirmed!`;
+      notification.innerHTML = `✅ Pay At Store order confirmed! Pickup code sent to customer.`;
       notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -5340,7 +5580,7 @@ Please arrive at your scheduled time with this code and payment method.`;
         if (document.body.contains(notification)) {
           document.body.removeChild(notification);
         }
-      }, 3000);
+      }, 4000);
 
     } catch (error) {
       console.error('Error confirming Pay At Store order:', error);
@@ -5849,8 +6089,51 @@ Bring your pickup code when you collect.`,
     try {
       // Get store information
       const storeId = orderData.sellerId || selectedConversation?.otherUserId;
-      const storeDoc = await getDoc(doc(db, 'stores', storeId));
-      const storeData = storeDoc.exists() ? storeDoc.data() : {};
+      let storeData = {};
+      let actualStoreName = selectedConversation?.otherUserName || orderData.sellerName || 'Store';
+      
+      // Try to fetch store data from stores collection
+      try {
+        const storeDoc = await getDoc(doc(db, 'stores', storeId));
+        if (storeDoc.exists()) {
+          storeData = storeDoc.data();
+          // Use comprehensive store name fallback chain
+          actualStoreName = storeData.storeName || 
+                           storeData.businessName || 
+                           storeData.name || 
+                           storeData.displayName ||
+                           selectedConversation?.otherUserName || 
+                           orderData.sellerName || 
+                           'Store';
+          console.log('✅ Store data found:', { 
+            storeId, 
+            storeName: actualStoreName,
+            availableFields: Object.keys(storeData)
+          });
+        } else {
+          console.warn('⚠️ Store document not found for storeId:', storeId);
+        }
+      } catch (storeError) {
+        console.error('❌ Error fetching store data:', storeError);
+      }
+      
+      // If still no good store name, try to fetch from users collection
+      if (actualStoreName === 'Store' && storeId) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', storeId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            actualStoreName = userData.displayName || 
+                             userData.businessName || 
+                             userData.storeName || 
+                             userData.name || 
+                             actualStoreName;
+            console.log('✅ Fallback store name from users collection:', actualStoreName);
+          }
+        } catch (userError) {
+          console.error('❌ Error fetching user data for store name:', userError);
+        }
+      }
       
       // Get buyer information
       const buyerInfo = await fetchUserInfo(currentUser.uid);
@@ -5888,11 +6171,28 @@ Bring your pickup code when you collect.`,
         customerName: buyerInfo.name || currentUser.displayName || currentUser.email,
         customerEmail: buyerInfo.email || currentUser.email,
         sellerId: storeId,
-        sellerName: storeData.businessName || storeData.name || orderData.sellerName || 'Store',
-        storeName: storeData.storeName || storeData.businessName || storeData.name || orderData.storeName || 'Store',
-        storeAddress: storeData.storeLocation || storeData.address || storeData.location?.address || orderData.storeAddress || 'Store address',
-        storePhone: storeData.phoneNumber || storeData.phone || orderData.storePhone || '',
-        storeEmail: storeData.email || '',
+        sellerName: actualStoreName,
+        storeName: actualStoreName,
+        storeAddress: storeData.storeLocation || 
+                     storeData.address || 
+                     storeData.businessAddress || 
+                     storeData.storeAddress ||
+                     storeData.location?.address || 
+                     (typeof storeData.location === 'string' ? storeData.location : '') ||
+                     storeData.fullAddress ||
+                     storeData.streetAddress ||
+                     orderData.storeAddress || 
+                     '',
+        storePhone: storeData.phoneNumber || 
+                   storeData.phone || 
+                   storeData.contactNumber || 
+                   storeData.businessPhone ||
+                   storeData.storePhone ||
+                   storeData.contactPhone ||
+                   storeData.mobile ||
+                   orderData.storePhone || 
+                   '',
+        storeEmail: storeData.email || storeData.contactEmail || storeData.businessEmail || '',
         storeRegistrationNumber: storeRegistrationNumber || '',
         storeVatNumber: storeVatNumber || '',
         storeBusinessId: storeBusinessId || '',
@@ -5966,7 +6266,7 @@ Bring your pickup code when you collect.`,
       const receiptMessage = {
         conversationId: selectedConversation.id,
         senderId: storeId,
-        senderName: storeData.businessName || storeData.name || orderData.sellerName || 'Store',
+        senderName: actualStoreName,
         receiverId: currentUser.uid,
         receiverName: buyerInfo.name || currentUser.displayName || currentUser.email,
         receiverEmail: buyerInfo.email || currentUser.email,
@@ -6868,6 +7168,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
   const filteredConversations = conversations
     .filter(conv =>
       conv.otherUserName?.toLowerCase().includes(search.toLowerCase()) ||
+      conv.storeName?.toLowerCase().includes(search.toLowerCase()) ||
       conv.otherUserEmail?.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
@@ -7010,7 +7311,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                           <div className="conversation-name">
                             {isSeller 
                               ? `Customer: ${conversation.otherUserName}` 
-                              : conversation.otherUserName
+                              : (conversation.storeName || conversation.otherUserName)
                             }
                           </div>
                           <div className="conversation-email">
@@ -7063,17 +7364,19 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                 
                 <div className="chat-header">
                   <div className="chat-user-info">
-                    <div className="chat-user-name">
-                      {isSeller 
-                        ? `Customer: ${selectedConversation.otherUserName}` 
-                        : selectedConversation.otherUserName
-                      }
-                    </div>
-                    <div className="chat-user-email">
-                      {(() => {
-                        const email = storeInfo?.email || selectedConversation.otherUserEmail;
-                        return (email && email !== 'store@example.com') ? email : '';
-                      })()}
+                    <div className="chat-user-details">
+                      <div className="chat-user-name">
+                        {isSeller 
+                          ? `Customer: ${selectedConversation.otherUserName}` 
+                          : (storeInfo?.storeName || selectedConversation.storeName || selectedConversation.otherUserName || 'Store')
+                        }
+                      </div>
+                      <div className="chat-user-email">
+                        {(() => {
+                          const email = storeInfo?.email || selectedConversation.otherUserEmail;
+                          return (email && email !== 'store@example.com') ? email : '';
+                        })()}
+                      </div>
                     </div>
                     {!isSeller && selectedConversation.storeAddress && !isAdminConversation && (
                       <div 
@@ -7226,7 +7529,28 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                             key={message.id}
                             className={`message ${message.senderId === currentUser.uid ? 'sent' : 'received'}`}
                           >
-                            <div className="message-bubble">
+                            <div 
+                              className="message-bubble"
+                              onTouchStart={(e) => {
+                                // Handle mobile long press for deletion (only for own messages)
+                                if (message.senderId === currentUser.uid) {
+                                  e.target.touchStartTime = Date.now();
+                                }
+                              }}
+                              onTouchEnd={(e) => {
+                                // Handle mobile long press for deletion (only for own messages)
+                                if (message.senderId === currentUser.uid && e.target.touchStartTime) {
+                                  const touchDuration = Date.now() - e.target.touchStartTime;
+                                  if (touchDuration > 500) { // 500ms long press
+                                    e.preventDefault();
+                                    handleMessageLongPress(message.id, message.message);
+                                  }
+                                }
+                              }}
+                              style={{
+                                cursor: message.senderId === currentUser.uid ? 'pointer' : 'default'
+                              }}
+                            >
                               <div className="message-content">
                                 <div className="message-text">
                                   {message.message}
@@ -7263,10 +7587,11 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                                   </div>
                                 )}
 
+                                {/* Desktop delete button - only show on larger screens */}
                                 {message.senderId === currentUser.uid && (
                                   <button
                                     onClick={() => deleteMessage(message.id)}
-                                    className="delete-message-btn"
+                                    className="delete-message-btn desktop-only"
                                     title="Delete message"
                                   >
                                     🗑️
@@ -9243,6 +9568,21 @@ I hereby confirm this is a formal report and all information provided is accurat
                         </div>
                       </div>
                     )}
+
+                    {/* Mobile delete hint */}
+                    <div className="mobile-hint" style={{
+                      display: 'none',
+                      fontSize: '0.8rem',
+                      color: '#6B7280',
+                      textAlign: 'center',
+                      padding: '0.75rem 1rem',
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(5, 150, 105, 0.02))',
+                      borderTop: '1px solid rgba(16, 185, 129, 0.2)',
+                      backdropFilter: 'blur(5px)',
+                      fontWeight: '500'
+                    }}>
+                      ✨ Long press your messages to delete them
+                    </div>
 
                     <div className="message-input-area">
                       <input
@@ -11250,36 +11590,63 @@ I hereby confirm this is a formal report and all information provided is accurat
       <style jsx>{`
         .messages-container {
           max-width: 1200px;
-          margin: 2rem auto;
-          background: #fff;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(184, 184, 184, 0.3);
+          margin: 1.5rem auto;
+          background: rgba(255, 255, 255, 0.98);
+          border-radius: 20px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
           overflow: hidden;
-          min-height: calc(100vh - 6rem);
+          min-height: calc(100vh - 4rem);
         }
 
         .messages-tabs {
           display: flex;
-          border-bottom: 2px solid #eee;
+          border-bottom: 1px solid rgba(229, 231, 235, 0.6);
+          background: rgba(249, 250, 251, 0.8);
+          backdrop-filter: blur(10px);
         }
 
         .tab-button {
           flex: 1;
-          padding: 1rem;
+          padding: 1.25rem 1rem;
           background: transparent;
           border: none;
-          border-bottom: 2px solid transparent;
-          color: #888;
-          font-weight: 700;
-          font-size: 1.1rem;
+          border-bottom: 3px solid transparent;
+          color: #6B7280;
+          font-weight: 600;
+          font-size: 1rem;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .tab-button::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(5, 150, 105, 0.05));
+          opacity: 0;
+          transition: opacity 0.3s ease;
+        }
+
+        .tab-button:hover::before {
+          opacity: 1;
         }
 
         .tab-button.active {
-          background: #F9F5EE;
-          border-bottom-color: #007B7F;
-          color: #007B7F;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05));
+          border-bottom-color: #10B981;
+          color: #059669;
+          font-weight: 700;
+        }
+
+        .tab-button.active::before {
+          opacity: 1;
         }
 
         .messages-content {
@@ -11288,23 +11655,36 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .conversations-panel {
-          width: 320px;
-          border-right: 1px solid #eee;
+          width: 360px;
+          border-right: 1px solid rgba(229, 231, 235, 0.6);
           display: flex;
           flex-direction: column;
+          background: rgba(249, 250, 251, 0.5);
+          backdrop-filter: blur(10px);
         }
 
         .search-input {
-          width: 100%;
-          padding: 0.75rem;
-          border: 1.5px solid #B8B8B8;
-          border-radius: 6px;
-          margin: 1rem;
-          margin-bottom: 0.5rem;
           width: calc(100% - 2rem);
+          padding: 1rem 1.25rem;
+          border: 2px solid rgba(229, 231, 235, 0.6);
+          border-radius: 25px;
+          margin: 1.25rem 1rem 1rem 1rem;
           font-size: 0.95rem;
           outline: none;
           box-sizing: border-box;
+          background: rgba(255, 255, 255, 0.9);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .search-input:focus {
+          border-color: #10B981;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+          background: #ffffff;
+        }
+
+        .search-input::placeholder {
+          color: #9CA3AF;
+          font-weight: 400;
         }
 
         .mobile-only {
@@ -11350,22 +11730,51 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .conversation-item {
-          padding: 0.75rem;
-          border: 1px solid #eee;
-          border-radius: 8px;
-          margin-bottom: 0.5rem;
-          background: #fafafa;
+          padding: 1rem;
+          border: 1px solid rgba(229, 231, 235, 0.4);
+          border-radius: 16px;
+          margin: 0 1rem 0.75rem 1rem;
+          background: rgba(255, 255, 255, 0.8);
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          backdrop-filter: blur(5px);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .conversation-item::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(5, 150, 105, 0.02));
+          opacity: 0;
+          transition: opacity 0.3s ease;
         }
 
         .conversation-item:hover {
-          background: #f0f9ff;
+          background: rgba(255, 255, 255, 0.95);
+          border-color: rgba(16, 185, 129, 0.3);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .conversation-item:hover::before {
+          opacity: 1;
         }
 
         .conversation-item.selected {
-          background: #F0F9FF;
-          border-left: 4px solid #007B7F;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05));
+          border-color: #10B981;
+          border-width: 2px;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.15);
+        }
+
+        .conversation-item.selected::before {
+          opacity: 1;
         }
 
         .conversation-content {
@@ -11425,39 +11834,64 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .chat-header {
-          padding: 1rem;
-          border-bottom: 1px solid #eee;
+          padding: 1.5rem;
+          border-bottom: 1px solid rgba(229, 231, 235, 0.6);
           display: flex;
           justify-content: space-between;
           align-items: center;
-          background: #fff;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(249, 250, 251, 0.8));
+          backdrop-filter: blur(10px);
+          position: relative;
+        }
+
+        .chat-header::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.3), transparent);
         }
 
         .chat-user-info {
           flex: 1;
         }
 
+        .chat-user-details {
+          flex: 1;
+        }
+
         .chat-user-name {
-          font-weight: 600;
-          font-size: 1.1rem;
+          font-weight: 700;
+          font-size: 1.2rem;
+          color: #1F2937;
+          margin-bottom: 0.25rem;
         }
 
         .chat-user-email {
-          font-size: 0.9rem;
-          color: #666;
+          font-size: 0.875rem;
+          color: #6B7280;
+          margin-bottom: 0.25rem;
         }
 
         .chat-store-address {
-          font-size: 0.9rem;
-          color: #007B7F !important;
+          font-size: 0.875rem;
+          color: #10B981 !important;
           cursor: pointer;
-          text-decoration: underline;
-          margin-top: 4px;
-          transition: color 0.2s ease;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.2s ease;
+          padding: 0.25rem 0.5rem;
+          border-radius: 6px;
+          background: rgba(16, 185, 129, 0.1);
+          display: inline-block;
         }
 
         .chat-store-address:hover {
-          color: #005a5e !important;
+          color: #059669 !important;
+          background: rgba(16, 185, 129, 0.15);
+          transform: translateY(-1px);
         }
 
         .browse-items-btn {
@@ -11499,33 +11933,40 @@ I hereby confirm this is a formal report and all information provided is accurat
         .messages-list {
           flex: 1;
           overflow-y: scroll !important;
-          padding: 1rem;
+          padding: 1.5rem;
           height: calc(100vh - 350px) !important;
           max-height: calc(100vh - 350px) !important;
-          scrollbar-width: auto !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(16, 185, 129, 0.3) transparent !important;
           -webkit-overflow-scrolling: touch;
+          background: linear-gradient(180deg, rgba(249, 250, 251, 0.3) 0%, rgba(255, 255, 255, 0.1) 100%);
         }
 
         .messages-list::-webkit-scrollbar {
-          width: 12px !important;
+          width: 8px !important;
         }
 
         .messages-list::-webkit-scrollbar-track {
-          background: #f1f1f1 !important;
+          background: rgba(0, 0, 0, 0.02) !important;
+          border-radius: 10px !important;
         }
 
         .messages-list::-webkit-scrollbar-thumb {
-          background: #888 !important;
-          border-radius: 6px !important;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(5, 150, 105, 0.6)) !important;
+          border-radius: 10px !important;
+          border: 2px solid transparent !important;
+          background-clip: content-box !important;
         }
 
         .messages-list::-webkit-scrollbar-thumb:hover {
-          background: #555 !important;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.6), rgba(5, 150, 105, 0.8)) !important;
         }
 
         .message {
-          margin-bottom: 1rem;
+          margin-bottom: 1.25rem;
           display: flex;
+          align-items: flex-end;
+          gap: 0.5rem;
         }
 
         .message.sent {
@@ -11537,27 +11978,45 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .message-bubble {
-          max-width: 80%;
-          padding: 0.75rem 1rem;
-          border-radius: 12px;
+          max-width: 75%;
+          padding: 1rem 1.25rem;
+          border-radius: 20px;
           word-wrap: break-word;
+          overflow-wrap: break-word;
+          hyphens: auto;
+          position: relative;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          backdrop-filter: blur(10px);
         }
 
         .message.sent .message-bubble {
-          background: #007B7F;
-          color: #fff;
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          color: #ffffff;
+          border-bottom-right-radius: 6px;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
 
         .message.received .message-bubble {
-          background: #f1f1f1;
-          color: #333;
+          background: rgba(255, 255, 255, 0.95);
+          color: #1F2937;
+          border: 1px solid rgba(229, 231, 235, 0.8);
+          border-bottom-left-radius: 6px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         }
 
         .message-text {
           font-size: 0.95rem;
           white-space: pre-wrap;
-          line-height: 1.4;
+          line-height: 1.5;
+          word-break: break-word;
+          overflow-wrap: break-word;
+          hyphens: auto;
+          font-weight: 400;
+          letter-spacing: 0.01em;
         }
+
+
 
         .message-time {
           font-size: 0.75rem;
@@ -11567,40 +12026,74 @@ I hereby confirm this is a formal report and all information provided is accurat
 
         .message-input-area {
           display: flex !important;
-          gap: 0.5rem;
-          align-items: center;
-          padding: 1rem !important;
-          border-top: 1px solid #eee !important;
-          background: #fff !important;
+          gap: 0.75rem;
+          align-items: flex-end;
+          padding: 1.25rem 1.5rem !important;
+          border-top: 1px solid rgba(229, 231, 235, 0.6) !important;
+          background: rgba(255, 255, 255, 0.95) !important;
+          backdrop-filter: blur(10px) !important;
           flex-wrap: wrap;
           position: sticky !important;
           bottom: 0 !important;
           z-index: 10 !important;
-          box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1) !important;
+          box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
           width: 100% !important;
           box-sizing: border-box !important;
         }
 
         .message-input {
           flex: 1 !important;
-          padding: 0.75rem !important;
-          border: 1px solid #ccc !important;
-          border-radius: 8px !important;
+          padding: 1rem 1.25rem !important;
+          border: 2px solid rgba(229, 231, 235, 0.6) !important;
+          border-radius: 25px !important;
           outline: none !important;
           font-size: 0.95rem !important;
           min-width: 200px !important;
-          background: #fff !important;
+          background: rgba(255, 255, 255, 0.9) !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          resize: none !important;
+          font-family: inherit !important;
+          line-height: 1.4 !important;
+          max-height: 120px !important;
+          min-height: 44px !important;
+        }
+
+        .message-input:focus {
+          border-color: #10B981 !important;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
+          background: #ffffff !important;
+        }
+
+        .message-input::placeholder {
+          color: #9CA3AF !important;
+          font-weight: 400 !important;
         }
 
         .send-button {
-          padding: 0.75rem 1.5rem !important;
-          background: #007B7F !important;
+          padding: 0.875rem 1.75rem !important;
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
           color: #fff !important;
           border: none !important;
-          border-radius: 8px !important;
+          border-radius: 25px !important;
           cursor: pointer !important;
           font-weight: 600 !important;
-          transition: background 0.2s !important;
+          font-size: 0.95rem !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 0.5rem !important;
+          min-height: 44px !important;
+        }
+
+        .send-button:hover:not(:disabled) {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+          transform: translateY(-1px) !important;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+        }
+
+        .send-button:active {
+          transform: translateY(0) !important;
         }
 
         .send-button:disabled {
@@ -13059,16 +13552,26 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .delete-message-btn {
-          background: transparent;
-          border: none;
-          color: #999;
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          color: #EF4444;
           cursor: pointer;
-          font-size: 0.8rem;
-          padding: 0.2rem;
-          border-radius: 3px;
+          font-size: 0.75rem;
+          padding: 0.375rem;
+          border-radius: 50%;
           opacity: 0;
-          transition: all 0.2s;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           flex-shrink: 0;
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(5px);
+          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
         }
 
         .message:hover .delete-message-btn {
@@ -13076,9 +13579,20 @@ I hereby confirm this is a formal report and all information provided is accurat
         }
 
         .delete-message-btn:hover {
-          background: #ff4444;
+          background: linear-gradient(135deg, #EF4444, #DC2626);
           color: #fff;
           transform: scale(1.1);
+          border-color: transparent;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .delete-message-btn:active {
+          transform: scale(0.95);
+        }
+
+        /* Hide delete button on mobile, show only on desktop */
+        .desktop-only {
+          display: flex;
         }
 
         /* Mobile responsive updates */
@@ -13174,6 +13688,49 @@ I hereby confirm this is a formal report and all information provided is accurat
           .message-bubble {
             max-width: 85%;
             word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            word-break: break-word;
+            padding: 0.75rem;
+            min-height: 44px; /* Better touch target */
+            box-sizing: border-box;
+          }
+
+          /* Hide desktop delete button on mobile */
+          .desktop-only {
+            display: none !important;
+          }
+
+          /* Add visual feedback for long press on mobile */
+          .message.sent .message-bubble:active {
+            transform: scale(0.98);
+            opacity: 0.8;
+            transition: all 0.1s ease;
+          }
+
+          /* Subtle indication that message is pressable */
+          .message.sent .message-bubble {
+            position: relative;
+          }
+
+          .message.sent .message-bubble::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            opacity: 0.6;
+          }
+
+          /* Better text wrapping on mobile */
+          .message-text {
+            word-break: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            line-height: 1.5;
           }
 
           /* Ensure input area doesn't get hidden */
@@ -13221,6 +13778,11 @@ I hereby confirm this is a formal report and all information provided is accurat
           .messages-list {
             padding-bottom: 100px !important;
           }
+
+          /* Show mobile hint on mobile devices */
+          .mobile-hint {
+            display: block !important;
+          }
         }
 
         @media (max-width: 480px) {
@@ -13246,6 +13808,25 @@ I hereby confirm this is a formal report and all information provided is accurat
           .message-bubble {
             max-width: 90%;
             padding: 0.5rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            word-break: break-word;
+            min-height: 40px; /* Smaller touch target for very small screens */
+          }
+
+          /* Ensure desktop delete button stays hidden on very small screens */
+          .desktop-only {
+            display: none !important;
+          }
+
+          /* Improve text readability on small screens */
+          .message-text {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
           }
 
           .cart-btn {
@@ -13280,6 +13861,26 @@ I hereby confirm this is a formal report and all information provided is accurat
           .message-input,
           .search-input {
             font-size: 16px;
+          }
+        }
+
+        /* Tablet and medium screen optimizations */
+        @media (max-width: 1024px) and (min-width: 769px) {
+          .message-bubble {
+            max-width: 75%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+          }
+          
+          /* Show delete button on hover for tablets */
+          .desktop-only {
+            display: block;
+          }
+          
+          .message-text {
+            word-break: break-word;
+            overflow-wrap: break-word;
           }
         }
 
