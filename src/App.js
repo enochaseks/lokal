@@ -33,6 +33,8 @@ import { getAuth, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db } from './firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
+import LoadingSplashManager from './components/LoadingSplashManager';
+import SimpleLoadingSpinner from './components/SimpleLoadingSpinner';
 
 function DeletedAccountGuard({ children }) {
   const navigate = useNavigate();
@@ -146,19 +148,42 @@ function ProtectedRoute({ element }) {
   }, [navigate]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <SimpleLoadingSpinner message="Authenticating..." overlay={true} />;
   }
 
   return isAuthenticated ? element : null;
 }
 
 function App() {
+  const [appLoading, setAppLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  useEffect(() => {
+    // Initialize Firebase Auth and check authentication state
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthInitialized(true);
+      // Add a minimum loading time for better UX
+      setTimeout(() => {
+        setAppLoading(false);
+      }, 1500); // Show splash for at least 1.5 seconds
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <MessageProvider>
       <CartProvider>
         <Router>
-          <DeletedAccountGuard>
-            <OnboardingGuard>
+          <LoadingSplashManager 
+            isLoading={appLoading} 
+            message="Welcome to Lokal"
+            minDisplayTime={1500}
+            fadeOutDuration={800}
+          >
+            <DeletedAccountGuard>
+              <OnboardingGuard>
           <div className="App" style={{ 
             minHeight: '100vh', 
             width: '100%', 
@@ -353,6 +378,7 @@ function App() {
           </div>
             </OnboardingGuard>
           </DeletedAccountGuard>
+          </LoadingSplashManager>
       </Router>
     </CartProvider>
     </MessageProvider>
