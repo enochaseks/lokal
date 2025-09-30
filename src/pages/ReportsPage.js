@@ -1536,6 +1536,11 @@ For any questions regarding this order, please contact the seller.`,
   const downloadReceipt = (transaction) => {
     if (!transaction) return;
 
+    // Detect mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+
     // Create receipt date
     const receiptDate = transaction.timestamp 
       ? (transaction.timestamp.toDate ? transaction.timestamp.toDate() : new Date(transaction.timestamp))
@@ -1820,18 +1825,82 @@ For any questions regarding this order, please contact the seller.`,
 
     // Create a new window with the HTML content
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(htmlContent);
+    
+    // Enhanced HTML content with mobile-specific instructions
+    const mobileInstructions = isMobile ? `
+      <div id="mobile-instructions" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 1rem;
+        text-align: center;
+        font-family: Arial, sans-serif;
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      ">
+        <div style="font-weight: bold; margin-bottom: 0.5rem;">📱 Save to ${isIOS ? 'Files (iOS)' : isAndroid ? 'Downloads (Android)' : 'Device'}</div>
+        <div style="font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.4;">
+          ${isIOS ? 
+            '1️⃣ Tap the Share button (⬆️) at the bottom<br/>2️⃣ Select "Save to Files"<br/>3️⃣ Choose your preferred location' : 
+            isAndroid ? 
+            '1️⃣ Tap Menu (⋮) in the top right<br/>2️⃣ Select "Print"<br/>3️⃣ Choose "Save as PDF"<br/>4️⃣ Select Download location' :
+            'Use your browser\'s menu to print or save as PDF'
+          }
+        </div>
+        <button onclick="document.getElementById('mobile-instructions').style.display='none'" style="
+          background: rgba(255,255,255,0.2);
+          border: 1px solid rgba(255,255,255,0.3);
+          color: white;
+          padding: 0.5rem 1rem;
+          border-radius: 0.375rem;
+          cursor: pointer;
+          font-size: 0.875rem;
+        ">Got it!</button>
+        <button onclick="window.close()" style="
+          background: rgba(255,255,255,0.2);
+          border: 1px solid rgba(255,255,255,0.3);
+          color: white;
+          padding: 0.5rem 1rem;
+          border-radius: 0.375rem;
+          cursor: pointer;
+          font-size: 0.875rem;
+          margin-left: 0.5rem;
+        ">Close</button>
+      </div>
+      <div style="height: 120px;"></div>
+    ` : '';
+
+    const enhancedHtmlContent = htmlContent.replace(
+      '<body>',
+      `<body>${mobileInstructions}`
+    );
+
+    printWindow.document.write(enhancedHtmlContent);
     printWindow.document.close();
     
-    // Wait for content to load then print
+    // Wait for content to load then handle printing
     printWindow.onload = function() {
       // Set the document title for the PDF filename
       printWindow.document.title = filename;
       
       // Use setTimeout to ensure everything is rendered
       setTimeout(() => {
-        printWindow.print();
-        // Don't close the window automatically - let user decide
+        if (isMobile) {
+          // For mobile, don't auto-trigger print, let user follow instructions
+          console.log('Mobile device detected - user will manually save PDF');
+          
+          // Try to use native share API if available
+          if (navigator.share && isIOS) {
+            // Note: Web Share API can't share HTML directly, but this sets up future enhancement
+            console.log('Native share API available');
+          }
+        } else {
+          // For desktop, trigger print dialog
+          printWindow.print();
+        }
       }, 500);
     };
   };
@@ -1889,6 +1958,18 @@ For any questions regarding this order, please contact the seller.`,
         onPrimaryAction: () => {
           setMessageModal(null);
           downloadReceipt(transaction);
+          
+          // Show success notification for mobile users
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          if (isMobile) {
+            setTimeout(() => {
+              setNotification({
+                type: 'success',
+                title: 'PDF Ready!',
+                message: 'Follow the instructions in the new tab to save your receipt'
+              });
+            }, 1000);
+          }
         },
         onSecondaryAction: () => {
           setMessageModal(null);
@@ -2384,6 +2465,38 @@ For any questions regarding this order, please contact the seller.`,
         padding: '0 1rem',
         minHeight: 'calc(100vh - 120px)'
       }}>
+        {/* Back Button */}
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.75rem 1rem',
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #e9ecef',
+            borderRadius: '0.5rem',
+            color: '#495057',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            marginBottom: '1.5rem',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#e9ecef';
+            e.target.style.transform = 'translateX(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#f8f9fa';
+            e.target.style.transform = 'translateX(0)';
+          }}
+        >
+          <span style={{ fontSize: '1.2rem' }}>⬅️</span>
+          Back
+        </button>
+
         <div style={{ marginBottom: '2rem' }}>
           <h1 style={{ 
             fontSize: '2rem', 

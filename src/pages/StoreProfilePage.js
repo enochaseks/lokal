@@ -297,6 +297,53 @@ function StoreProfilePage() {
     ));
   };
 
+  // Auto-fill daily schedule with general opening/closing times
+  const autoFillSchedule = () => {
+    if (!editOpeningTime || !editClosingTime) {
+      alert('Please set general opening and closing times first.');
+      return;
+    }
+    
+    const newOpeningTimes = {};
+    const newClosingTimes = {};
+    
+    daysOfWeek.forEach(day => {
+      if (!closedDays.includes(day)) {
+        newOpeningTimes[day] = editOpeningTime;
+        newClosingTimes[day] = editClosingTime;
+      }
+    });
+    
+    setOpeningTimes(newOpeningTimes);
+    setClosingTimes(newClosingTimes);
+  };
+
+  // Clear all daily schedules
+  const clearSchedule = () => {
+    setOpeningTimes({});
+    setClosingTimes({});
+  };
+
+  // Auto-populate daily schedule when general times are set (if no daily schedule exists)
+  const handleGeneralTimeChange = (type, value) => {
+    if (type === 'opening') {
+      setEditOpeningTime(value);
+    } else {
+      setEditClosingTime(value);
+    }
+
+    // If no daily schedule is set and both general times are now available, offer to auto-fill
+    const hasExistingSchedule = Object.keys(openingTimes).length > 0 || Object.keys(closingTimes).length > 0;
+    if (!hasExistingSchedule && value && (type === 'opening' ? editClosingTime : editOpeningTime)) {
+      // Auto-populate after a short delay to ensure state is updated
+      setTimeout(() => {
+        if (window.confirm('Would you like to apply these general hours to all days? You can still modify individual days afterward.')) {
+          autoFillSchedule();
+        }
+      }, 100);
+    }
+  };
+
   // Item management functions
   const handleEditItem = (item) => {
     setEditingItem(item);
@@ -2377,13 +2424,72 @@ function StoreProfilePage() {
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Opening Time</label>
-                  <input type="time" value={editOpeningTime} onChange={e => setEditOpeningTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>General Opening Time</label>
+                  <input 
+                    type="time" 
+                    value={editOpeningTime} 
+                    onChange={e => handleGeneralTimeChange('opening', e.target.value)} 
+                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} 
+                    required 
+                  />
+                  <small style={{ color: '#666', fontSize: '0.85rem' }}>This will be used as default for days without specific hours</small>
                 </div>
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Closing Time</label>
-                  <input type="time" value={editClosingTime} onChange={e => setEditClosingTime(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required />
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>General Closing Time</label>
+                  <input 
+                    type="time" 
+                    value={editClosingTime} 
+                    onChange={e => handleGeneralTimeChange('closing', e.target.value)} 
+                    style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} 
+                    required 
+                  />
+                  <small style={{ color: '#666', fontSize: '0.85rem' }}>This will be used as default for days without specific hours</small>
                 </div>
+                {/* Schedule Management Buttons */}
+                <div style={{ marginBottom: 16, padding: '12px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <strong style={{ color: '#495057', fontSize: '0.95rem' }}>📅 Schedule Management</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={autoFillSchedule}
+                      disabled={!editOpeningTime || !editClosingTime}
+                      style={{
+                        background: editOpeningTime && editClosingTime ? '#007B7F' : '#ccc',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        cursor: editOpeningTime && editClosingTime ? 'pointer' : 'not-allowed',
+                        fontWeight: '500'
+                      }}
+                    >
+                      🔄 Apply to All Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearSchedule}
+                      style={{
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      🗑️ Clear All
+                    </button>
+                  </div>
+                  <small style={{ color: '#6c757d', fontSize: '0.8rem', display: 'block', marginTop: '6px' }}>
+                    Use "Apply to All Days" to automatically fill the schedule below with your general hours
+                  </small>
+                </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Closed Days (optional)</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -2395,6 +2501,13 @@ function StoreProfilePage() {
                           onChange={e => {
                             if (e.target.checked) {
                               setClosedDays([...closedDays, day]);
+                              // Clear times for closed days
+                              const newOpeningTimes = { ...openingTimes };
+                              const newClosingTimes = { ...closingTimes };
+                              delete newOpeningTimes[day];
+                              delete newClosingTimes[day];
+                              setOpeningTimes(newOpeningTimes);
+                              setClosingTimes(newClosingTimes);
                             } else {
                               setClosedDays(closedDays.filter(d => d !== day));
                             }
@@ -2405,48 +2518,82 @@ function StoreProfilePage() {
                     ))}
                   </div>
                 </div>
+                {/* Daily Schedule Header */}
+                <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #e9ecef' }}>
+                  <strong style={{ color: '#495057', fontSize: '1rem' }}>📅 Daily Schedule</strong>
+                  <div style={{ fontSize: '0.85rem', color: '#6c757d', marginTop: 2 }}>
+                    Set specific hours for each day or leave blank to use general hours
+                  </div>
+                </div>
+
                 {daysOfWeek.map(day => (
-                  <div key={day} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <label style={{ minWidth: 80, fontWeight: closedDays.includes(day) ? 400 : 500 }}>
+                  <div key={day} style={{ 
+                    marginBottom: 12, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 10,
+                    padding: '8px',
+                    background: closedDays.includes(day) ? '#f8f9fa' : 'transparent',
+                    borderRadius: '6px',
+                    border: closedDays.includes(day) ? '1px solid #dee2e6' : 'none'
+                  }}>
+                    <label style={{ 
+                      minWidth: 85, 
+                      fontWeight: closedDays.includes(day) ? 400 : 500,
+                      color: closedDays.includes(day) ? '#6c757d' : '#495057'
+                    }}>
                       {day}:
                     </label>
-                    <input
-                      type="time"
-                      value={closedDays.includes(day) ? '' : (openingTimes[day] || '')}
-                      onChange={e => {
-                        if (!closedDays.includes(day)) {
-                          setOpeningTimes({ ...openingTimes, [day]: e.target.value });
-                        }
-                      }}
-                      disabled={closedDays.includes(day)}
-                      placeholder="Open"
-                      style={{ 
-                        width: 110, 
-                        border: closedDays.includes(day) ? '1px solid #ddd' : '1px solid #B8B8B8', 
-                        borderRadius: 4, 
-                        padding: '0.3rem',
-                        backgroundColor: closedDays.includes(day) ? '#f5f5f5' : '#fff'
-                      }}
-                    />
-                    <span style={{ color: closedDays.includes(day) ? '#999' : '#000' }}>to</span>
-                    <input
-                      type="time"
-                      value={closedDays.includes(day) ? '' : (closingTimes[day] || '')}
-                      onChange={e => {
-                        if (!closedDays.includes(day)) {
-                          setClosingTimes({ ...closingTimes, [day]: e.target.value });
-                        }
-                      }}
-                      disabled={closedDays.includes(day)}
-                      placeholder="Close"
-                      style={{ 
-                        width: 110, 
-                        border: closedDays.includes(day) ? '1px solid #ddd' : '1px solid #B8B8B8', 
-                        borderRadius: 4, 
-                        padding: '0.3rem',
-                        backgroundColor: closedDays.includes(day) ? '#f5f5f5' : '#fff'
-                      }}
-                    />
+                    {closedDays.includes(day) ? (
+                      <span style={{ 
+                        color: '#dc3545', 
+                        fontWeight: '500', 
+                        fontStyle: 'italic',
+                        flex: 1,
+                        padding: '8px 12px'
+                      }}>
+                        🚫 Closed
+                      </span>
+                    ) : (
+                      <>
+                        <input
+                          type="time"
+                          value={openingTimes[day] || ''}
+                          onChange={e => {
+                            setOpeningTimes({ ...openingTimes, [day]: e.target.value });
+                          }}
+                          placeholder="Opening"
+                          style={{ 
+                            width: 110, 
+                            border: '1px solid #B8B8B8', 
+                            borderRadius: 4, 
+                            padding: '6px',
+                            backgroundColor: '#fff'
+                          }}
+                        />
+                        <span style={{ color: '#495057', fontWeight: '500' }}>to</span>
+                        <input
+                          type="time"
+                          value={closingTimes[day] || ''}
+                          onChange={e => {
+                            setClosingTimes({ ...closingTimes, [day]: e.target.value });
+                          }}
+                          placeholder="Closing"
+                          style={{ 
+                            width: 110, 
+                            border: '1px solid #B8B8B8', 
+                            borderRadius: 4, 
+                            padding: '6px',
+                            backgroundColor: '#fff'
+                          }}
+                        />
+                        {!openingTimes[day] && !closingTimes[day] && editOpeningTime && editClosingTime && (
+                          <small style={{ color: '#6c757d', fontSize: '0.8rem', marginLeft: '8px' }}>
+                            Will use: {editOpeningTime} - {editClosingTime}
+                          </small>
+                        )}
+                      </>
+                    )}
                     {closedDays.includes(day) && (
                       <span style={{ color: '#D92D20', fontSize: '0.9rem', fontWeight: 600 }}>
                         CLOSED
