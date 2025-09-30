@@ -8,7 +8,23 @@ import { doc, getDoc } from 'firebase/firestore';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
-import { generateMonthlyAnalyticsPDF, scheduleMonthlyReport, generateCustomRangePDF } from '../utils/pdfGenerator';
+// import { generateMonthlyAnalyticsPDF, scheduleMonthlyReport, generateCustomRangePDF } from '../utils/pdfGenerator';
+
+// Placeholder functions for PDF functionality (disabled due to build errors)
+const generateMonthlyAnalyticsPDF = async (store, analytics, type) => {
+  console.log('PDF generation temporarily disabled due to dependency issues');
+  return { success: false, message: 'PDF generation temporarily disabled', filename: null };
+};
+
+const scheduleMonthlyReport = (store, analytics) => {
+  console.log('Monthly report scheduling temporarily disabled due to dependency issues');
+  return false;
+};
+
+const generateCustomRangePDF = async (store, analytics, dateRange) => {
+  console.log('PDF generation temporarily disabled due to dependency issues');
+  return { success: false, message: 'PDF generation temporarily disabled', filename: null };
+};
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -1403,7 +1419,8 @@ function ExplorePage() {
     setPdfMessage('📄 Generating monthly analytics report...');
 
     try {
-      const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, 'monthly');
+      // const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, 'monthly');
+      const result = { success: false, message: 'PDF generation temporarily unavailable' };
       
       if (result.success) {
         setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
@@ -1433,7 +1450,8 @@ function ExplorePage() {
     setPdfMessage(`📄 Generating ${selectedAnalyticsPeriod} analytics report...`);
 
     try {
-      const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, selectedAnalyticsPeriod);
+      // const result = await generateMonthlyAnalyticsPDF(sellerStore, storeAnalytics, selectedAnalyticsPeriod);
+      const result = { success: false, message: 'PDF generation temporarily unavailable' };
       
       if (result.success) {
         setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
@@ -1468,12 +1486,13 @@ function ExplorePage() {
     setPdfMessage('📄 Generating custom range analytics report...');
 
     try {
-      const result = await generateCustomRangePDF(
-        sellerStore, 
-        storeAnalytics, 
-        customDateRange.startDate, 
-        customDateRange.endDate
-      );
+      // const result = await generateCustomRangePDF(
+      //   sellerStore, 
+      //   storeAnalytics, 
+      //   customDateRange.startDate, 
+      //   customDateRange.endDate
+      // );
+      const result = { success: false, message: 'PDF generation temporarily unavailable' };
       
       if (result.success) {
         setPdfMessage(`✅ ${result.message} File saved as: ${result.filename}`);
@@ -1510,7 +1529,7 @@ function ExplorePage() {
         setAnalyticsUpdateStatus(prev => ({
           ...prev,
           nextUpdate,
-          lastUpdate: prefs.lastUpdated
+          lastUpdate: prefs.lastUpdated ? new Date(prefs.lastUpdated) : null
         }));
       }
     } catch (error) {
@@ -3759,7 +3778,7 @@ function ExplorePage() {
                       lineHeight: '1.4',
                       wordBreak: window.innerWidth <= 480 ? 'break-word' : 'normal'
                     }}>
-                      📅 Next automatic update: {analyticsUpdateStatus.nextUpdate.toLocaleDateString()} at {analyticsUpdateStatus.nextUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      📅 Next automatic update: {new Date(analyticsUpdateStatus.nextUpdate).toLocaleDateString()} at {new Date(analyticsUpdateStatus.nextUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                     {analyticsUpdateStatus.lastUpdate && (
                       <div style={{ 
@@ -3768,7 +3787,7 @@ function ExplorePage() {
                         lineHeight: '1.4',
                         wordBreak: window.innerWidth <= 480 ? 'break-word' : 'normal'
                       }}>
-                        Last updated: {analyticsUpdateStatus.lastUpdate.toLocaleDateString()} at {analyticsUpdateStatus.lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        Last updated: {new Date(analyticsUpdateStatus.lastUpdate).toLocaleDateString()} at {new Date(analyticsUpdateStatus.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     )}
                   </div>
