@@ -3,9 +3,10 @@ import Navbar from '../components/Navbar';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { getDocs, collection, query, where, setDoc, doc, getDoc } from 'firebase/firestore';
+import { getDocs, collection, query, where, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addOrUpdateContact } from '../utils/hubspotClient';
+// Removed debug imports
 
 function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -52,25 +53,8 @@ function RegisterPage() {
     validatePassword(newPassword);
   };
 
-  useEffect(() => {
-    const auth = getAuth(app);
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (user && user.emailVerified) {
-        // Check onboardingStep
-        const { doc, getDoc } = await import('firebase/firestore');
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const onboardingStep = userDoc.data().onboardingStep;
-          if (onboardingStep && onboardingStep !== 'complete') {
-            navigate('/' + onboardingStep);
-            return;
-          }
-        }
-        navigate('/onboarding');
-      }
-    });
-    return () => unsubscribe();
-  }, [navigate]);
+  // No auth state listener needed on registration page
+  // Users will manually verify their email and navigate away
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -106,48 +90,68 @@ function RegisterPage() {
       setError('You must be at least 16 years old to sign up.');
       return;
     }
+
     try {
-      // Check if email is deactivated in users or stores
-      const usersQuery = query(collection(db, 'users'), where('email', '==', email), where('deactivated', '==', true));
-      const usersSnap = await getDocs(usersQuery);
-      const storesQuery = query(collection(db, 'stores'), where('email', '==', email), where('deactivated', '==', true));
-      const storesSnap = await getDocs(storesQuery);
-      if (!usersSnap.empty || !storesSnap.empty) {
-        setError('This email is associated with a deactivated account. Please contact support.');
-        return;
-      }
       const auth = getAuth(app);
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const { setDoc, doc, getDoc } = await import('firebase/firestore');
-      const userRef = doc(db, 'users', userCredential.user.uid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          email,
-          createdAt: new Date().toISOString(),
-          onboardingStep: 'onboarding',
-          marketingConsent: marketingConsent,
+      const normalizedEmail = email.trim().toLowerCase();
+      
+      // Create the user account
+      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      const user = userCredential.user;
+
+      // Create user document in Firestore
+      const userDoc = {
+        email: normalizedEmail,
+        dateOfBirth: dob,
+        createdAt: new Date().toISOString(),
+        onboardingStep: 'onboarding',
+        marketingConsent: marketingConsent,
+        emailVerified: false,
+        uid: user.uid
+      };
+
+      await setDoc(doc(db, 'users', user.uid), userDoc);
+      
+      // Send email verification
+      await sendEmailVerification(user, {
+        url: `${window.location.origin}/login`,
+        handleCodeInApp: false
+      });
+      
+      // Add to HubSpot in background (non-blocking)
+      if (marketingConsent) {
+        addOrUpdateContact({
+          email: normalizedEmail,
+          marketingConsent: true
+        }).catch(hubspotError => {
+          console.warn('HubSpot integration failed:', hubspotError);
         });
-        
-        // Add the user to HubSpot if they consented to marketing
-        if (marketingConsent) {
-          try {
-            await addOrUpdateContact({
-              email,
-              marketingConsent: true
-            });
-            console.log('User added to HubSpot marketing');
-          } catch (hubspotError) {
-            console.error('Failed to add user to HubSpot:', hubspotError);
-            // Don't block registration if HubSpot integration fails
-          }
-        }
       }
-      await sendEmailVerification(userCredential.user);
+      
       setVerificationSent(true);
-      setSuccess('Account created! Please check your email to verify your account.');
+      setSuccess('Account created successfully! Please check your email and click the verification link to complete your registration.');
+      
     } catch (err) {
-      setError(err.message);
+      console.error('Registration error:', err);
+      
+      // Handle specific Firebase Auth errors
+      if (err.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists. Please use a different email or try logging in.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak. Please choose a stronger password.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Registration is currently disabled. Please contact support.');
+        console.error('FIREBASE SETUP REQUIRED: Email/Password authentication must be enabled in Firebase Console');
+        console.error('Go to: Firebase Console > Authentication > Sign-in method > Email/Password > Enable');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Network error. Please check your internet connection and try again.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many registration attempts. Please wait a few minutes and try again.');
+      } else {
+        setError('Registration failed: ' + (err.message || 'Please try again.'));
+      }
     }
   };
 
@@ -505,14 +509,60 @@ function RegisterPage() {
             }} 
             disabled={!isPasswordValid || password !== confirmPassword || !agreedToTerms || !agreedToPrivacy || verificationSent}
           >
-            Register
+            {verificationSent ? 'Registration Complete - Check Email' : 'Register'}
           </button>
         </form>
         {verificationSent && (
-          <div style={{ color: '#007B7F', marginTop: '1rem', textAlign: 'center' }}>
-            Please verify your email to continue. Refresh this page after verification.
+          <div style={{ 
+            backgroundColor: '#f0f7f7', 
+            border: '1px solid #007B7F', 
+            borderRadius: '8px', 
+            padding: '15px', 
+            marginTop: '1rem', 
+            textAlign: 'center' 
+          }}>
+            <h4 style={{ color: '#007B7F', margin: '0 0 10px 0' }}>✉️ Verification Email Sent!</h4>
+            <p style={{ margin: '0 0 15px 0', color: '#333' }}>
+              Please check your email and click the verification link to complete your registration.
+            </p>
+            <button
+              onClick={async () => {
+                const auth = getAuth(app);
+                if (auth.currentUser) {
+                  await auth.currentUser.reload();
+                  if (auth.currentUser.emailVerified) {
+                    // Check onboarding step and navigate accordingly
+                    const { doc, getDoc } = await import('firebase/firestore');
+                    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+                    if (userDoc.exists()) {
+                      const onboardingStep = userDoc.data().onboardingStep;
+                      if (onboardingStep && onboardingStep !== 'complete') {
+                        navigate('/' + onboardingStep);
+                        return;
+                      }
+                    }
+                    navigate('/onboarding');
+                  } else {
+                    alert('Email not verified yet. Please check your email and click the verification link.');
+                  }
+                }
+              }}
+              style={{
+                backgroundColor: '#007B7F',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '8px 16px',
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              I've verified my email - Continue
+            </button>
           </div>
         )}
+        
+
         <div style={{ marginTop: '1rem', textAlign: 'center' }}>
           <span style={{ color: '#1C1C1C' }}>Already have an account? </span>
           <a href="/login" style={{ color: '#007B7F', fontWeight: 'bold', textDecoration: 'none' }}>Login</a>

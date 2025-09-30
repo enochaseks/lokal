@@ -1473,6 +1473,112 @@ function StorePreviewPage() {
               </div>
             </div>
             
+            {/* Compact Social Media and Website Icons */}
+            {((store.socialLinks && store.socialLinks.length > 0) || 
+              (store.websiteLinks && store.websiteLinks.length > 0) ||
+              (store.platform && store.socialHandle) ||
+              store.websiteLink) && (
+              <div className="social-icons-container">
+                <div className="social-icons-wrapper">
+                  {/* Display new format social links */}
+                  {store.socialLinks && store.socialLinks.length > 0 && 
+                    store.socialLinks.map((link, index) => (
+                      <a
+                        key={`social-${index}`}
+                        href={
+                          link.platform === 'Instagram' ? `https://instagram.com/${link.handle.replace('@', '')}` :
+                          link.platform === 'Facebook' ? `https://facebook.com/${link.handle.replace('@', '')}` :
+                          link.platform === 'Twitter' ? `https://twitter.com/${link.handle.replace('@', '')}` :
+                          link.platform === 'TikTok' ? `https://tiktok.com/@${link.handle.replace('@', '')}` :
+                          link.platform === 'LinkedIn' ? `https://linkedin.com/in/${link.handle.replace('@', '')}` :
+                          link.platform === 'YouTube' ? `https://youtube.com/@${link.handle.replace('@', '')}` :
+                          link.platform === 'WhatsApp' ? `https://wa.me/${link.handle.replace(/[^0-9]/g, '')}` :
+                          link.handle.startsWith('http') ? link.handle : `https://${link.handle}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="social-icon-link"
+                        title={`${link.platform}: ${link.handle.startsWith('@') ? link.handle : '@' + link.handle}`}
+                      >
+                        <div className={`social-icon-circle ${link.platform.toLowerCase()}-icon`}>
+                          {link.platform === 'Instagram' ? 'IG' :
+                           link.platform === 'Facebook' ? 'f' :
+                           link.platform === 'Twitter' ? '𝕏' :
+                           link.platform === 'TikTok' ? '♪' :
+                           link.platform === 'LinkedIn' ? 'in' :
+                           link.platform === 'YouTube' ? '▶' :
+                           link.platform === 'WhatsApp' ? 'W' :
+                           '🔗'}
+                        </div>
+                      </a>
+                    ))
+                  }
+                  
+                  {/* Display legacy format social link if no new format exists */}
+                  {(!store.socialLinks || store.socialLinks.length === 0) && 
+                   store.platform && store.socialHandle && (
+                    <a
+                      href={
+                        store.platform === 'Instagram' ? `https://instagram.com/${store.socialHandle.replace('@', '')}` :
+                        store.platform === 'Facebook' ? `https://facebook.com/${store.socialHandle.replace('@', '')}` :
+                        store.platform === 'Twitter' ? `https://twitter.com/${store.socialHandle.replace('@', '')}` :
+                        store.platform === 'TikTok' ? `https://tiktok.com/@${store.socialHandle.replace('@', '')}` :
+                        store.platform === 'WhatsApp' ? `https://wa.me/${store.socialHandle.replace(/[^0-9]/g, '')}` :
+                        store.socialHandle.startsWith('http') ? store.socialHandle : `https://${store.socialHandle}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-icon-link"
+                      title={`${store.platform}: ${store.socialHandle.startsWith('@') ? store.socialHandle : '@' + store.socialHandle}`}
+                    >
+                      <div className={`social-icon-circle ${store.platform.toLowerCase()}-icon`}>
+                        {store.platform === 'Instagram' ? 'IG' :
+                         store.platform === 'Facebook' ? 'f' :
+                         store.platform === 'Twitter' ? '𝕏' :
+                         store.platform === 'TikTok' ? '♪' :
+                         store.platform === 'WhatsApp' ? 'W' :
+                         '🔗'}
+                      </div>
+                    </a>
+                  )}
+                  
+                  {/* Display new format website links */}
+                  {store.websiteLinks && store.websiteLinks.length > 0 && 
+                    store.websiteLinks.map((link, index) => (
+                      <a
+                        key={`website-${index}`}
+                        href={link.url.startsWith('http') ? link.url : `https://${link.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="social-icon-link"
+                        title={link.name || 'Website'}
+                      >
+                        <div className="social-icon-circle website-icon">
+                          WWW
+                        </div>
+                      </a>
+                    ))
+                  }
+                  
+                  {/* Display legacy format website link if no new format exists */}
+                  {(!store.websiteLinks || store.websiteLinks.length === 0) && 
+                   store.websiteLink && (
+                    <a
+                      href={store.websiteLink.startsWith('http') ? store.websiteLink : `https://${store.websiteLink}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-icon-link"
+                      title="Website"
+                    >
+                      <div className="social-icon-circle website-icon">
+                        WWW
+                      </div>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+            
             {/* Display fee information */}
             {console.log('Current storeFeeSettings:', storeFeeSettings, 'deliveryEnabled:', storeFeeSettings.deliveryEnabled, 'serviceFeeEnabled:', storeFeeSettings.serviceFeeEnabled)}
             {/* Hide delivery fee for ALL Collection orders (both Pay at Store and Card Payment) */}
@@ -1598,6 +1704,186 @@ function StorePreviewPage() {
                 font-size: 0.85rem;
                 margin-top: 6px;
                 font-style: italic;
+              }
+              
+              .social-icons-container {
+                margin-top: 8px;
+              }
+              
+              .social-icons-wrapper {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+              }
+              
+              .social-icon-link {
+                text-decoration: none;
+                transition: all 0.2s ease;
+              }
+              
+              .social-icon-link:hover {
+                transform: translateY(-2px);
+              }
+              
+              .social-icon-circle {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.9rem;
+                font-weight: bold;
+                color: white;
+                transition: all 0.3s ease;
+                position: relative;
+                overflow: hidden;
+                background: linear-gradient(135deg, #007B7F, #005a5f);
+                box-shadow: 0 2px 6px rgba(0,123,127,0.3);
+              }
+              
+              /* Instagram brand colors */
+              .instagram-icon {
+                background: linear-gradient(135deg, #E4405F, #833AB4, #F77737) !important;
+                box-shadow: 0 2px 6px rgba(228,64,95,0.4) !important;
+                font-size: 0.7rem !important;
+                letter-spacing: -0.5px;
+              }
+              
+              /* Facebook brand colors */
+              .facebook-icon {
+                background: linear-gradient(135deg, #1877F2, #0C5FB8) !important;
+                box-shadow: 0 2px 6px rgba(24,119,242,0.4) !important;
+                font-size: 1.1rem !important;
+                font-family: 'Times New Roman', serif;
+              }
+              
+              /* Twitter/X brand colors */
+              .twitter-icon {
+                background: linear-gradient(135deg, #000000, #333333) !important;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.4) !important;
+                font-size: 1rem !important;
+                font-weight: 900;
+              }
+              
+              /* TikTok brand colors */
+              .tiktok-icon {
+                background: linear-gradient(135deg, #000000, #FF0050, #00F2EA) !important;
+                box-shadow: 0 2px 6px rgba(255,0,80,0.4) !important;
+                font-size: 1.1rem !important;
+              }
+              
+              /* LinkedIn brand colors */
+              .linkedin-icon {
+                background: linear-gradient(135deg, #0A66C2, #084A94) !important;
+                box-shadow: 0 2px 6px rgba(10,102,194,0.4) !important;
+                font-size: 0.7rem !important;
+                font-weight: bold;
+              }
+              
+              /* YouTube brand colors */
+              .youtube-icon {
+                background: linear-gradient(135deg, #FF0000, #CC0000) !important;
+                box-shadow: 0 2px 6px rgba(255,0,0,0.4) !important;
+                font-size: 0.9rem !important;
+              }
+              
+              /* WhatsApp brand colors */
+              .whatsapp-icon {
+                background: linear-gradient(135deg, #25D366, #1EBE57) !important;
+                box-shadow: 0 2px 6px rgba(37,211,102,0.4) !important;
+                font-size: 1rem !important;
+                font-weight: bold;
+              }
+              
+              .social-icon-circle::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+                border-radius: 50%;
+                transition: opacity 0.3s ease;
+                opacity: 0;
+              }
+              
+              .social-icon-link:hover .social-icon-circle {
+                transform: scale(1.1);
+                box-shadow: 0 4px 12px rgba(0,123,127,0.4);
+              }
+              
+              .social-icon-link:hover .social-icon-circle::before {
+                opacity: 1;
+              }
+              
+              .website-icon {
+                background: linear-gradient(135deg, #28A745, #20693e) !important;
+                box-shadow: 0 2px 6px rgba(40,167,69,0.3) !important;
+                font-size: 0.6rem !important;
+                font-weight: bold;
+                letter-spacing: -0.5px;
+              }
+              
+              .social-icon-link:hover .website-icon {
+                box-shadow: 0 4px 12px rgba(40,167,69,0.4) !important;
+              }
+              
+              /* Hover effects for each platform */
+              .social-icon-link:hover .instagram-icon {
+                box-shadow: 0 4px 12px rgba(228,64,95,0.5) !important;
+              }
+              
+              .social-icon-link:hover .facebook-icon {
+                box-shadow: 0 4px 12px rgba(24,119,242,0.5) !important;
+              }
+              
+              .social-icon-link:hover .twitter-icon {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+              }
+              
+              .social-icon-link:hover .tiktok-icon {
+                box-shadow: 0 4px 12px rgba(255,0,80,0.5) !important;
+              }
+              
+              .social-icon-link:hover .linkedin-icon {
+                box-shadow: 0 4px 12px rgba(10,102,194,0.5) !important;
+              }
+              
+              .social-icon-link:hover .youtube-icon {
+                box-shadow: 0 4px 12px rgba(255,0,0,0.5) !important;
+              }
+              
+              .social-icon-link:hover .whatsapp-icon {
+                box-shadow: 0 4px 12px rgba(37,211,102,0.5) !important;
+              }
+              
+              /* Responsive design for social icons */
+              @media (max-width: 768px) {
+                .social-icon-circle {
+                  width: 28px;
+                  height: 28px;
+                  font-size: 0.9rem;
+                }
+                
+                .social-icons-wrapper {
+                  gap: 6px;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                .social-icon-circle {
+                  width: 26px;
+                  height: 26px;
+                  font-size: 0.8rem;
+                }
+                
+                .social-icons-wrapper {
+                  gap: 5px;
+                }
+              }
               }
             `}</style>
             

@@ -7,6 +7,15 @@ import { db, storage } from '../firebase';
 import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
+// Country and origin arrays
+const africanCountries = [
+  'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia', 'Morocco', 'Uganda', 'Tanzania', 'Algeria', 'Angola', 'Cameroon', 'Ivory Coast', 'Senegal', 'Zimbabwe', 'Zambia', 'Botswana', 'Namibia', 'Rwanda', 'Burundi', 'Mali', 'Malawi', 'Mozambique', 'Tunisia', 'Libya', 'Sudan', 'Somalia', 'Chad', 'Niger', 'Benin', 'Burkina Faso', 'Guinea', 'Sierra Leone', 'Liberia', 'Togo', 'Central African Republic', 'Congo', 'Gabon', 'Gambia', 'Lesotho', 'Mauritius', 'Swaziland', 'Djibouti', 'Eritrea', 'Seychelles', 'Comoros', 'Cape Verde', 'Sao Tome and Principe',
+];
+
+const caribbeanIslands = [
+  'Jamaica', 'Trinidad and Tobago', 'Barbados', 'Bahamas', 'Saint Lucia', 'Grenada', 'Saint Vincent and the Grenadines', 'Antigua and Barbuda', 'Dominica', 'Saint Kitts and Nevis', 'Cuba', 'Haiti', 'Dominican Republic', 'Puerto Rico', 'Aruba', 'Curacao', 'Saint Martin', 'Saint Barthelemy', 'Anguilla', 'Montserrat', 'British Virgin Islands', 'US Virgin Islands', 'Cayman Islands', 'Turks and Caicos', 'Guadeloupe', 'Martinique', 'Saint Pierre and Miquelon',
+];
+
 function StoreProfilePage() {
   const location = useLocation();
   const [profile, setProfile] = useState(null);
@@ -73,6 +82,10 @@ function StoreProfilePage() {
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
   const [editPhoneType, setEditPhoneType] = useState('work');
+  
+  // Social media and website fields - now as arrays for multiple links
+  const [editSocialLinks, setEditSocialLinks] = useState([]);
+  const [editWebsiteLinks, setEditWebsiteLinks] = useState([]);
 
   // Add at the top, after other useState hooks
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -111,6 +124,30 @@ function StoreProfilePage() {
           setEditAlcoholLicense(data.alcoholLicense || null);
           setEditPhoneNumber(data.phoneNumber || '');
           setEditPhoneType(data.phoneType || 'work');
+          
+          // Initialize social media and website arrays - convert from old format if needed
+          const socialLinks = data.socialLinks || [];
+          // If we have old format data, convert it
+          if (data.platform && data.socialHandle && socialLinks.length === 0) {
+            socialLinks.push({
+              platform: data.platform,
+              handle: data.socialHandle,
+              id: Date.now()
+            });
+          }
+          setEditSocialLinks(socialLinks);
+          
+          const websiteLinks = data.websiteLinks || [];
+          // If we have old format data, convert it
+          if (data.websiteLink && websiteLinks.length === 0) {
+            websiteLinks.push({
+              name: data.websiteName || 'Website',
+              url: data.websiteLink,
+              id: Date.now()
+            });
+          }
+          setEditWebsiteLinks(websiteLinks);
+          
           // Load change history
           setChangeHistory({
             nameChanges: data.nameChanges || [],
@@ -190,6 +227,43 @@ function StoreProfilePage() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Social media and website link management functions
+  const addSocialLink = () => {
+    setEditSocialLinks([...editSocialLinks, {
+      platform: 'Instagram',
+      handle: '',
+      id: Date.now()
+    }]);
+  };
+
+  const removeSocialLink = (id) => {
+    setEditSocialLinks(editSocialLinks.filter(link => link.id !== id));
+  };
+
+  const updateSocialLink = (id, field, value) => {
+    setEditSocialLinks(editSocialLinks.map(link => 
+      link.id === id ? { ...link, [field]: value } : link
+    ));
+  };
+
+  const addWebsiteLink = () => {
+    setEditWebsiteLinks([...editWebsiteLinks, {
+      name: '',
+      url: '',
+      id: Date.now()
+    }]);
+  };
+
+  const removeWebsiteLink = (id) => {
+    setEditWebsiteLinks(editWebsiteLinks.filter(link => link.id !== id));
+  };
+
+  const updateWebsiteLink = (id, field, value) => {
+    setEditWebsiteLinks(editWebsiteLinks.map(link => 
+      link.id === id ? { ...link, [field]: value } : link
+    ));
+  };
 
   const handleAddItem = async (e) => {
     e.preventDefault();
@@ -337,6 +411,14 @@ function StoreProfilePage() {
         alcoholLicense: editAlcoholLicense,
         phoneNumber: editPhoneNumber,
         phoneType: editPhoneType,
+        // Social media and website arrays
+        socialLinks: editSocialLinks,
+        websiteLinks: editWebsiteLinks,
+        // Keep old format for backward compatibility
+        platform: editSocialLinks.length > 0 ? editSocialLinks[0].platform : '',
+        socialHandle: editSocialLinks.length > 0 ? editSocialLinks[0].handle : '',
+        hasWebsite: editWebsiteLinks.length > 0 ? 'yes' : 'no',
+        websiteLink: editWebsiteLinks.length > 0 ? editWebsiteLinks[0].url : '',
       };
 
       // Handle significant changes that require license updates
@@ -523,22 +605,55 @@ function StoreProfilePage() {
     storeItems.length > 0;
 
   const handleGoLive = async () => {
-    if (!canGoLive) return;
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return;
-    const docRef = doc(db, 'stores', user.uid);
-    await updateDoc(docRef, { live: true });
-    setProfile(prev => ({ ...prev, live: true }));
+    if (!canGoLive) {
+      console.log('Cannot go live. Missing requirements:', {
+        backgroundImg: !!profile?.backgroundImg,
+        storeName: !!profile?.storeName,
+        storeLocation: !!profile?.storeLocation,
+        origin: !!profile?.origin,
+        deliveryType: !!profile?.deliveryType,
+        hasItems: storeItems.length > 0
+      });
+      return;
+    }
+    
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        alert('Please log in to continue');
+        return;
+      }
+      
+      console.log('Going live...');
+      const docRef = doc(db, 'stores', user.uid);
+      await updateDoc(docRef, { live: true });
+      setProfile(prev => ({ ...prev, live: true }));
+      console.log('Store is now live!');
+    } catch (error) {
+      console.error('Error going live:', error);
+      alert('Failed to go live. Please try again.');
+    }
   };
 
   const handleGoOffline = async () => {
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return;
-    const docRef = doc(db, 'stores', user.uid);
-    await updateDoc(docRef, { live: false });
-    setProfile(prev => ({ ...prev, live: false }));
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        alert('Please log in to continue');
+        return;
+      }
+      
+      console.log('Going offline...');
+      const docRef = doc(db, 'stores', user.uid);
+      await updateDoc(docRef, { live: false });
+      setProfile(prev => ({ ...prev, live: false }));
+      console.log('Store is now offline');
+    } catch (error) {
+      console.error('Error going offline:', error);
+      alert('Failed to go offline. Please try again.');
+    }
   };
 
   const handleFollow = async () => {
@@ -1275,6 +1390,42 @@ function StoreProfilePage() {
                   {storeItems.length} {storeItems.length === 1 ? 'Item' : 'Items'}
                 </div>
               </div>
+              
+              {/* Go Live Status Debug */}
+              {!profile?.live && (
+                <div style={{ 
+                  marginTop: '16px',
+                  padding: '12px',
+                  background: canGoLive ? '#f0f9ff' : '#fef3f2',
+                  border: `1px solid ${canGoLive ? '#bfdbfe' : '#fecaca'}`,
+                  borderRadius: '8px',
+                  fontSize: '0.85rem'
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: '8px', color: canGoLive ? '#1e40af' : '#dc2626' }}>
+                    {canGoLive ? '✅ Ready to Go Live!' : '⚠️ Requirements for Going Live:'}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '4px' }}>
+                    <div style={{ color: profile?.backgroundImg ? '#10b981' : '#ef4444' }}>
+                      {profile?.backgroundImg ? '✅' : '❌'} Background Image
+                    </div>
+                    <div style={{ color: profile?.storeName ? '#10b981' : '#ef4444' }}>
+                      {profile?.storeName ? '✅' : '❌'} Store Name
+                    </div>
+                    <div style={{ color: profile?.storeLocation ? '#10b981' : '#ef4444' }}>
+                      {profile?.storeLocation ? '✅' : '❌'} Store Location
+                    </div>
+                    <div style={{ color: profile?.origin ? '#10b981' : '#ef4444' }}>
+                      {profile?.origin ? '✅' : '❌'} Origin
+                    </div>
+                    <div style={{ color: profile?.deliveryType ? '#10b981' : '#ef4444' }}>
+                      {profile?.deliveryType ? '✅' : '❌'} Delivery Type
+                    </div>
+                    <div style={{ color: storeItems.length > 0 ? '#10b981' : '#ef4444' }}>
+                      {storeItems.length > 0 ? '✅' : '❌'} At least 1 item ({storeItems.length})
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={{ 
                 display: 'grid', 
@@ -1524,20 +1675,21 @@ function StoreProfilePage() {
                     onChange={e => setEditOrigin(e.target.value)}
                     style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }}
                     required
-                    disabled
                   >
-                    <option value="">Select country/island</option>
+                    <option value="">Select origin</option>
                     <option value="African">African</option>
                     <option value="Caribbean">Caribbean</option>
+                    <option value="African American">African American</option>
+                    <option value="Black British">Black British</option>
+                    <option value="Black Caribbean">Black Caribbean</option>
+                    <option value="Black African">Black African</option>
+                    <option value="Black British Caribbean">Black British Caribbean</option>
+                    <option value="Black British African">Black British African</option>
                     <optgroup label="African Countries">
-                      {[
-                        'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia', 'Morocco', 'Uganda', 'Tanzania', 'Algeria', 'Angola', 'Cameroon', 'Ivory Coast', 'Senegal', 'Zimbabwe', 'Zambia', 'Botswana', 'Namibia', 'Rwanda', 'Burundi', 'Mali', 'Malawi', 'Mozambique', 'Tunisia', 'Libya', 'Sudan', 'Somalia', 'Chad', 'Niger', 'Benin', 'Burkina Faso', 'Guinea', 'Sierra Leone', 'Liberia', 'Togo', 'Central African Republic', 'Congo', 'Gabon', 'Gambia', 'Lesotho', 'Mauritius', 'Swaziland', 'Djibouti', 'Eritrea', 'Seychelles', 'Comoros', 'Cape Verde', 'Sao Tome and Principe',
-                      ].map(c => <option key={c} value={c}>{c}</option>)}
+                      {africanCountries.map(c => <option key={c} value={c}>{c}</option>)}
                     </optgroup>
                     <optgroup label="Caribbean Islands">
-                      {[
-                        'Jamaica', 'Trinidad and Tobago', 'Barbados', 'Bahamas', 'Saint Lucia', 'Grenada', 'Saint Vincent and the Grenadines', 'Antigua and Barbuda', 'Dominica', 'Saint Kitts and Nevis', 'Cuba', 'Haiti', 'Dominican Republic', 'Puerto Rico', 'Aruba', 'Curacao', 'Saint Martin', 'Saint Barthelemy', 'Anguilla', 'Montserrat', 'British Virgin Islands', 'US Virgin Islands', 'Cayman Islands', 'Turks and Caicos', 'Guadeloupe', 'Martinique', 'Saint Pierre and Miquelon',
-                      ].map(c => <option key={c} value={c}>{c}</option>)}
+                      {caribbeanIslands.map(c => <option key={c} value={c}>{c}</option>)}
                     </optgroup>
                   </select>
                 </div>
@@ -1607,6 +1759,184 @@ function StoreProfilePage() {
                   <small style={{ color: '#888', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
                     Adding a phone number helps customers contact you directly
                   </small>
+                </div>
+
+                {/* Dynamic Social Media Links Section */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <label style={{ fontWeight: 500, display: 'block' }}>Social Media Links (optional)</label>
+                    <button
+                      type="button"
+                      onClick={addSocialLink}
+                      style={{
+                        background: '#007BFF',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: 30,
+                        height: 30,
+                        fontSize: '1.2rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Add social media link"
+                    >
+                      +
+                    </button>
+                  </div>
+                  
+                  {editSocialLinks.map((link, index) => (
+                    <div key={link.id} style={{ 
+                      border: '1px solid #E0E0E0', 
+                      borderRadius: 8, 
+                      padding: 12, 
+                      marginBottom: 8,
+                      backgroundColor: '#F9F9F9'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>Social Link {index + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSocialLink(link.id)}
+                          style={{
+                            background: '#DC3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: 24,
+                            height: 24,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="Remove link"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      
+                      <div style={{ marginBottom: 8 }}>
+                        <select
+                          value={link.platform}
+                          onChange={e => updateSocialLink(link.id, 'platform', e.target.value)}
+                          style={{ width: '100%', padding: '0.4rem', border: '1px solid #B8B8B8', borderRadius: 4, fontSize: '0.9rem' }}
+                        >
+                          <option value="">Select platform</option>
+                          <option value="Instagram">Instagram</option>
+                          <option value="Facebook">Facebook</option>
+                          <option value="WhatsApp">WhatsApp</option>
+                          <option value="TikTok">TikTok</option>
+                          <option value="Twitter">Twitter</option>
+                          <option value="LinkedIn">LinkedIn</option>
+                          <option value="YouTube">YouTube</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      
+                      <input 
+                        type="text" 
+                        value={link.handle} 
+                        onChange={e => updateSocialLink(link.id, 'handle', e.target.value)}
+                        placeholder="@yourusername or your handle"
+                        style={{ width: '100%', padding: '0.4rem', border: '1px solid #B8B8B8', borderRadius: 4, fontSize: '0.9rem' }}
+                      />
+                    </div>
+                  ))}
+                  
+                  {editSocialLinks.length === 0 && (
+                    <p style={{ color: '#888', fontSize: '0.9rem', fontStyle: 'italic', textAlign: 'center', margin: '12px 0' }}>
+                      Click the + button to add social media links
+                    </p>
+                  )}
+                </div>
+
+                {/* Dynamic Website Links Section */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <label style={{ fontWeight: 500, display: 'block' }}>Website Links (optional)</label>
+                    <button
+                      type="button"
+                      onClick={addWebsiteLink}
+                      style={{
+                        background: '#28A745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: 30,
+                        height: 30,
+                        fontSize: '1.2rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Add website link"
+                    >
+                      +
+                    </button>
+                  </div>
+                  
+                  {editWebsiteLinks.map((link, index) => (
+                    <div key={link.id} style={{ 
+                      border: '1px solid #E0E0E0', 
+                      borderRadius: 8, 
+                      padding: 12, 
+                      marginBottom: 8,
+                      backgroundColor: '#F9F9F9'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>Website {index + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeWebsiteLink(link.id)}
+                          style={{
+                            background: '#DC3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: 24,
+                            height: 24,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="Remove link"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      
+                      <div style={{ marginBottom: 8 }}>
+                        <input 
+                          type="text" 
+                          value={link.name} 
+                          onChange={e => updateWebsiteLink(link.id, 'name', e.target.value)}
+                          placeholder="Website name (e.g., My Store, Online Shop)"
+                          style={{ width: '100%', padding: '0.4rem', border: '1px solid #B8B8B8', borderRadius: 4, fontSize: '0.9rem' }}
+                        />
+                      </div>
+                      
+                      <input 
+                        type="url" 
+                        value={link.url} 
+                        onChange={e => updateWebsiteLink(link.id, 'url', e.target.value)}
+                        placeholder="https://yourwebsite.com"
+                        style={{ width: '100%', padding: '0.4rem', border: '1px solid #B8B8B8', borderRadius: 4, fontSize: '0.9rem' }}
+                      />
+                    </div>
+                  ))}
+                  
+                  {editWebsiteLinks.length === 0 && (
+                    <p style={{ color: '#888', fontSize: '0.9rem', fontStyle: 'italic', textAlign: 'center', margin: '12px 0' }}>
+                      Click the + button to add website links
+                    </p>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: 14 }}>

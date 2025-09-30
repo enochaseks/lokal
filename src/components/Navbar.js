@@ -47,12 +47,14 @@ function Navbar() {
         } else {
           setUserType('buyer');
         }
-        // Onboarding guard
-        const userDoc = await getDoc(doc(db, 'users', u.uid));
-        const onboardingStepValue = userDoc.exists() ? userDoc.data().onboardingStep : null;
-        setOnboardingStep(onboardingStepValue);
-        if (onboardingStepValue && onboardingStepValue !== 'complete') {
-          navigate('/' + onboardingStepValue);
+        // Onboarding guard - only redirect if email is verified
+        if (u.emailVerified) {
+          const userDoc = await getDoc(doc(db, 'users', u.uid));
+          const onboardingStepValue = userDoc.exists() ? userDoc.data().onboardingStep : null;
+          setOnboardingStep(onboardingStepValue);
+          if (onboardingStepValue && onboardingStepValue !== 'complete') {
+            navigate('/' + onboardingStepValue);
+          }
         }
       } else {
         setUserType('');

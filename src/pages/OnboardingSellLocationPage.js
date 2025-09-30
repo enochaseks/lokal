@@ -20,7 +20,11 @@ const commonCountries = [
 
 // Helper to map country name to country code for Nominatim
 const countryNameToCode = {
+  // Common Countries
+  'United States': 'us', 'United Kingdom': 'gb', 'Canada': 'ca', 'Australia': 'au', 'Germany': 'de', 'France': 'fr', 'Italy': 'it', 'Spain': 'es', 'Netherlands': 'nl', 'India': 'in', 'China': 'cn', 'Japan': 'jp', 'Brazil': 'br', 'Mexico': 'mx', 'Turkey': 'tr', 'UAE': 'ae', 'Saudi Arabia': 'sa', 'Ireland': 'ie', 'Sweden': 'se', 'Norway': 'no', 'Denmark': 'dk', 'Finland': 'fi', 'Switzerland': 'ch', 'Belgium': 'be', 'Austria': 'at', 'New Zealand': 'nz', 'Singapore': 'sg', 'Malaysia': 'my', 'South Korea': 'kr', 'Russia': 'ru', 'Poland': 'pl', 'Portugal': 'pt', 'Greece': 'gr', 'Israel': 'il',
+  // African Countries
   'Nigeria': 'ng', 'Ghana': 'gh', 'Kenya': 'ke', 'South Africa': 'za', 'Egypt': 'eg', 'Ethiopia': 'et', 'Morocco': 'ma', 'Uganda': 'ug', 'Tanzania': 'tz', 'Algeria': 'dz', 'Angola': 'ao', 'Cameroon': 'cm', 'Ivory Coast': 'ci', 'Senegal': 'sn', 'Zimbabwe': 'zw', 'Zambia': 'zm', 'Botswana': 'bw', 'Namibia': 'na', 'Rwanda': 'rw', 'Burundi': 'bi', 'Mali': 'ml', 'Malawi': 'mw', 'Mozambique': 'mz', 'Tunisia': 'tn', 'Libya': 'ly', 'Sudan': 'sd', 'Somalia': 'so', 'Chad': 'td', 'Niger': 'ne', 'Benin': 'bj', 'Burkina Faso': 'bf', 'Guinea': 'gn', 'Sierra Leone': 'sl', 'Liberia': 'lr', 'Togo': 'tg', 'Central African Republic': 'cf', 'Congo': 'cg', 'Gabon': 'ga', 'Gambia': 'gm', 'Lesotho': 'ls', 'Mauritius': 'mu', 'Swaziland': 'sz', 'Djibouti': 'dj', 'Eritrea': 'er', 'Seychelles': 'sc', 'Comoros': 'km', 'Cape Verde': 'cv', 'Sao Tome and Principe': 'st',
+  // Caribbean Islands
   'Jamaica': 'jm', 'Trinidad and Tobago': 'tt', 'Barbados': 'bb', 'Bahamas': 'bs', 'Saint Lucia': 'lc', 'Grenada': 'gd', 'Saint Vincent and the Grenadines': 'vc', 'Antigua and Barbuda': 'ag', 'Dominica': 'dm', 'Saint Kitts and Nevis': 'kn', 'Cuba': 'cu', 'Haiti': 'ht', 'Dominican Republic': 'do', 'Puerto Rico': 'pr', 'Aruba': 'aw', 'Curacao': 'cw', 'Saint Martin': 'mf', 'Saint Barthelemy': 'bl', 'Anguilla': 'ai', 'Montserrat': 'ms', 'British Virgin Islands': 'vg', 'US Virgin Islands': 'vi', 'Cayman Islands': 'ky', 'Turks and Caicos': 'tc', 'Guadeloupe': 'gp', 'Martinique': 'mq', 'Saint Pierre and Miquelon': 'pm',
 };
 
@@ -389,11 +393,10 @@ function OnboardingSellLocationPage() {
         ) : showMarketForm ? (
           <form style={{ textAlign: 'left' }} onSubmit={async e => {
             e.preventDefault();
-            const country = origin || '';
             const fullAddress = `${marketStreet}, ${marketCity}, ${marketState}, ${marketZip}, ${country}`;
             let lat = null, lon = null;
             try {
-              const countryCode = countryNameToCode[origin] || '';
+              const countryCode = countryNameToCode[country] || '';
               const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
               const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}${countryParam}`);
               if (res.ok) {
@@ -443,7 +446,17 @@ function OnboardingSellLocationPage() {
               }
             }
             console.log('MARKET FORM SUBMIT', { marketName, fullAddress, origin, category, deliveryType, lat, lon });
-            navigate('/create-shop', { state: { storeName: marketName, storeLocation: fullAddress, origin, category, deliveryType, latitude: lat, longitude: lon } });
+            navigate('/create-shop', { state: { 
+              storeName: marketName, 
+              storeLocation: fullAddress, 
+              origin, 
+              category, 
+              deliveryType, 
+              latitude: lat, 
+              longitude: lon,
+              foodHygiene,
+              marketStallLicence
+            } });
           }}>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Market Name</label>
@@ -513,17 +526,33 @@ function OnboardingSellLocationPage() {
                 e.preventDefault();
                 setVerifying(true);
                 setVerifyError('');
-                const fullAddress = `${marketCity}, ${marketState}, ${marketZip}, ${origin}`;
+                // Use country instead of origin for location verification
+                const fullAddress = `${marketCity}, ${marketState}, ${marketZip}, ${country}`;
                 try {
-                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                  // Add country code for better geocoding results
+                  const countryCode = countryNameToCode[country] || '';
+                  const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
+                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}${countryParam}`);
                   const data = await res.json();
                   if (data.length > 0) {
                     setLat(parseFloat(data[0].lat));
                     setLon(parseFloat(data[0].lon));
                     setLocationVerified(true);
+                    setVerifyError('');
                   } else {
-                    setVerifyError('Location not found. Please check your city, state, postcode, and country.');
-                    setLocationVerified(false);
+                    // Try a more general search without zip code
+                    const generalAddress = `${marketCity}, ${marketState}, ${country}`;
+                    const generalRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(generalAddress)}${countryParam}`);
+                    const generalData = await generalRes.json();
+                    if (generalData.length > 0) {
+                      setLat(parseFloat(generalData[0].lat));
+                      setLon(parseFloat(generalData[0].lon));
+                      setLocationVerified(true);
+                      setVerifyError('');
+                    } else {
+                      setVerifyError('Location not found. Please check your city, state/province, and country. You can skip the postal code if needed.');
+                      setLocationVerified(false);
+                    }
                   }
                 } catch {
                   setVerifyError('Error verifying location.');
@@ -531,7 +560,7 @@ function OnboardingSellLocationPage() {
                 }
                 setVerifying(false);
               }}
-              disabled={verifying || !marketCity || !origin}
+              disabled={verifying || !marketCity || !country}
               type="button"
               style={{ marginTop: 12, background: '#007B7F', color: '#fff', padding: '0.7rem 1.2rem', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
             >
@@ -551,7 +580,17 @@ function OnboardingSellLocationPage() {
                   const userRef = doc(db, 'users', user.uid);
                   await updateDoc(userRef, { onboardingStep: 'create-shop' });
                 }
-                navigate('/create-shop', { state: { storeName: marketName, storeLocation: marketFullAddress, origin, category, deliveryType, latitude: lat, longitude: lon } });
+                navigate('/create-shop', { state: { 
+                  storeName: marketName, 
+                  storeLocation: marketFullAddress, 
+                  origin, 
+                  category, 
+                  deliveryType, 
+                  latitude: lat, 
+                  longitude: lon,
+                  foodHygiene,
+                  marketStallLicence
+                } });
               }}
               disabled={!locationVerified}
               type="button"
@@ -563,11 +602,10 @@ function OnboardingSellLocationPage() {
         ) : (
           <form style={{ textAlign: 'left' }} onSubmit={async e => {
             e.preventDefault();
-            const country = origin || '';
             const fullAddress = `${onlineStreet}, ${onlineCity}, ${onlineState}, ${onlineZip}, ${country}`;
             let lat = null, lon = null;
             try {
-              const countryCode = countryNameToCode[origin] || '';
+              const countryCode = countryNameToCode[country] || '';
               const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
               const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}${countryParam}`);
               if (res.ok) {
@@ -622,8 +660,21 @@ function OnboardingSellLocationPage() {
                 });
               }
             }
-            console.log('ONLINE FORM SUBMIT', { onlineName, fullAddress, origin, category, deliveryType, lat, lon });
-            navigate('/create-shop', { state: { storeName: onlineName, storeLocation: fullAddress, origin, category, deliveryType, latitude: lat, longitude: lon } });
+            console.log('ONLINE FORM SUBMIT', { onlineName, fullAddress, origin, category, deliveryType, lat, lon, platform, socialHandle, hasWebsite, websiteLink });
+            navigate('/create-shop', { state: { 
+              storeName: onlineName, 
+              storeLocation: fullAddress, 
+              origin, 
+              category, 
+              deliveryType, 
+              latitude: lat, 
+              longitude: lon,
+              platform,
+              socialHandle,
+              hasWebsite,
+              websiteLink,
+              onlineLicence
+            } });
           }}>
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Name</label>
@@ -689,17 +740,33 @@ function OnboardingSellLocationPage() {
                 e.preventDefault();
                 setVerifying(true);
                 setVerifyError('');
-                const fullAddress = `${onlineCity}, ${onlineState}, ${onlineZip}, ${origin}`;
+                // Use country instead of origin for location verification
+                const fullAddress = `${onlineCity}, ${onlineState}, ${onlineZip}, ${country}`;
                 try {
-                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}`);
+                  // Add country code for better geocoding results
+                  const countryCode = countryNameToCode[country] || '';
+                  const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
+                  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}${countryParam}`);
                   const data = await res.json();
                   if (data.length > 0) {
                     setLat(parseFloat(data[0].lat));
                     setLon(parseFloat(data[0].lon));
                     setLocationVerified(true);
+                    setVerifyError('');
                   } else {
-                    setVerifyError('Location not found. Please check your city, state, postcode, and country.');
-                    setLocationVerified(false);
+                    // Try a more general search without zip code
+                    const generalAddress = `${onlineCity}, ${onlineState}, ${country}`;
+                    const generalRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(generalAddress)}${countryParam}`);
+                    const generalData = await generalRes.json();
+                    if (generalData.length > 0) {
+                      setLat(parseFloat(generalData[0].lat));
+                      setLon(parseFloat(generalData[0].lon));
+                      setLocationVerified(true);
+                      setVerifyError('');
+                    } else {
+                      setVerifyError('Location not found. Please check your city, state/province, and country. You can skip the postal code if needed.');
+                      setLocationVerified(false);
+                    }
                   }
                 } catch {
                   setVerifyError('Error verifying location.');
@@ -707,7 +774,7 @@ function OnboardingSellLocationPage() {
                 }
                 setVerifying(false);
               }}
-              disabled={verifying || !onlineCity || !origin}
+              disabled={verifying || !onlineCity || !country}
               type="button"
               style={{ marginTop: 12, background: '#007B7F', color: '#fff', padding: '0.7rem 1.2rem', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
             >

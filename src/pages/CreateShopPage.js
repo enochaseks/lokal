@@ -195,10 +195,22 @@ function CreateShopPage() {
         certificate: certificateUrl,
         foodHygiene: foodHygieneUrl,
         marketStallLicence: marketStallLicenceUrl,
+        // Legacy format for backward compatibility
         platform: sellerData.platform || '',
         socialHandle: sellerData.socialHandle || '',
         hasWebsite: sellerData.hasWebsite || '',
         websiteLink: sellerData.websiteLink || '',
+        // New format - convert from legacy if exists
+        socialLinks: sellerData.platform && sellerData.socialHandle ? [{
+          platform: sellerData.platform,
+          handle: sellerData.socialHandle,
+          id: Date.now()
+        }] : [],
+        websiteLinks: sellerData.websiteLink ? [{
+          name: 'Website',
+          url: sellerData.websiteLink,
+          id: Date.now()
+        }] : [],
         onlineLicence: onlineLicenceUrl,
         backgroundImg: backgroundUrl,
         hasOwnDelivery: deliveryType === 'Delivery' ? hasOwnDelivery : '',
