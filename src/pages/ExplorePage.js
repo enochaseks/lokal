@@ -294,20 +294,35 @@ const generateAnalyticsPDF = async (store, analytics, type, orderDetails = []) =
               <div class="store-info-item">
                 <div class="store-info-label">� Store Statistics</div>
                 ${(() => {
-                  const hasValidCreatedAt = store.createdAt && store.createdAt.seconds && !isNaN(store.createdAt.seconds);
                   let content = [];
                   
-                  // Only show creation date if it's valid
-                  if (hasValidCreatedAt) {
-                    const createdDate = new Date(store.createdAt.seconds * 1000);
-                    const daysOperating = Math.floor((Date.now() - store.createdAt.seconds * 1000) / (1000 * 60 * 60 * 24));
-                    if (!isNaN(createdDate.getTime()) && daysOperating >= 0) {
-                      content.push(`Creation Date: ${createdDate.toLocaleDateString('en-GB', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}`);
-                      content.push(`Operating Since: ${daysOperating} days`);
+                  // Handle creation date - could be ISO string, Firestore timestamp, or regular date
+                  if (store.createdAt) {
+                    let createdDate;
+                    
+                    // Handle different date formats
+                    if (typeof store.createdAt === 'string') {
+                      // ISO string format
+                      createdDate = new Date(store.createdAt);
+                    } else if (store.createdAt.seconds) {
+                      // Firestore timestamp format
+                      createdDate = new Date(store.createdAt.seconds * 1000);
+                    } else if (store.createdAt instanceof Date) {
+                      // Regular Date object
+                      createdDate = store.createdAt;
+                    }
+                    
+                    // Validate and display the date
+                    if (createdDate && !isNaN(createdDate.getTime())) {
+                      const daysOperating = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+                      if (daysOperating >= 0) {
+                        content.push(`Creation Date: ${createdDate.toLocaleDateString('en-GB', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}`);
+                        content.push(`Operating Since: ${daysOperating} days`);
+                      }
                     }
                   }
                   
