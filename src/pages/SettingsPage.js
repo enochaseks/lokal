@@ -759,34 +759,271 @@ function SettingsPage() {
   // Main menu view
   if (view === 'main') {
     return (
-      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', 
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
         <Navbar />
-        <div style={{ maxWidth: 600, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem' }}>
-          <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 24 }}>Settings</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <button onClick={() => setView('payment')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              Payment Type <span style={{ float: 'right', color: '#888', fontWeight: 400 }}>{paymentType ? paymentType : 'Not set'}</span>
-            </button>
-            {userType === 'seller' && (
-              <button onClick={() => setView('discounts')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-                Discounts
+        
+        {/* Header Section */}
+        <div style={{ 
+          padding: '3rem 1rem',
+          textAlign: 'center'
+        }}>
+          <h1 style={{ 
+            margin: 0, 
+            fontSize: '3rem', 
+            fontWeight: 900,
+            marginBottom: '0.5rem',
+            background: 'linear-gradient(135deg, #007B7F 0%, #005a5d 50%, #00a5aa 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textShadow: '0 4px 12px rgba(0, 123, 127, 0.3)',
+            filter: 'drop-shadow(0 2px 8px rgba(0, 123, 127, 0.2))',
+            letterSpacing: '-0.02em'
+          }}>
+            ⚙️ Settings
+          </h1>
+          <p style={{ 
+            margin: 0, 
+            fontSize: '1.2rem', 
+            color: '#64748b',
+            fontWeight: 600,
+            textShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            Manage your account preferences and configurations
+          </p>
+        </div>
+
+        {/* Main Content */}
+        <div style={{ 
+          maxWidth: 700, 
+          margin: '-2rem auto 2rem', 
+          padding: '0 1rem',
+          position: 'relative',
+          zIndex: 10
+        }}>
+          <div style={{ 
+            background: 'white',
+            borderRadius: 20,
+            padding: '2rem',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0, 123, 127, 0.1)'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {userType === 'seller' && (
+                <button 
+                  onClick={() => setView('payment')} 
+                  style={{ 
+                    textAlign: 'left', 
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                    border: '1px solid #e2e8f0', 
+                    borderRadius: 16, 
+                    padding: '1.5rem', 
+                    fontSize: '1.1rem', 
+                    fontWeight: 600, 
+                    color: '#1e293b', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                    e.currentTarget.style.color = 'white';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                    e.currentTarget.style.color = '#1e293b';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '1.3rem' }}>💳</span>
+                    <span>Payment Type</span>
+                  </div>
+                  <span style={{ fontSize: '0.95rem', opacity: 0.7 }}>
+                    {paymentType ? paymentType : 'Not set'}
+                  </span>
+                </button>
+              )}
+              
+              <button 
+                onClick={() => setView('account')} 
+                style={{ 
+                  textAlign: 'left', 
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: 16, 
+                  padding: '1.5rem', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600, 
+                  color: '#1e293b', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>👤</span>
+                <span>Account Management</span>
               </button>
-            )}
-            <button onClick={() => setView('account')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              Account Management
-            </button>
-            <button onClick={() => setView('about')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              About
-            </button>
-            <button onClick={() => setView('terms')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              Terms of Service
-            </button>
-            <button onClick={() => setView('privacy')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              Privacy Policy
-            </button>
-            <button onClick={() => setView('communications')} style={{ textAlign: 'left', background: '#f6f6fa', border: '1px solid #eee', borderRadius: 8, padding: '1.2rem', fontSize: '1.1rem', fontWeight: 600, color: '#007B7F', cursor: 'pointer' }}>
-              Communication Preferences
-            </button>
+              
+              <button 
+                onClick={() => setView('about')} 
+                style={{ 
+                  textAlign: 'left', 
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: 16, 
+                  padding: '1.5rem', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600, 
+                  color: '#1e293b', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>ℹ️</span>
+                <span>About</span>
+              </button>
+              
+              <button 
+                onClick={() => setView('terms')} 
+                style={{ 
+                  textAlign: 'left', 
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: 16, 
+                  padding: '1.5rem', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600, 
+                  color: '#1e293b', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>📋</span>
+                <span>Terms of Service</span>
+              </button>
+              
+              <button 
+                onClick={() => setView('privacy')} 
+                style={{ 
+                  textAlign: 'left', 
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: 16, 
+                  padding: '1.5rem', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600, 
+                  color: '#1e293b', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>🔒</span>
+                <span>Privacy Policy</span>
+              </button>
+              
+              <button 
+                onClick={() => setView('communications')} 
+                style={{ 
+                  textAlign: 'left', 
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: 16, 
+                  padding: '1.5rem', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600, 
+                  color: '#1e293b', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.25)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)';
+                  e.currentTarget.style.color = '#1e293b';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>💬</span>
+                <span>Communication Preferences</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -796,11 +1033,53 @@ function SettingsPage() {
   // Payment type view
   if (view === 'payment') {
     return (
-      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', 
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
         <Navbar />
-        <div style={{ maxWidth: 600, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem' }}>
-          <button onClick={() => setView('main')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
-          <h2 style={{ fontWeight: 700, fontSize: '1.3rem', marginBottom: 18 }}>Payment Type</h2>
+        <div style={{ 
+          maxWidth: 700, 
+          margin: '2rem auto', 
+          background: 'white', 
+          borderRadius: 20, 
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)', 
+          border: '1px solid rgba(0, 123, 127, 0.1)',
+          padding: '2.5rem' 
+        }}>
+          <button 
+            onClick={() => setView('main')} 
+            style={{ 
+              marginBottom: 24, 
+              background: 'rgba(255, 255, 255, 0.9)', 
+              border: '1px solid rgba(0, 123, 127, 0.2)', 
+              borderRadius: 12, 
+              padding: '0.75rem 1.5rem', 
+              color: '#007B7F', 
+              fontWeight: 600, 
+              fontSize: '1rem', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>←</span> Back to Settings
+          </button>
+          <h2 style={{ 
+            fontWeight: 800, 
+            fontSize: '2rem', 
+            marginBottom: 24,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>💳</span>
+            Payment Type
+          </h2>
           {/* Payment type edit UI here */}
           {editPayment ? (
             userType === 'seller' ? (
@@ -1049,13 +1328,120 @@ function SettingsPage() {
   // Account management view
   if (view === 'account') {
     return (
-      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', 
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
         <Navbar />
-        <div style={{ maxWidth: 600, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2rem' }}>
-          <button onClick={() => setView('main')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
-          <h2 style={{ fontWeight: 700, fontSize: '1.3rem', marginBottom: 18 }}>Account Management</h2>
-          <button onClick={() => setShowDeactivateWarning(true)} style={{ background: '#FFD700', color: '#222', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, marginRight: 12, cursor: 'pointer' }}>Deactivate Account</button>
-          <button onClick={() => setShowDeleteWarning(true)} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Delete Account</button>
+        <div style={{ 
+          maxWidth: 700, 
+          margin: '2rem auto', 
+          background: 'white', 
+          borderRadius: 20, 
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)', 
+          border: '1px solid rgba(0, 123, 127, 0.1)',
+          padding: '2.5rem' 
+        }}>
+          <button 
+            onClick={() => setView('main')} 
+            style={{ 
+              marginBottom: 24, 
+              background: 'rgba(255, 255, 255, 0.9)', 
+              border: '1px solid rgba(0, 123, 127, 0.2)', 
+              borderRadius: 12, 
+              padding: '0.75rem 1.5rem', 
+              color: '#007B7F', 
+              fontWeight: 600, 
+              fontSize: '1rem', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>←</span> Back to Settings
+          </button>
+          <h2 style={{ 
+            fontWeight: 800, 
+            fontSize: '2rem', 
+            marginBottom: 32,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>👤</span>
+            Account Management
+          </h2>
+          
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+            borderRadius: 16,
+            padding: '2rem',
+            border: '1px solid #fca5a5',
+            marginBottom: '1.5rem'
+          }}>
+            <h3 style={{ 
+              color: '#dc2626', 
+              marginBottom: '1rem',
+              fontSize: '1.2rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              ⚠️ Danger Zone
+            </h3>
+            <p style={{ 
+              color: '#7f1d1d', 
+              marginBottom: '1.5rem',
+              lineHeight: 1.5
+            }}>
+              These actions are permanent and cannot be undone. Please proceed with caution.
+            </p>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => setShowDeactivateWarning(true)} 
+                style={{ 
+                  background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', 
+                  color: '#92400e', 
+                  border: 'none', 
+                  borderRadius: 12, 
+                  padding: '1rem 1.5rem', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                ⏸️ Deactivate Account
+              </button>
+              <button 
+                onClick={() => setShowDeleteWarning(true)} 
+                style={{ 
+                  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: 12, 
+                  padding: '1rem 1.5rem', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                🗑️ Delete Account
+              </button>
+            </div>
+          </div>
         </div>
         {showDeactivateWarning && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
@@ -1116,12 +1502,59 @@ function SettingsPage() {
   // About page view
   if (view === 'about') {
     return (
-      <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
+      <div style={{ 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', 
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
         <Navbar />
-        <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
-          <button onClick={() => setView('main')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
-          <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>About Lokal</h2>
-          <div style={{ color: '#222', fontSize: '1.1rem', lineHeight: 1.7 }}>
+        <div style={{ 
+          maxWidth: 800, 
+          margin: '2rem auto', 
+          background: 'white', 
+          borderRadius: 20, 
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)', 
+          border: '1px solid rgba(0, 123, 127, 0.1)',
+          padding: '2.5rem' 
+        }}>
+          <button 
+            onClick={() => setView('main')} 
+            style={{ 
+              marginBottom: 24, 
+              background: 'rgba(255, 255, 255, 0.9)', 
+              border: '1px solid rgba(0, 123, 127, 0.2)', 
+              borderRadius: 12, 
+              padding: '0.75rem 1.5rem', 
+              color: '#007B7F', 
+              fontWeight: 600, 
+              fontSize: '1rem', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span>←</span> Back to Settings
+          </button>
+          <h2 style={{ 
+            fontWeight: 800, 
+            fontSize: '2.2rem', 
+            marginBottom: 32,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '1.8rem' }}>ℹ️</span>
+            About Lokal
+          </h2>
+          <div style={{ 
+            color: '#374151', 
+            fontSize: '1.1rem', 
+            lineHeight: 1.8,
+            letterSpacing: '0.01em'
+          }}>
             <p><b>Lokal</b> is your dedicated African & Caribbean e-commerce marketplace, designed to help you discover and connect with nearby stores in your community. Unlike generic search engines that provide vague locations and limited information, Lokal empowers you to create a vibrant virtual store, showcase your products, engage with customers, and receive real feedback—all in one place.</p>
             <p>The inspiration for Lokal began in 2023, when our founder recognized a significant gap in the market. Finding authentic African and Caribbean stores for daily shopping was a challenge, and even when such stores were found, accessibility was often an issue. Lokal—originally known as Folo—was created to bridge this gap, making it easy to find, shop, and communicate with local African and Caribbean businesses. Whether you want to shop online, chat with store owners, or arrange delivery or collection, Lokal brings the marketplace to your fingertips.</p>
             <p>Our mission is to empower African & Caribbean businesses to reach new customers and grow their income in a way that is more accessible and community-driven than traditional platforms like Google, Facebook, or Instagram. We are building a space where business owners can not only sell to local shoppers, but also connect with vendors and partners from across Africa, the Caribbean, and around the world.</p>

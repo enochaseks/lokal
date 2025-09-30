@@ -35,6 +35,7 @@ exports.helloWorld = onRequest((request, response) => {
 // Import the boost store functions
 const boostStoreFunctions = require('./boost-store-function');
 const stripeReceiptFunctions = require('./stripe-receipt-function');
+const employeeInvitationFunctions = require('./employee-invitation-function');
 
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
@@ -45,3 +46,12 @@ exports.createPaymentIntentWithReceipt = stripeReceiptFunctions.createPaymentInt
 exports.sendStripeReceipt = stripeReceiptFunctions.sendStripeReceipt;
 exports.sendCustomReceipt = stripeReceiptFunctions.sendCustomReceipt;
 exports.handleStripeWebhook = stripeReceiptFunctions.handleStripeWebhook;
+
+// Export Employee Management functions
+exports.inviteEmployee = employeeInvitationFunctions.inviteEmployee;
+exports.acceptEmployeeInvitation = employeeInvitationFunctions.acceptEmployeeInvitation;
+exports.getBusinessEmployees = employeeInvitationFunctions.getBusinessEmployees;
+exports.removeEmployee = employeeInvitationFunctions.removeEmployee;
+exports.updateEmployeeRole = employeeInvitationFunctions.updateEmployeeRole;
+exports.debugUserType = employeeInvitationFunctions.debugUserType;
+exports.fixUserType = employeeInvitationFunctions.fixUserType;

@@ -348,127 +348,519 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
   };
 
   return (
-    <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
+    <div style={{ 
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', 
+      minHeight: '100vh',
+      fontFamily: 'Inter, system-ui, sans-serif'
+    }}>
       <Navbar />
-      <div style={{ maxWidth: 600, margin: '2rem auto', background: '#fff', padding: '2rem 1rem', borderRadius: 8, boxShadow: '0 2px 8px #B8B8B8' }}>
+      
+      {/* Header Section */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)',
+        padding: '2rem 1rem',
+        color: 'white',
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'url("data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff" fill-opacity="0.05"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat',
+          opacity: 0.1
+        }} />
+        <div style={{ position: 'relative', zIndex: 2 }}>
+          <h1 style={{ 
+            margin: 0, 
+            fontSize: '2.5rem', 
+            fontWeight: 800,
+            marginBottom: '0.5rem',
+            textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            🛒 Your Cart
+          </h1>
+          <p style={{ 
+            margin: 0, 
+            fontSize: '1.1rem', 
+            opacity: 0.9,
+            fontWeight: 400
+          }}>
+            {cart.length === 0 ? 'Your cart is empty' : `${cart.length} item${cart.length !== 1 ? 's' : ''} from ${Object.keys(grouped).length} store${Object.keys(grouped).length !== 1 ? 's' : ''}`}
+          </p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ 
+        maxWidth: 900, 
+        margin: '-2rem auto 2rem', 
+        padding: '0 1rem',
+        position: 'relative',
+        zIndex: 10
+      }}>
+        {/* Back Button */}
         <button
           onClick={() => navigate(-1)}
-          style={{ marginBottom: 20, background: '#eee', color: '#007B7F', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}
+          style={{ 
+            marginBottom: 24, 
+            background: 'rgba(255, 255, 255, 0.95)', 
+            color: '#007B7F', 
+            border: '1px solid rgba(0, 123, 127, 0.2)', 
+            borderRadius: 12, 
+            padding: '0.75rem 1.5rem', 
+            fontWeight: 600, 
+            cursor: 'pointer',
+            fontSize: '0.95rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 12px rgba(0, 123, 127, 0.15)',
+            backdropFilter: 'blur(10px)'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = '#007B7F';
+            e.currentTarget.style.color = 'white';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 123, 127, 0.25)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
+            e.currentTarget.style.color = '#007B7F';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 123, 127, 0.15)';
+          }}
         >
-          ← Back
+          <span style={{ fontSize: '1.1rem' }}>←</span> Back to Shopping
         </button>
-        <h2 style={{ marginBottom: 24 }}>Your Cart</h2>
+
         {cart.length === 0 ? (
-          <div style={{ color: '#888', textAlign: 'center', margin: '2rem 0' }}>Your cart is empty.</div>
+          /* Empty Cart State */
+          <div style={{ 
+            background: 'white',
+            borderRadius: 20,
+            padding: '4rem 2rem',
+            textAlign: 'center',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0, 123, 127, 0.1)'
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🛒</div>
+            <h3 style={{ 
+              color: '#1e293b', 
+              marginBottom: '1rem',
+              fontSize: '1.5rem',
+              fontWeight: 600
+            }}>
+              Your cart is empty
+            </h3>
+            <p style={{ 
+              color: '#64748b', 
+              marginBottom: '2rem',
+              fontSize: '1.1rem'
+            }}>
+              Start shopping to add items to your cart
+            </p>
+            <button
+              onClick={() => navigate('/explore')}
+              style={{
+                background: 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: 12,
+                padding: '1rem 2rem',
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 16px rgba(0, 123, 127, 0.3)'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 123, 127, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 123, 127, 0.3)';
+              }}
+            >
+              🛍️ Start Shopping
+            </button>
+          </div>
         ) : (
+          /* Cart Items */
           <>
             {Object.entries(grouped).map(([key, group]) => {
               const fees = calculateFeesSync(group);
               return (
-                <div key={key} style={{ marginBottom: 32 }}>
-                  <h3 style={{ color: '#007B7F', marginBottom: 10 }}>{group.storeName} <span style={{ color: '#888', fontSize: '1rem' }}>({group.currency})</span></h3>
-                  {group.deliveryType && (
-                    <div style={{ color: '#007B7F', fontWeight: 500, marginBottom: 8 }}>
-                      Delivery Type: {group.deliveryType}
+                <div key={key} style={{ 
+                  marginBottom: 24,
+                  background: 'white',
+                  borderRadius: 20,
+                  padding: '2rem',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+                  border: '1px solid rgba(0, 123, 127, 0.1)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {/* Store Header */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    marginBottom: '1.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: '2px solid #f1f5f9'
+                  }}>
+                    <div>
+                      <h3 style={{ 
+                        color: '#1e293b', 
+                        margin: 0,
+                        fontSize: '1.4rem',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                      }}>
+                        🏪 {group.storeName}
+                        <span style={{ 
+                          color: '#64748b', 
+                          fontSize: '1rem',
+                          fontWeight: 500,
+                          background: '#f1f5f9',
+                          padding: '4px 12px',
+                          borderRadius: '20px'
+                        }}>
+                          {group.currency}
+                        </span>
+                      </h3>
+                      {group.deliveryType && (
+                        <div style={{ 
+                          color: '#007B7F', 
+                          fontWeight: 600, 
+                          marginTop: 8,
+                          fontSize: '0.95rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          🚚 {group.deliveryType}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {group.items.map(item => (
-                    <div key={item.itemId} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, background: '#f6f6fa', borderRadius: 8, padding: '0.7rem 1rem' }}>
-                      {item.image && <img src={item.image} alt={item.itemName} style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600 }}>{item.itemName}</div>
-                        <div style={{ color: '#444' }}>{getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)} × {item.quantity}</div>
+                  </div>
+
+                  {/* Items List */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    {group.items.map(item => (
+                      <div key={item.itemId} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 16, 
+                        marginBottom: 12, 
+                        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                        borderRadius: 16, 
+                        padding: '1.25rem',
+                        border: '1px solid #e2e8f0',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}>
+                        {item.image && (
+                          <div style={{ 
+                            width: 64, 
+                            height: 64, 
+                            borderRadius: 12, 
+                            overflow: 'hidden',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                            border: '2px solid white'
+                          }}>
+                            <img 
+                              src={item.image} 
+                              alt={item.itemName} 
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover'
+                              }} 
+                            />
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontWeight: 700, 
+                            fontSize: '1.1rem',
+                            color: '#1e293b',
+                            marginBottom: '4px'
+                          }}>
+                            {item.itemName}
+                          </div>
+                          <div style={{ 
+                            color: '#64748b',
+                            fontSize: '0.95rem',
+                            fontWeight: 500
+                          }}>
+                            {getCurrencySymbol(item.currency)}{formatPrice(item.price, item.currency)} × {item.quantity} = {getCurrencySymbol(item.currency)}{formatPrice(item.price * item.quantity, item.currency)}
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeFromCart(item.itemId, item.storeId)} 
+                          style={{ 
+                            background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', 
+                            color: '#fff', 
+                            border: 'none', 
+                            borderRadius: 10, 
+                            padding: '0.6rem 1rem', 
+                            fontWeight: 600, 
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+                          }}
+                        >
+                          🗑️ Remove
+                        </button>
                       </div>
-                      <button onClick={() => removeFromCart(item.itemId, item.storeId)} style={{ background: '#D92D20', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}>Remove</button>
+                    ))}
+                  </div>
+
+                  {/* Price Breakdown */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                    borderRadius: 16,
+                    padding: '1.5rem',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        color: '#64748b',
+                        fontSize: '0.95rem',
+                        marginBottom: '6px'
+                      }}>
+                        <span>Subtotal:</span>
+                        <span>{getCurrencySymbol(group.currency)}{formatPrice(fees.subtotal, group.currency)}</span>
+                      </div>
+                      {fees.deliveryFee > 0 && (
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          color: '#64748b',
+                          fontSize: '0.95rem',
+                          marginBottom: '6px'
+                        }}>
+                          <span>🚚 Delivery Fee:</span>
+                          <span>{getCurrencySymbol(group.currency)}{formatPrice(fees.deliveryFee, group.currency)}</span>
+                        </div>
+                      )}
+                      {fees.serviceFee > 0 && (
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          color: '#64748b',
+                          fontSize: '0.95rem',
+                          marginBottom: '6px'
+                        }}>
+                          <span>⚙️ Service Fee:</span>
+                          <span>{getCurrencySymbol(group.currency)}{formatPrice(fees.serviceFee, group.currency)}</span>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  <div style={{ textAlign: 'right', marginTop: 8 }}>
-                    <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                      Subtotal: {getCurrencySymbol(group.currency)}{formatPrice(fees.subtotal, group.currency)}
-                    </div>
-                    {fees.deliveryFee > 0 && (
-                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                        Delivery Fee: {getCurrencySymbol(group.currency)}{formatPrice(fees.deliveryFee, group.currency)}
-                      </div>
-                    )}
-                    {fees.serviceFee > 0 && (
-                      <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                        Service Fee: {getCurrencySymbol(group.currency)}{formatPrice(fees.serviceFee, group.currency)}
-                      </div>
-                    )}
-                    <div style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 4 }}>
-                      Total: {getCurrencySymbol(group.currency)}{formatPrice(fees.total, group.currency)}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      fontWeight: 700, 
+                      fontSize: '1.3rem',
+                      color: '#007B7F',
+                      paddingTop: '0.75rem',
+                      borderTop: '2px solid #e2e8f0'
+                    }}>
+                      <span>Total:</span>
+                      <span>{getCurrencySymbol(group.currency)}{formatPrice(fees.total, group.currency)}</span>
                     </div>
                   </div>
                 </div>
               );
             })}
             
-            <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+            {/* Action Buttons */}
+            <div style={{ 
+              background: 'white',
+              borderRadius: 20,
+              padding: '2rem',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+              border: '1px solid rgba(0, 123, 127, 0.1)',
+              display: 'flex', 
+              gap: 16, 
+              flexWrap: 'wrap',
+              justifyContent: 'center'
+            }}>
               <button 
                 onClick={clearCart} 
                 style={{ 
-                  background: '#888', 
+                  background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)', 
                   color: '#fff', 
                   border: 'none', 
-                  borderRadius: 8, 
-                  padding: '0.7rem 1.2rem', 
+                  borderRadius: 12, 
+                  padding: '1rem 1.5rem', 
                   fontWeight: 600, 
-                  cursor: 'pointer' 
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(107, 114, 128, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(107, 114, 128, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(107, 114, 128, 0.3)';
                 }}
               >
-                Clear Cart
+                🗑️ Clear Cart
               </button>
               <button
                 onClick={handlePayNow}
                 disabled={processing}
                 style={{ 
-                  background: processing ? '#ccc' : '#007B7F', 
+                  background: processing 
+                    ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)' 
+                    : 'linear-gradient(135deg, #007B7F 0%, #005a5d 100%)', 
                   color: '#fff', 
                   border: 'none', 
-                  borderRadius: 8, 
-                  padding: '0.7rem 1.2rem', 
+                  borderRadius: 12, 
+                  padding: '1rem 2rem', 
                   fontWeight: 600, 
-                  cursor: processing ? 'not-allowed' : 'pointer' 
+                  cursor: processing ? 'not-allowed' : 'pointer',
+                  fontSize: '1.1rem',
+                  transition: 'all 0.2s ease',
+                  boxShadow: processing 
+                    ? '0 2px 8px rgba(0,0,0,0.1)' 
+                    : '0 4px 16px rgba(0, 123, 127, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  minWidth: '200px',
+                  justifyContent: 'center'
+                }}
+                onMouseOver={(e) => {
+                  if (!processing) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 123, 127, 0.4)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!processing) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 123, 127, 0.3)';
+                  }
                 }}
               >
-                {processing ? 'Sending Orders...' : 'Send Order Requests'}
+                {processing ? (
+                  <>
+                    <span style={{ 
+                      display: 'inline-block',
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTop: '2px solid white',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Sending Orders...
+                  </>
+                ) : (
+                  <>🚀 Send Order Requests</>
+                )}
               </button>
             </div>
 
+            {/* Location Warning */}
             {showLocationWarning && (
               <div style={{ 
-                color: '#D92D20', 
-                marginTop: 12, 
-                fontWeight: 600,
-                background: '#fbe8e8',
-                padding: '0.8rem',
-                borderRadius: 8,
-                border: '1px solid #D92D20'
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                border: '1px solid #fca5a5',
+                borderRadius: 16,
+                padding: '1.5rem',
+                marginTop: 16,
+                boxShadow: '0 4px 12px rgba(248, 113, 113, 0.2)'
               }}>
-                ⚠️ Please set your location in your profile to order from delivery stores.
-                <div style={{ marginTop: 8 }}>
-                  <button 
-                    onClick={() => navigate('/profile')}
-                    style={{
-                      background: '#D92D20',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      padding: '0.4rem 0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    Update Profile
-                  </button>
+                <div style={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '1rem'
+                }}>
+                  <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+                  <span style={{ 
+                    color: '#dc2626', 
+                    fontWeight: 700,
+                    fontSize: '1.1rem'
+                  }}>
+                    Location Required
+                  </span>
                 </div>
+                <p style={{ 
+                  color: '#7f1d1d',
+                  margin: '0 0 1rem 0',
+                  fontSize: '1rem',
+                  lineHeight: 1.5
+                }}>
+                  Please set your location in your profile to order from delivery stores.
+                </p>
+                <button 
+                  onClick={() => navigate('/profile')}
+                  style={{
+                    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '0.75rem 1.5rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+                  }}
+                >
+                  📍 Update Profile Location
+                </button>
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Add CSS for spinner animation */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

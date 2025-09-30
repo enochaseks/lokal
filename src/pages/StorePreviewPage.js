@@ -1354,6 +1354,15 @@ function StorePreviewPage() {
                     <span className="boosted-icon">⭐</span> BOOSTED
                   </div>
                 )}
+                {isStoreOwner && (
+                  <button 
+                    onClick={() => navigate('/store-profile')}
+                    className="edit-store-button"
+                    title="Edit Store Information"
+                  >
+                    ⚙️ Edit Store
+                  </button>
+                )}
               </div>
               <div className="store-location">{store.storeLocation}</div>
               {store.phoneNumber && (
@@ -1415,6 +1424,28 @@ function StorePreviewPage() {
               
               .boosted-icon {
                 font-size: 0.9rem;
+              }
+              
+              .edit-store-button {
+                background: linear-gradient(135deg, #007B7F 0%, #005a5d 100%);
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 8px 16px;
+                font-size: 0.9rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                box-shadow: 0 2px 8px rgba(0, 123, 127, 0.2);
+              }
+              
+              .edit-store-button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0, 123, 127, 0.3);
+                background: linear-gradient(135deg, #005a5d 0%, #007B7F 100%);
               }
               
               .store-location {
@@ -2177,6 +2208,39 @@ function StorePreviewPage() {
           `}</style>
         </div>
         
+        {/* Store Owner Dashboard */}
+        {isStoreOwner && (
+          <div className="owner-dashboard">
+            <h3 className="owner-dashboard-title">🎛️ Store Management</h3>
+            <div className="owner-dashboard-actions">
+              <button 
+                onClick={() => navigate('/store-profile')}
+                className="dashboard-button primary"
+              >
+                ⚙️ Store Settings
+              </button>
+              <button 
+                onClick={() => navigate('/store-profile?addItem=true')}
+                className="dashboard-button secondary"
+              >
+                ➕ Add New Item
+              </button>
+              <button 
+                onClick={() => navigate('/messages')}
+                className="dashboard-button secondary"
+              >
+                💬 View Messages
+              </button>
+              <button 
+                onClick={() => navigate('/reports')}
+                className="dashboard-button secondary"
+              >
+                📊 View Analytics
+              </button>
+            </div>
+          </div>
+        )}
+        
         <div className="tab-navigation">
           <button 
             onClick={() => setTab('products')} 
@@ -2193,6 +2257,69 @@ function StorePreviewPage() {
         </div>
         
         <style>{`
+          .owner-dashboard {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 123, 127, 0.1);
+          }
+          
+          .owner-dashboard-title {
+            margin: 0 0 1rem 0;
+            color: #1e293b;
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          
+          .owner-dashboard-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+          }
+          
+          .dashboard-button {
+            border: none;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.95rem;
+          }
+          
+          .dashboard-button.primary {
+            background: linear-gradient(135deg, #007B7F 0%, #005a5d 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(0, 123, 127, 0.2);
+          }
+          
+          .dashboard-button.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 123, 127, 0.3);
+          }
+          
+          .dashboard-button.secondary {
+            background: white;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          }
+          
+          .dashboard-button.secondary:hover {
+            background: #f9fafb;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          }
+          
           .tab-navigation {
             display: flex;
             gap: 16px;
@@ -2340,6 +2467,26 @@ function StorePreviewPage() {
                         </button>
                       </div>
                     )}
+                    
+                    {/* Show edit functionality for store owners */}
+                    {isStoreOwner && (
+                      <div className="product-owner-actions">
+                        <button
+                          className="edit-item-button"
+                          onClick={() => navigate(`/store-profile?editItem=${item.id}`)}
+                          title="Edit this item"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          className="manage-item-button"
+                          onClick={() => navigate('/store-profile')}
+                          title="Go to Store Management"
+                        >
+                          📊 Manage
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -2460,6 +2607,49 @@ function StorePreviewPage() {
               .add-to-cart-button:hover {
                 background: #006366;
                 transform: translateY(-2px);
+              }
+              
+              .product-owner-actions {
+                margin-top: auto;
+                display: flex;
+                gap: 8px;
+              }
+              
+              .edit-item-button, .manage-item-button {
+                flex: 1;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+              }
+              
+              .edit-item-button {
+                background: linear-gradient(135deg, #007B7F 0%, #005a5d 100%);
+                color: white;
+              }
+              
+              .edit-item-button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 123, 127, 0.3);
+              }
+              
+              .manage-item-button {
+                background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+                color: #374151;
+                border: 1px solid #d1d5db;
+              }
+              
+              .manage-item-button:hover {
+                background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
               }
             `}</style>
             {userType === 'buyer' && selectedItems.length > 0 && storeIsOpen && (

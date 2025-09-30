@@ -240,6 +240,32 @@ function StoreProfilePage() {
     return () => unsubscribe();
   }, []);
 
+  // Handle query parameters for direct item editing and adding
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const editItemId = urlParams.get('editItem');
+    const addItem = urlParams.get('addItem');
+    
+    if (editItemId && storeItems.length > 0) {
+      const itemToEdit = storeItems.find(item => item.id === editItemId);
+      if (itemToEdit) {
+        // Trigger edit for this specific item
+        handleEditItem(itemToEdit);
+        // Clean up URL parameter
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+    
+    if (addItem === 'true') {
+      // Trigger add item modal
+      setShowAddModal(true);
+      // Clean up URL parameter
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [location.search, storeItems]);
+
   // Close dropdown menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
