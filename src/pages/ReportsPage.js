@@ -1549,24 +1549,26 @@ For any questions regarding this order, please contact the seller.`,
       minute: '2-digit'
     });
 
-    // Get store address and phone info
-    let storeAddress = 'Not available';
-    let storePhone = 'Not available';
-    
-    if (transaction.storeData) {
-      storeAddress = transaction.storeData.storeLocation || 
-                     transaction.storeData.storeAddress || 
-                     transaction.storeData.address || 
-                     'Not available';
+    // Get store address and phone info from multiple possible sources
+    let storeAddress = transaction.storeAddress || 
+                      (transaction.storeData && transaction.storeData.storeLocation) ||
+                      (transaction.storeData && transaction.storeData.storeAddress) || 
+                      (transaction.storeData && transaction.storeData.address) ||
+                      'Not available';
       
-      storePhone = transaction.storeData.phoneNumber || 
-                   transaction.storeData.phone || 
-                   'Not available';
-    }
+    let storePhone = transaction.storePhone ||
+                    (transaction.storeData && transaction.storeData.phoneNumber) ||
+                    (transaction.storeData && transaction.storeData.phone) ||
+                    'Not available';
 
     // Generate filename
     const receiptType = transaction.receiptType === 'refund_receipt' ? 'Refund' : 'Receipt';
-    const storeName = (transaction.storeName || transaction.businessName || 'Store').replace(/[^a-zA-Z0-9]/g, '_');
+    const storeNameForFile = transaction.storeName || 
+                            transaction.businessName || 
+                            (transaction.storeData && transaction.storeData.businessName) ||
+                            (transaction.storeData && transaction.storeData.storeName) ||
+                            'Store';
+    const storeName = storeNameForFile.replace(/[^a-zA-Z0-9]/g, '_');
     const orderId = (transaction.orderId || transaction.orderID || transaction.id || 'Unknown').substring(0, 8);
     const dateStr = receiptDate.toISOString().split('T')[0];
     const filename = `${receiptType}_${storeName}_${orderId}_${dateStr}`;
@@ -1701,7 +1703,7 @@ For any questions regarding this order, please contact the seller.`,
             <h2>🏪 Store Information</h2>
             <div class="info-row">
               <span class="info-label">Store Name:</span>
-              <span class="info-value">${transaction.storeName || transaction.businessName || 'Unknown Store'}</span>
+              <span class="info-value">${storeNameForFile}</span>
             </div>
             ${storeAddress !== 'Not available' ? `
             <div class="info-row">
@@ -1857,10 +1859,18 @@ For any questions regarding this order, please contact the seller.`,
     
     if (!paymentIntentId) {
       // For non-Stripe receipts, show informative modal with items
+      // Use the enriched data from previewData if available, fallback to transaction
       const items = transaction.items || [];
       const itemsDetails = items.length > 0 
-        ? items.map(item => `• ${item.name || item.productName || 'Item'} ${item.quantity ? `(${item.quantity})` : ''} - ${transaction.currency || 'GBP'} ${item.price || item.amount || 0}`)
+        ? items.map(item => `• ${item.name || item.productName || item.title || 'Item'} ${item.quantity ? `(${item.quantity})` : ''} - ${transaction.currency || 'GBP'} ${Number(item.price || item.amount || 0).toFixed(2)}`)
         : ['• No items available'];
+
+      // Get store name from the most appropriate source
+      const storeName = transaction.storeName || 
+                       transaction.businessName || 
+                       (transaction.storeData && transaction.storeData.businessName) ||
+                       (transaction.storeData && transaction.storeData.storeName) ||
+                       'Store';
 
       setMessageModal({
         type: 'info',
@@ -1868,8 +1878,8 @@ For any questions regarding this order, please contact the seller.`,
         message: 'This receipt is from a non-Stripe payment and cannot be emailed automatically.',
         details: [
           `Order ID: ${transaction.orderId || transaction.orderID || transaction.id || 'Unknown'}`,
-          `Amount: ${transaction.currency || 'GBP'} ${transaction.totalAmount || transaction.amount || 0}`,
-          `Store: ${transaction.storeName || transaction.businessName || 'Store'}`,
+          `Amount: ${transaction.currency || 'GBP'} ${Number(transaction.totalAmount || transaction.amount || 0).toFixed(2)}`,
+          `Store: ${storeName}`,
           '',
           'Items Purchased:',
           ...itemsDetails
@@ -3672,7 +3682,7 @@ For any questions regarding this order, please contact the seller.`,
                 Cancel
               </button>
               <button
-                onClick={() => sendReceiptViaEmail(selectedTransaction)}
+                onClick={() => sendReceiptViaEmail(previewData || selectedTransaction)}
                 disabled={receiptLoading}
                 style={{
                   padding: '0.75rem 1.25rem',
