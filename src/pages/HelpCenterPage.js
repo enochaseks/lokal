@@ -1690,6 +1690,309 @@ function HelpCenterPage() {
             </div>
           )}
 
+          {/* Store Analytics Content */}
+          {helpTopic === 'store-analytics' && (
+            <div>
+              <h1 style={topicStyles.h1}>Understanding Store Analytics</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Track Your Store's Performance:</strong> Lokal's store analytics dashboard provides powerful insights to help you understand your customers, monitor sales trends, and grow your business effectively.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>What Are Store Analytics?</h2>
+              <p style={topicStyles.p}>Store analytics are comprehensive performance metrics that show how your store is performing on the Lokal platform. These insights help you make data-driven decisions to improve your business.</p>
+              
+              <h2 style={topicStyles.h2}>Accessing Your Analytics Dashboard</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Navigate to the Explore Page</h3>
+                  <p>As a seller, go to the Explore page where you'll find your analytics dashboard displayed prominently at the top of the page.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>View Your Analytics Cards</h3>
+                  <p>Your analytics are presented in easy-to-read cards showing key performance indicators for different time periods.</p>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Key Metrics Explained</h2>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>📊 Total Views</h3>
+                <p style={topicStyles.p}>This shows how many times customers have viewed your store or products. A higher number indicates good visibility on the platform.</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>What it means:</strong> Each time a customer clicks on your store or views your products, it counts as a view</li>
+                  <li style={topicStyles.li}><strong>Why it matters:</strong> More views typically lead to more potential customers and sales</li>
+                  <li style={topicStyles.li}><strong>How to improve:</strong> Optimize your store description, use quality product images, and ensure competitive pricing</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>💬 Message Interactions</h3>
+                <p style={topicStyles.p}>Tracks how many customers have started conversations with you about your products or services.</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>What it means:</strong> Customers who message you are highly interested and likely to purchase</li>
+                  <li style={topicStyles.li}><strong>Why it matters:</strong> High message counts indicate strong customer engagement</li>
+                  <li style={topicStyles.li}><strong>How to improve:</strong> Respond quickly to messages and provide helpful, detailed answers</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>🛒 Add to Cart Actions</h3>
+                <p style={topicStyles.p}>Shows how many times customers have added your products to their shopping cart.</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>What it means:</strong> Customers are seriously considering purchasing your products</li>
+                  <li style={topicStyles.li}><strong>Why it matters:</strong> This indicates product appeal and purchase intent</li>
+                  <li style={topicStyles.li}><strong>How to improve:</strong> Ensure clear product descriptions, competitive pricing, and good product photos</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>✅ Completed Orders</h3>
+                <p style={topicStyles.p}>The number of successful transactions and orders fulfilled by your store.</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>What it means:</strong> Actual sales and revenue generated by your store</li>
+                  <li style={topicStyles.li}><strong>Why it matters:</strong> This directly impacts your business revenue and growth</li>
+                  <li style={topicStyles.li}><strong>How to improve:</strong> Provide excellent customer service, fast delivery, and quality products</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Time Period Analysis</h2>
+              <p style={topicStyles.p}>Your analytics are broken down into different time periods to help you track trends:</p>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '8px', color: '#333' }}>📅 Today's Performance</h4>
+                <p style={topicStyles.p}>Shows real-time metrics for the current day, helping you understand immediate performance and make quick adjustments.</p>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '8px', color: '#333' }}>📅 This Week</h4>
+                <p style={topicStyles.p}>Weekly trends help you identify patterns and see how your store performs over a longer period.</p>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '8px', color: '#333' }}>📅 This Month</h4>
+                <p style={topicStyles.p}>Monthly data provides insights into longer-term trends and seasonal patterns in your business.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Using Analytics to Grow Your Business</h2>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Identify Peak Performance Times</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Compare daily, weekly, and monthly metrics to find patterns</li>
+                  <li style={topicStyles.li}>Schedule promotions during high-traffic periods</li>
+                  <li style={topicStyles.li}>Adjust your availability based on when customers are most active</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Optimize Your Conversion Funnel</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Track the progression from views → messages → cart additions → completed orders</li>
+                  <li style={topicStyles.li}>If you have high views but low messages, improve your product descriptions</li>
+                  <li style={topicStyles.li}>If you have high cart additions but low completed orders, review your pricing or checkout process</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Monitor Customer Engagement</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>High message interactions indicate good customer interest</li>
+                  <li style={topicStyles.li}>Quick response times can improve conversion rates</li>
+                  <li style={topicStyles.li}>Use customer questions to improve your product listings</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Advanced Analytics Features</h2>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>📊 Visual Analytics with Pie Charts</h3>
+                <p style={topicStyles.p}>Your analytics dashboard includes interactive pie charts that provide visual insights into your store's performance:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Performance Breakdown:</strong> See the proportion of views, messages, cart additions, and completed orders</li>
+                  <li style={topicStyles.li}><strong>Interactive Display:</strong> Hover over chart segments to see exact numbers and percentages</li>
+                  <li style={topicStyles.li}><strong>Color-Coded Segments:</strong> Each metric has its own color for easy identification</li>
+                  <li style={topicStyles.li}><strong>Multiple Time Periods:</strong> View separate pie charts for daily, weekly, and monthly data</li>
+                </ul>
+                
+                <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px', marginTop: '15px' }}>
+                  <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#333' }}>Understanding Pie Chart Colors & Segments:</h4>
+                  <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                    <li><strong>Views:</strong> Typically displayed in blue - represents customer interest and visibility</li>
+                    <li><strong>Messages:</strong> Usually shown in green - indicates direct customer engagement</li>
+                    <li><strong>Cart Additions:</strong> Often displayed in orange - shows purchase intent</li>
+                    <li><strong>Completed Orders:</strong> Generally shown in red - represents actual sales and revenue</li>
+                  </ul>
+                  <p style={{ marginTop: '10px', marginBottom: 0, fontSize: '0.9rem', fontStyle: 'italic' }}>💡 A healthy conversion funnel typically shows a large "Views" segment with progressively smaller segments for Messages, Cart Additions, and Completed Orders.</p>
+                </div>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>📄 PDF Analytics Reports</h3>
+                <p style={topicStyles.p}>Download comprehensive PDF reports of your store analytics for offline review, record-keeping, or sharing:</p>
+                
+                <div style={topicStyles.steps.container}>
+                  <div style={topicStyles.steps.counter}>1</div>
+                  <div style={topicStyles.steps.content}>
+                    <h4 style={{ fontSize: '1.05rem', marginBottom: '8px' }}>Locate Download Buttons</h4>
+                    <p>On your analytics dashboard, you'll find download buttons next to each analytics card. Look for the "📄 PDF" buttons.</p>
+                  </div>
+                </div>
+                
+                <div style={topicStyles.steps.container}>
+                  <div style={topicStyles.steps.counter}>2</div>
+                  <div style={topicStyles.steps.content}>
+                    <h4 style={{ fontSize: '1.05rem', marginBottom: '8px' }}>Choose Your Report Type</h4>
+                    <p>You can download different types of reports:</p>
+                    <ul style={topicStyles.ul}>
+                      <li style={topicStyles.li}><strong>Daily Report:</strong> Today's performance metrics and trends</li>
+                      <li style={topicStyles.li}><strong>Weekly Report:</strong> This week's analytics summary</li>
+                      <li style={topicStyles.li}><strong>Monthly Report:</strong> Comprehensive monthly performance overview</li>
+                    </ul>
+                  </div>
+                </div>
+                
+                <div style={topicStyles.steps.container}>
+                  <div style={topicStyles.steps.counter}>3</div>
+                  <div style={topicStyles.steps.content}>
+                    <h4 style={{ fontSize: '1.05rem', marginBottom: '8px' }}>What's Included in PDF Reports</h4>
+                    <p>Each PDF report contains:</p>
+                    <ul style={topicStyles.ul}>
+                      <li style={topicStyles.li}>Your store name and report generation date</li>
+                      <li style={topicStyles.li}>Complete breakdown of all four key metrics</li>
+                      <li style={topicStyles.li}>Visual pie chart representation of your data</li>
+                      <li style={topicStyles.li}>Performance insights and trend analysis</li>
+                      <li style={topicStyles.li}>Professional formatting suitable for business records</li>
+                    </ul>
+                  </div>
+                </div>
+                
+                <div style={{ padding: '12px', backgroundColor: '#e6f7f5', borderRadius: '6px', marginTop: '15px' }}>
+                  <p style={{ margin: 0, fontWeight: 500 }}>💡 Pro Tip: Download reports regularly to track your store's growth over time and identify successful strategies!</p>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Data Updates and Refresh Information</h2>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>🔄 Real-Time Data Updates</h3>
+                <p style={topicStyles.p}>Your analytics dashboard updates automatically to provide the most current information:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Automatic Refresh:</strong> Analytics update every time you visit the Explore page</li>
+                  <li style={topicStyles.li}><strong>Real-Time Tracking:</strong> New customer interactions are reflected immediately</li>
+                  <li style={topicStyles.li}><strong>Live Counters:</strong> All metrics are calculated from live database queries</li>
+                  <li style={topicStyles.li}><strong>No Delays:</strong> Data is current as of the moment you view the dashboard</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>📅 Time Period Calculations</h3>
+                <p style={topicStyles.p}>Understanding how time periods are calculated helps you interpret your data correctly:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Today:</strong> Resets at midnight (00:00) and shows activity from midnight to the current time</li>
+                  <li style={topicStyles.li}><strong>This Week:</strong> Starts from Monday 00:00 and includes the current week up to now</li>
+                  <li style={topicStyles.li}><strong>This Month:</strong> Begins on the 1st of the current month and shows month-to-date activity</li>
+                  <li style={topicStyles.li}><strong>Timezone:</strong> All calculations use your local browser timezone</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '25px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>🔄 Manual Refresh Options</h3>
+                <p style={topicStyles.p}>While analytics update automatically, you can also manually refresh your data:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Page Refresh:</strong> Simply refresh your browser or navigate away and back to the Explore page</li>
+                  <li style={topicStyles.li}><strong>Instant Updates:</strong> New customer interactions appear immediately without needing to refresh</li>
+                  <li style={topicStyles.li}><strong>Browser Cache:</strong> Your browser may cache some data - a hard refresh (Ctrl+F5) ensures latest data</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Understanding Analytics Cards Layout</h2>
+              <p style={topicStyles.p}>Your analytics are displayed in a responsive card layout that adapts to your device:</p>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f0f7f7', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '10px', color: '#007B7F' }}>Desktop & Tablet View</h4>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Analytics cards are displayed side-by-side for easy comparison</li>
+                  <li style={topicStyles.li}>Each time period (Today, This Week, This Month) has its own dedicated section</li>
+                  <li style={topicStyles.li}>All metrics are visible at once for comprehensive analysis</li>
+                  <li style={topicStyles.li}>PDF download buttons are prominently placed next to each analytics card</li>
+                  <li style={topicStyles.li}>Pie charts display alongside the numerical data for visual analysis</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f0f7f7', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '10px', color: '#007B7F' }}>Mobile View</h4>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Analytics cards stack vertically for optimal mobile viewing</li>
+                  <li style={topicStyles.li}>Each card maintains full readability on smaller screens</li>
+                  <li style={topicStyles.li}>Swipe or scroll to view all your analytics data</li>
+                  <li style={topicStyles.li}>PDF download buttons remain easily accessible on mobile devices</li>
+                  <li style={topicStyles.li}>Pie charts are optimized for touch interaction and mobile viewing</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Troubleshooting Analytics</h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '8px', color: '#333' }}>📊 No Data Showing</h4>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>This is normal for new stores - data will appear as customers interact with your store</li>
+                  <li style={topicStyles.li}>Make sure your store is live and has products listed</li>
+                  <li style={topicStyles.li}>Analytics update in real-time, so new activity should appear immediately</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.05rem', marginBottom: '8px', color: '#333' }}>📊 Data Seems Inaccurate</h4>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Analytics data is pulled directly from your store's activity log</li>
+                  <li style={topicStyles.li}>Each metric is counted only once per customer session</li>
+                  <li style={topicStyles.li}>If you notice discrepancies, contact support with specific details</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '10px', color: '#333' }}>Analytics Best Practices</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Check regularly:</strong> Review your analytics daily to stay on top of trends</li>
+                  <li style={topicStyles.li}><strong>Compare periods:</strong> Look at today vs. last week, this week vs. last month</li>
+                  <li style={topicStyles.li}><strong>Use visual data:</strong> Study the pie charts to understand the proportion of different customer interactions</li>
+                  <li style={topicStyles.li}><strong>Download reports:</strong> Save monthly PDF reports for business records and tax purposes</li>
+                  <li style={topicStyles.li}><strong>Track seasonal trends:</strong> Use historical PDF reports to identify busy periods and plan accordingly</li>
+                  <li style={topicStyles.li}><strong>Act on insights:</strong> Use the data to make informed business decisions</li>
+                  <li style={topicStyles.li}><strong>Monitor conversion rates:</strong> Track the percentage of views that become orders using the pie chart ratios</li>
+                  <li style={topicStyles.li}><strong>Share with stakeholders:</strong> Use PDF reports to share performance data with business partners or investors</li>
+                  <li style={topicStyles.li}><strong>Focus on conversion:</strong> Work to improve the journey from views to completed orders</li>
+                  <li style={topicStyles.li}><strong>Real-time monitoring:</strong> Check analytics after making changes to see immediate impact</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Need help understanding your analytics? Our support team can provide personalized guidance:</p>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Explore Page Guide Content */}
           {helpTopic === 'explore-page-guide' && (
             <div>
@@ -2326,6 +2629,15 @@ function HelpCenterPage() {
                   style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
                 >
                   Setting up payment methods
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('store-analytics'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Understanding store analytics
                 </a>
               </li>
             </ul>
