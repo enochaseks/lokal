@@ -27,8 +27,20 @@ function FeedPage() {
   const [commentMenuOpen, setCommentMenuOpen] = useState({});
   const [editingComment, setEditingComment] = useState({});
   const [editCommentText, setEditCommentText] = useState({});
+  const [replyMenuOpen, setReplyMenuOpen] = useState({});
+  const [editingReply, setEditingReply] = useState({});
+  const [editReplyText, setEditReplyText] = useState({});
+  const [expandedReplies, setExpandedReplies] = useState({});
+  const [threadedReplyInputs, setThreadedReplyInputs] = useState({});
   const [mediaPopup, setMediaPopup] = useState({ open: false, url: '', type: 'image' });
   const [isCampaign, setIsCampaign] = useState(false);
+  
+  // Report functionality states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportingPostId, setReportingPostId] = useState(null);
 
   useEffect(() => {
     const auth = getAuth();
@@ -110,6 +122,19 @@ function FeedPage() {
     return () => { cancelled = true; };
   }, [posts, storeProfilesById]);
 
+  // Initialize liked posts state based on actual database data
+  useEffect(() => {
+    if (!user) return;
+    
+    const newLikedPosts = {};
+    posts.forEach(post => {
+      const likes = post.likes || [];
+      newLikedPosts[post.id] = likes.includes(user.uid);
+    });
+    
+    setLikedPosts(newLikedPosts);
+  }, [posts, user]);
+
   // Listen for comments for each open post
   useEffect(() => {
     const unsubscribes = [];
@@ -129,7 +154,36 @@ function FeedPage() {
 
   const handleMediaChange = (e) => setMediaFiles(Array.from(e.target.files));
   
-  const handleLike = (postId) => setLikedPosts(prev => ({ ...prev, [postId]: !prev[postId] }));
+  const handleLike = async (postId) => {
+    if (!user) return;
+    
+    try {
+      const postRef = doc(db, 'posts', postId);
+      const postSnap = await getDoc(postRef);
+      if (!postSnap.exists()) return;
+      
+      const postData = postSnap.data();
+      const likes = postData.likes || [];
+      const liked = likes.includes(user.uid);
+      
+      const updatedLikes = liked 
+        ? likes.filter(uid => uid !== user.uid) 
+        : [...likes, user.uid];
+      
+      // Update with timestamp for notification tracking
+      const updateData = { 
+        likes: updatedLikes,
+        lastLikeTimestamp: serverTimestamp() // Essential for seller notifications
+      };
+      
+      await updateDoc(postRef, updateData);
+      
+      // Update local state for immediate UI feedback
+      setLikedPosts(prev => ({ ...prev, [postId]: !liked }));
+    } catch (error) {
+      console.error("Error updating like:", error);
+    }
+  };
 
   const handleToggleComments = (postId) => {
     setOpenComments(prev => ({ ...prev, [postId]: !prev[postId] }));
@@ -149,36 +203,44 @@ function FeedPage() {
     let name = '';
     let photoURL = '';
     let foundProfile = false;
-    // Always fetch from Firestore, do not fallback to displayName/email/uid
+    
     // Try stores first (store owner)
     const storeProfileSnap = await getDoc(doc(db, 'stores', user.uid));
     if (storeProfileSnap.exists()) {
       const data = storeProfileSnap.data();
       name = data.storeName || '';
-      photoURL = data.backgroundImg || '';
+      photoURL = data.backgroundImg || data.photoURL || '';
       foundProfile = !!name;
-    } else {
-      // Try users collection (buyer)
+    }
+    
+    // If not a store owner, try users collection (buyer)
+    if (!foundProfile) {
       const userProfileSnap = await getDoc(doc(db, 'users', user.uid));
       if (userProfileSnap.exists()) {
         const data = userProfileSnap.data();
-        name = data.displayName || data.name || '';
-        photoURL = data.photoURL || '';
+        name = data.displayName || data.name || data.firstName || '';
+        photoURL = data.photoURL || data.profilePicture || '';
         foundProfile = !!name;
       }
     }
-    // If no profile, do not allow comment and alert user
+    
+    // Fallback to Firebase Auth data if no Firestore profile
     if (!foundProfile) {
-      alert('You must set up your profile (name and photo) in your account before commenting.');
-      return;
+      name = user.displayName || user.email?.split('@')[0] || 'Anonymous User';
+      photoURL = user.photoURL || '';
+      foundProfile = true;
     }
-    if (!photoURL) photoURL = 'https://via.placeholder.com/32';
+    
+    // Use default avatar if no photo
+    if (!photoURL) photoURL = 'https://via.placeholder.com/32x32/007B7F/ffffff?text=' + (name.charAt(0).toUpperCase() || 'U');
+    
     const newComment = {
       uid: user.uid,
       name,
       photoURL,
       text,
       timestamp: new Date(),
+      likes: []
     };
     const updatedComments = [...(postData.comments || []), newComment];
     await updateDoc(postRef, { comments: updatedComments });
@@ -279,6 +341,7 @@ function FeedPage() {
         return {
           ...c,
           likes: liked ? likes.filter(uid => uid !== user.uid) : [...likes, user.uid],
+          lastLikeTimestamp: serverTimestamp() // Essential for seller notifications
         };
       });
       updateDoc(doc(db, 'posts', postId), { comments });
@@ -290,42 +353,129 @@ function FeedPage() {
     setReplyInputs(prev => ({ ...prev, [commentIdx]: value }));
   };
 
-  const handleReply = (postId, parentIdx) => {
-    setReplyingTo(prev => ({ ...prev, [postId]: parentIdx }));
+  const handleThreadedReplyInput = (replyId, value) => {
+    setThreadedReplyInputs(prev => ({ ...prev, [replyId]: value }));
+  };
+
+  const handleReply = (postId, parentIdx, isReplyToReply = false, parentReplyId = null) => {
+    if (isReplyToReply) {
+      setReplyingTo(prev => ({ 
+        ...prev, 
+        [postId]: { 
+          type: 'reply', 
+          commentIdx: parentIdx, 
+          replyId: parentReplyId 
+        } 
+      }));
+    } else {
+      setReplyingTo(prev => ({ 
+        ...prev, 
+        [postId]: { 
+          type: 'comment', 
+          commentIdx: parentIdx 
+        } 
+      }));
+    }
+  };
+
+  const handleReplyLike = async (postId, commentIndex, replyId) => {
+    if (!user) return;
+    
+    try {
+      const postRef = doc(db, 'posts', postId);
+      const postDoc = await getDoc(postRef);
+      
+      if (postDoc.exists()) {
+        const postData = postDoc.data();
+        const updatedComments = [...(postData.comments || [])];
+        
+        // Find the reply by ID (it could be at any level)
+        const comment = updatedComments[commentIndex];
+        if (!comment.replies) return;
+        
+        const replyIndex = comment.replies.findIndex(r => r.id === replyId || (typeof replyId === 'number' && comment.replies.indexOf(r) === replyId));
+        if (replyIndex === -1) return;
+        
+        const reply = comment.replies[replyIndex];
+        if (!reply.likes) reply.likes = [];
+        
+        const userLiked = reply.likes.includes(user.uid);
+        
+        if (userLiked) {
+          // Unlike
+          reply.likes = reply.likes.filter(uid => uid !== user.uid);
+        } else {
+          // Like
+          reply.likes.push(user.uid);
+          reply.lastLikeTimestamp = serverTimestamp();
+        }
+        
+        await updateDoc(postRef, { comments: updatedComments });
+        
+        // Update local state
+        setPosts(prevPosts => prevPosts.map(p => 
+          p.id === postId ? { ...p, comments: updatedComments } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error liking reply:', error);
+    }
   };
 
   const handleAddReply = async (postId, parentIdx) => {
-    const text = (replyInputs[parentIdx] || '').trim();
-    if (!text || !user) return;
+    const replyContext = replyingTo[postId];
+    if (!replyContext || !user) return;
+
+    let text = '';
+    if (replyContext.type === 'comment') {
+      text = (replyInputs[parentIdx] || '').trim();
+    } else {
+      text = (threadedReplyInputs[replyContext.replyId] || '').trim();
+    }
+
+    if (!text) return;
+
     const postRef = doc(db, 'posts', postId);
     const postSnap = await getDoc(postRef);
     if (!postSnap.exists()) return;
     const postData = postSnap.data();
-    const parentComment = postData.comments[parentIdx];
+
     let name = '';
     let photoURL = '';
     let foundProfile = false;
+    
+    // Try stores first (store owner)
     const storeProfileSnap = await getDoc(doc(db, 'stores', user.uid));
     if (storeProfileSnap.exists()) {
       const data = storeProfileSnap.data();
       name = data.storeName || '';
-      photoURL = data.backgroundImg || '';
+      photoURL = data.backgroundImg || data.photoURL || '';
       foundProfile = !!name;
-    } else {
+    }
+    
+    // If not a store owner, try users collection (buyer)
+    if (!foundProfile) {
       const userProfileSnap = await getDoc(doc(db, 'users', user.uid));
       if (userProfileSnap.exists()) {
         const data = userProfileSnap.data();
-        name = data.displayName || data.name || '';
-        photoURL = data.photoURL || '';
+        name = data.displayName || data.name || data.firstName || '';
+        photoURL = data.photoURL || data.profilePicture || '';
         foundProfile = !!name;
       }
     }
+    
+    // Fallback to Firebase Auth data if no Firestore profile
     if (!foundProfile) {
-      alert('You must set up your profile (name and photo) in your account before replying.');
-      return;
+      name = user.displayName || user.email?.split('@')[0] || 'Anonymous User';
+      photoURL = user.photoURL || '';
+      foundProfile = true;
     }
-    if (!photoURL) photoURL = 'https://via.placeholder.com/32';
+    
+    // Use default avatar if no photo
+    if (!photoURL) photoURL = 'https://via.placeholder.com/32x32/007B7F/ffffff?text=' + (name.charAt(0).toUpperCase() || 'U');
+    
     const reply = {
+      id: Date.now().toString(), // Generate unique ID for the reply
       uid: user.uid,
       name,
       photoURL,
@@ -333,12 +483,34 @@ function FeedPage() {
       timestamp: new Date(),
       likes: [],
       replies: [],
+      parentId: replyContext.type === 'reply' ? replyContext.replyId : null // Track parent for threading
     };
-    const updatedComments = postData.comments.map((c, i) =>
-      i === parentIdx ? { ...c, replies: [...(c.replies || []), reply] } : c
-    );
+
+    const updatedComments = [...postData.comments];
+    
+    if (replyContext.type === 'comment') {
+      // Reply to original comment
+      updatedComments[parentIdx] = {
+        ...updatedComments[parentIdx],
+        replies: [...(updatedComments[parentIdx].replies || []), reply]
+      };
+    } else {
+      // Reply to a reply - add to the same comment's replies array but with parentId set
+      updatedComments[replyContext.commentIdx] = {
+        ...updatedComments[replyContext.commentIdx],
+        replies: [...(updatedComments[replyContext.commentIdx].replies || []), reply]
+      };
+    }
+
     await updateDoc(postRef, { comments: updatedComments });
-    setReplyInputs(prev => ({ ...prev, [parentIdx]: '' }));
+    
+    // Clear inputs
+    if (replyContext.type === 'comment') {
+      setReplyInputs(prev => ({ ...prev, [parentIdx]: '' }));
+    } else {
+      setThreadedReplyInputs(prev => ({ ...prev, [replyContext.replyId]: '' }));
+    }
+    
     setReplyingTo(prev => ({ ...prev, [postId]: null }));
   };
 
@@ -384,6 +556,119 @@ function FeedPage() {
     setCommentMenuOpen(prev => ({ ...prev, [`${postId}_${commentIdx}`]: false }));
   };
 
+  // Reply menu handlers
+  const handleReplyMenuToggle = (postId, commentIdx, replyIdx) => {
+    const key = `${postId}_${commentIdx}_${replyIdx}`;
+    setReplyMenuOpen(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleEditReply = (postId, commentIdx, replyIdx, text) => {
+    setEditingReply({ postId, commentIdx, replyIdx });
+    setEditReplyText({ postId, commentIdx, replyIdx, text });
+    const key = `${postId}_${commentIdx}_${replyIdx}`;
+    setReplyMenuOpen(prev => ({ ...prev, [key]: false }));
+  };
+
+  const handleEditReplyChange = (value) => {
+    setEditReplyText(prev => ({ ...prev, text: value }));
+  };
+
+  const handleEditReplySave = async (postId, commentIdx, replyIdx) => {
+    const postRef = doc(db, 'posts', postId);
+    const postSnap = await getDoc(postRef);
+    if (!postSnap.exists()) return;
+    const postData = postSnap.data();
+    const updatedComments = postData.comments.map((c, i) => {
+      if (i === commentIdx) {
+        const updatedReplies = c.replies.map((r, ri) =>
+          ri === replyIdx ? { ...r, text: editReplyText.text } : r
+        );
+        return { ...c, replies: updatedReplies };
+      }
+      return c;
+    });
+    await updateDoc(postRef, { comments: updatedComments });
+    setEditingReply({});
+    setEditReplyText({});
+  };
+
+  const handleEditReplyCancel = () => {
+    setEditingReply({});
+    setEditReplyText({});
+  };
+
+  const handleDeleteReply = async (postId, commentIdx, replyIdx) => {
+    const postRef = doc(db, 'posts', postId);
+    const postSnap = await getDoc(postRef);
+    if (!postSnap.exists()) return;
+    const postData = postSnap.data();
+    const updatedComments = postData.comments.map((c, i) => {
+      if (i === commentIdx) {
+        const updatedReplies = c.replies.filter((_, ri) => ri !== replyIdx);
+        return { ...c, replies: updatedReplies };
+      }
+      return c;
+    });
+    await updateDoc(postRef, { comments: updatedComments });
+    const key = `${postId}_${commentIdx}_${replyIdx}`;
+    setReplyMenuOpen(prev => ({ ...prev, [key]: false }));
+  };
+
+  const handleToggleReplies = (postId, commentIdx) => {
+    const key = `${postId}_${commentIdx}`;
+    setExpandedReplies(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Function to count total comments including replies
+  const getTotalCommentCount = (comments) => {
+    if (!comments || comments.length === 0) return 0;
+    
+    let totalCount = comments.length; // Count main comments
+    
+    // Add reply counts
+    comments.forEach(comment => {
+      if (comment.replies && comment.replies.length > 0) {
+        totalCount += comment.replies.length;
+      }
+    });
+    
+    return totalCount;
+  };
+
+  // Helper function to organize replies into threads
+  const organizeRepliesIntoThreads = (replies) => {
+    if (!replies || replies.length === 0) return [];
+    
+    const threadsMap = new Map();
+    const rootReplies = [];
+    
+    // First pass: separate root replies from threaded replies
+    replies.forEach(reply => {
+      if (!reply.parentId) {
+        // Root reply (direct reply to comment)
+        rootReplies.push({ ...reply, children: [] });
+        threadsMap.set(reply.id, rootReplies[rootReplies.length - 1]);
+      }
+    });
+    
+    // Second pass: attach threaded replies to their parents
+    replies.forEach(reply => {
+      if (reply.parentId) {
+        const parent = threadsMap.get(reply.parentId);
+        if (parent) {
+          parent.children.push({ ...reply, children: [] });
+          threadsMap.set(reply.id, parent.children[parent.children.length - 1]);
+        } else {
+          // Parent not found, treat as root reply
+          rootReplies.push({ ...reply, children: [] });
+          threadsMap.set(reply.id, rootReplies[rootReplies.length - 1]);
+        }
+      }
+    });
+    
+    return rootReplies;
+  };
+
   const handleMediaClick = (url, type) => {
     setMediaPopup({ open: true, url, type });
   };
@@ -396,280 +681,2004 @@ function FeedPage() {
     setIsCampaign(prev => !prev);
   };
 
+  // Handle report post functionality
+  const handleReportPost = (postId) => {
+    setReportingPostId(postId);
+    setShowReportModal(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!user || !reportReason.trim() || !reportingPostId) {
+      alert('Please select a reason for reporting.');
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      // Get user data for the report
+      let userData = {
+        userName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        userEmail: user.email
+      };
+
+      // Try to get better user data from Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const firestoreUserData = userDoc.data();
+        userData = {
+          userName: firestoreUserData.name || firestoreUserData.displayName || userData.userName,
+          userEmail: firestoreUserData.email || user.email
+        };
+      }
+
+      // Get the post being reported
+      const reportedPost = posts.find(post => post.id === reportingPostId);
+      
+      // Submit the report to admin_complaints collection
+      await addDoc(collection(db, 'admin_complaints'), {
+        type: 'post_report',
+        reason: reportReason,
+        details: reportDetails.trim(),
+        reportedPostId: reportingPostId,
+        reportedPostText: reportedPost?.text || '',
+        reportedStoreId: reportedPost?.storeId,
+        reportedStoreName: reportedPost?.storeName,
+        reporterUserId: user.uid,
+        reporterName: userData.userName,
+        reporterEmail: userData.userEmail,
+        status: 'pending_review',
+        submittedAt: serverTimestamp(),
+        timestamp: serverTimestamp()
+      });
+
+      alert('Report submitted successfully. Our team will review it soon.');
+      setShowReportModal(false);
+      setReportReason('');
+      setReportDetails('');
+      setReportingPostId(null);
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      alert('Failed to submit report. Please try again.');
+    }
+    setReportSubmitting(false);
+  };
+
   return (
     <div style={{ background: '#F0F2F5', minHeight: '100vh', padding: 0 }}>
       <Navbar />
-      <div style={{ maxWidth: 600, margin: '2rem auto', padding: '0 8px' }}>
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '2rem 16px' }}>
         {storeProfile && (
-          <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.2)', padding: '1.5rem', marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <img src={storeProfile.backgroundImg || 'https://via.placeholder.com/44'} alt="avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
-              <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder="What's on your mind?" rows={2} style={{ flex: 1, borderRadius: 22, border: '1px solid #ccd0d5', padding: '12px 18px', fontSize: '1.1rem', background: '#F0F2F5', resize: 'vertical', outline: 'none' }} />
+          <div style={{ 
+            background: '#ffffff', 
+            borderRadius: '16px', 
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)', 
+            padding: '24px', 
+            marginBottom: '24px',
+            border: '1px solid rgba(0, 0, 0, 0.05)'
+          }}>
+            {/* Post Creation Header */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              gap: '16px',
+              marginBottom: '20px'
+            }}>
+              <img 
+                src={storeProfile.backgroundImg || 'https://via.placeholder.com/48'} 
+                alt="Store Avatar" 
+                style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  border: '2px solid #E4E6EA'
+                }} 
+              />
+              <div style={{ flex: 1 }}>
+                <textarea 
+                  value={postText} 
+                  onChange={e => setPostText(e.target.value)} 
+                  placeholder="What's happening in your store today?" 
+                  rows={3} 
+                  style={{ 
+                    width: '100%',
+                    border: '1px solid #E4E6EA',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    fontSize: '16px',
+                    lineHeight: '1.4',
+                    background: '#F8F9FA',
+                    resize: 'vertical',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#007B7F';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(0, 123, 127, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#E4E6EA';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            
+            {/* Post Actions */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              gap: '16px',
+              paddingTop: '16px',
+              borderTop: '1px solid #E4E6EA'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  padding: '8px 12px',
+                  border: '1px solid #E4E6EA',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  background: '#F8F9FA',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#606770',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#E4E6EA';
+                  e.target.style.borderColor = '#BDC3C7';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#F8F9FA';
+                  e.target.style.borderColor = '#E4E6EA';
+                }}
+                >
+                  <span style={{ fontSize: '16px' }}>📷</span>
+                  Add Media
+                  <input 
+                    type="file" 
+                    accept="image/*,video/*" 
+                    multiple 
+                    style={{ display: 'none' }}
+                    onChange={handleMediaChange} 
+                  />
+                </label>
+                
+                <button
+                  type="button"
+                  onClick={handleToggleCampaign}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    border: isCampaign ? '1px solid #FFD700' : '1px solid #E4E6EA',
+                    borderRadius: '8px',
+                    background: isCampaign ? '#FFF8DC' : '#F8F9FA',
+                    color: isCampaign ? '#B8860B' : '#606770',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  title={isCampaign ? 'Remove Campaign Tag' : 'Mark as Campaign'}
+                >
+                  <span style={{ fontSize: '16px' }}>📢</span>
+                  {isCampaign ? 'Campaign' : 'Campaign'}
+                </button>
+              </div>
+              
               <button 
                 type="button" 
                 onClick={handlePost} 
-                disabled={loading} 
+                disabled={loading || (!postText.trim() && mediaFiles.length === 0)} 
                 style={{ 
-                  background: 'rgba(0, 123, 127, 0.8)', 
-                  color: '#fff', 
+                  background: (!postText.trim() && mediaFiles.length === 0) ? '#BDC3C7' : '#007B7F',
+                  color: '#ffffff', 
                   border: 'none', 
-                  borderRadius: '12px', 
-                  padding: '0.4rem 1rem', 
+                  borderRadius: '8px', 
+                  padding: '10px 24px', 
                   fontWeight: '600', 
-                  fontSize: '0.9rem', 
-                  cursor: 'pointer',
+                  fontSize: '14px', 
+                  cursor: (!postText.trim() && mediaFiles.length === 0) ? 'not-allowed' : 'pointer',
                   opacity: loading ? 0.7 : 1,
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 4px 10px rgba(0, 123, 127, 0.2)',
                   transition: 'all 0.2s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                  minWidth: '80px'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 15px rgba(0, 123, 127, 0.3)';
+                  if (!loading && (postText.trim() || mediaFiles.length > 0)) {
+                    e.target.style.background = '#006367';
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 10px rgba(0, 123, 127, 0.2)';
+                  if (!loading && (postText.trim() || mediaFiles.length > 0)) {
+                    e.target.style.background = '#007B7F';
+                  }
                 }}
               >
                 {loading ? 'Posting...' : 'Post'}
               </button>
-              <input 
-                type="file" 
-                accept="image/*,video/*" 
-                multiple 
-                capture 
-                style={{ 
-                  flex: 1,
-                  background: 'rgba(255, 255, 255, 0.7)',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  borderRadius: '8px',
-                  padding: '6px'
-                }} 
-                onChange={handleMediaChange} 
-              />
             </div>
-            {/* Campaign icon/button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-              <button
-                type="button"
-                onClick={handleToggleCampaign}
-                style={{
-                  background: isCampaign ? '#FFD700' : '#eee',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '0.5rem 1rem',
-                  color: isCampaign ? '#222' : '#888',
-                  fontWeight: 600,
-                  cursor: 'pointer',
+            
+            {/* Media Preview */}
+            {mediaFiles.length > 0 && (
+              <div style={{ 
+                marginTop: '16px',
+                padding: '16px',
+                background: '#F8F9FA',
+                border: '1px solid #E4E6EA',
+                borderRadius: '12px'
+              }}>
+                <div style={{ 
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6
-                }}
-                title={isCampaign ? 'Unset as Campaign' : 'Set as Campaign'}
-              >
-                <span role="img" aria-label="campaign">📢</span>
-                {isCampaign ? 'Campaign Post' : 'Set as Campaign'}
-              </button>
-              {isCampaign && <span style={{ color: '#FFD700', fontWeight: 600 }}>This post will be marked as a campaign</span>}
-            </div>
+                  justifyContent: 'space-between',
+                  marginBottom: '12px'
+                }}>
+                  <h4 style={{ 
+                    margin: 0,
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#1C1E21'
+                  }}>
+                    Selected Media ({mediaFiles.length})
+                  </h4>
+                  <button
+                    onClick={() => setMediaFiles([])}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#E41E3F',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = '#FFF5F5'}
+                    onMouseLeave={(e) => e.target.style.background = 'none'}
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                  gap: '8px',
+                  maxHeight: '200px',
+                  overflowY: 'auto'
+                }}>
+                  {mediaFiles.map((file, index) => (
+                    <div key={index} style={{ 
+                      position: 'relative',
+                      background: '#ffffff',
+                      border: '1px solid #E4E6EA',
+                      borderRadius: '8px',
+                      overflow: 'hidden'
+                    }}>
+                      {file.type.startsWith('image/') ? (
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`Preview ${index + 1}`}
+                          style={{
+                            width: '100%',
+                            height: '80px',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      ) : file.type.startsWith('video/') ? (
+                        <div style={{ 
+                          width: '100%',
+                          height: '80px',
+                          background: '#000000',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          position: 'relative'
+                        }}>
+                          <video
+                            src={URL.createObjectURL(file)}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                            muted
+                          />
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ffffff',
+                            fontSize: '10px'
+                          }}>
+                            ▶
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ 
+                          width: '100%',
+                          height: '80px',
+                          background: '#F0F2F5',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '8px',
+                          textAlign: 'center'
+                        }}>
+                          <div style={{ fontSize: '16px', marginBottom: '4px' }}>📄</div>
+                          <div style={{ 
+                            fontSize: '10px',
+                            color: '#65676B',
+                            fontWeight: '500',
+                            wordBreak: 'break-all',
+                            lineHeight: '1.2'
+                          }}>
+                            {file.name.length > 15 ? `${file.name.substring(0, 12)}...` : file.name}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Remove individual file button */}
+                      <button
+                        onClick={() => {
+                          const newFiles = mediaFiles.filter((_, i) => i !== index);
+                          setMediaFiles(newFiles);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          background: 'rgba(0, 0, 0, 0.7)',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold'
+                        }}
+                        title="Remove this file"
+                      >
+                        ×
+                      </button>
+                      
+                      {/* File size info */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        left: '2px',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: '#ffffff',
+                        fontSize: '8px',
+                        padding: '1px 4px',
+                        borderRadius: '2px',
+                        fontWeight: '500'
+                      }}>
+                        {(file.size / 1024 / 1024).toFixed(1)}MB
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Campaign Notice */}
+            {isCampaign && (
+              <div style={{ 
+                marginTop: '16px',
+                padding: '12px 16px',
+                background: '#FFF8DC',
+                border: '1px solid #FFD700',
+                borderRadius: '8px',
+                color: '#B8860B',
+                fontSize: '14px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>📢</span>
+                This post will be marked as a promotional campaign
+              </div>
+            )}
           </div>
         )}
 
         {posts.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#888', fontSize: '1.1rem', marginTop: 40 }}>
-            {storeProfile ? "You have no posts yet. Your posts will appear here." : "No posts yet. Follow stores to see their updates here."}
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '60px 24px',
+            background: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            border: '1px solid rgba(0, 0, 0, 0.05)'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📱</div>
+            <h3 style={{ 
+              color: '#1C1E21', 
+              fontSize: '20px', 
+              fontWeight: '600', 
+              margin: '0 0 8px 0' 
+            }}>
+              {storeProfile ? "Share your first post" : "No posts to show"}
+            </h3>
+            <p style={{ 
+              color: '#65676B', 
+              fontSize: '16px', 
+              margin: 0,
+              lineHeight: '1.4'
+            }}>
+              {storeProfile 
+                ? "Share updates, promotions, and connect with your customers." 
+                : "Follow stores to see their latest updates and promotions here."
+              }
+            </p>
           </div>
         ) : (
           posts.map(post => {
             const storeProfileForPost = storeProfilesById[post.storeId];
-            const avatarUrl = storeProfileForPost && storeProfileForPost.backgroundImg ? storeProfileForPost.backgroundImg : 'https://via.placeholder.com/40';
+            const avatarUrl = storeProfileForPost && storeProfileForPost.backgroundImg ? storeProfileForPost.backgroundImg : 'https://via.placeholder.com/48';
             return (
-              <div key={post.id} style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.2)', marginBottom: 20, position: 'relative' }}>
+              <div key={post.id} style={{ 
+                background: '#ffffff', 
+                borderRadius: '16px', 
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)', 
+                marginBottom: '24px', 
+                position: 'relative',
+                border: '1px solid rgba(0, 0, 0, 0.05)',
+                overflow: 'hidden'
+              }}>
                 {/* Three dots menu */}
-                {user && post.storeId === user.uid && (
-                  <div style={{ position: 'absolute', top: 12, right: 16, zIndex: 10 }}>
-                    <button onClick={() => handleMenuToggle(post.id)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', padding: 4 }}>
+                {user && (
+                  <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10 }}>
+                    <button 
+                      onClick={() => handleMenuToggle(post.id)} 
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.9)', 
+                        border: '1px solid rgba(0, 0, 0, 0.1)', 
+                        borderRadius: '50%',
+                        width: '32px',
+                        height: '32px',
+                        fontSize: '16px', 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#65676B',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#F0F2F5';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.9)';
+                      }}
+                    >
                       &#8942;
                     </button>
                     {menuOpen[post.id] && (
-                      <div style={{ position: 'absolute', top: 28, right: 0, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #ccc', minWidth: 100 }}>
-                        <button onClick={() => handleEditPost(post)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', padding: '8px 12px', textAlign: 'left', cursor: 'pointer' }}>Edit</button>
-                        <button onClick={() => handleDeletePost(post.id)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', padding: '8px 12px', textAlign: 'left', color: '#D92D20', cursor: 'pointer' }}>Delete</button>
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '36px', 
+                        right: '0', 
+                        background: '#ffffff', 
+                        border: '1px solid #E4E6EA', 
+                        borderRadius: '8px', 
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)', 
+                        minWidth: '120px',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Owner options */}
+                        {post.storeId === user.uid ? (
+                          <>
+                            <button 
+                              onClick={() => handleEditPost(post)} 
+                              style={{ 
+                                display: 'block', 
+                                width: '100%', 
+                                background: 'none', 
+                                border: 'none', 
+                                padding: '12px 16px', 
+                                textAlign: 'left', 
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                color: '#1C1E21',
+                                transition: 'background-color 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => e.target.style.background = '#F0F2F5'}
+                              onMouseLeave={(e) => e.target.style.background = 'none'}
+                            >
+                              Edit Post
+                            </button>
+                            <button 
+                              onClick={() => handleDeletePost(post.id)} 
+                              style={{ 
+                                display: 'block', 
+                                width: '100%', 
+                                background: 'none', 
+                                border: 'none', 
+                                padding: '12px 16px', 
+                                textAlign: 'left', 
+                                color: '#E41E3F', 
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                transition: 'background-color 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => e.target.style.background = '#FFF5F5'}
+                              onMouseLeave={(e) => e.target.style.background = 'none'}
+                            >
+                              Delete Post
+                            </button>
+                          </>
+                        ) : (
+                          /* Buyer options */
+                          <button 
+                            onClick={() => {
+                              handleReportPost(post.id);
+                              setMenuOpen(prev => ({ ...prev, [post.id]: false }));
+                            }} 
+                            style={{ 
+                              display: 'block', 
+                              width: '100%', 
+                              background: 'none', 
+                              border: 'none', 
+                              padding: '12px 16px', 
+                              textAlign: 'left', 
+                              color: '#E41E3F', 
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              transition: 'background-color 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = '#FFF5F5'}
+                            onMouseLeave={(e) => e.target.style.background = 'none'}
+                          >
+                            <span style={{ fontSize: '12px' }}>🚩</span>
+                            Report Post
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
+                
                 {/* Edit mode */}
                 {editingPostId === post.id ? (
-                  <div style={{ padding: '12px 16px' }}>
-                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={2} style={{ width: '100%', borderRadius: 8, border: '1px solid #ccd0d5', padding: '10px', fontSize: '1.1rem', marginBottom: 8 }} />
-                    <div style={{ marginBottom: 8 }}>
-                      <input type="file" accept="image/*,video/*" multiple onChange={handleEditMediaChange} />
+                  <div style={{ padding: '24px' }}>
+                    <textarea 
+                      value={editText} 
+                      onChange={e => setEditText(e.target.value)} 
+                      rows={3} 
+                      style={{ 
+                        width: '100%', 
+                        borderRadius: '12px', 
+                        border: '1px solid #E4E6EA', 
+                        padding: '14px 18px', 
+                        fontSize: '16px',
+                        lineHeight: '1.4',
+                        marginBottom: '16px',
+                        background: '#F8F9FA',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        resize: 'vertical'
+                      }} 
+                    />
+                    
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ 
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 12px',
+                        border: '1px solid #E4E6EA',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        background: '#F8F9FA',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#606770',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#E4E6EA';
+                        e.target.style.borderColor = '#BDC3C7';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = '#F8F9FA';
+                        e.target.style.borderColor = '#E4E6EA';
+                      }}
+                      >
+                        <span style={{ fontSize: '16px' }}>📷</span>
+                        Update Media
+                        <input type="file" accept="image/*,video/*" multiple onChange={handleEditMediaChange} style={{ display: 'none' }} />
+                      </label>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      {editMediaUrls.map((m, i) => (
-                        <img key={i} src={m.url} alt="media" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6 }} />
-                      ))}
+                    
+                    {/* Existing Media Preview */}
+                    {editMediaUrls.length > 0 && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <h5 style={{ 
+                          margin: '0 0 8px 0',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: '#65676B'
+                        }}>
+                          Current Media:
+                        </h5>
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: '8px', 
+                          flexWrap: 'wrap'
+                        }}>
+                          {editMediaUrls.map((m, i) => (
+                            <div key={i} style={{ position: 'relative' }}>
+                              <img 
+                                src={m.url} 
+                                alt="Current media" 
+                                style={{ 
+                                  width: '80px', 
+                                  height: '80px', 
+                                  objectFit: 'cover', 
+                                  borderRadius: '8px',
+                                  border: '1px solid #E4E6EA'
+                                }} 
+                              />
+                              <button
+                                onClick={() => {
+                                  const newUrls = editMediaUrls.filter((_, index) => index !== i);
+                                  setEditMediaUrls(newUrls);
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  background: 'rgba(0, 0, 0, 0.7)',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '16px',
+                                  height: '16px',
+                                  color: '#ffffff',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 'bold'
+                                }}
+                                title="Remove this media"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Media Preview */}
+                    {editMediaFiles.length > 0 && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <h5 style={{ 
+                          margin: '0 0 8px 0',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: '#65676B'
+                        }}>
+                          New Media to Add:
+                        </h5>
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: '8px', 
+                          flexWrap: 'wrap'
+                        }}>
+                          {editMediaFiles.map((file, index) => (
+                            <div key={index} style={{ position: 'relative' }}>
+                              {file.type.startsWith('image/') ? (
+                                <img
+                                  src={URL.createObjectURL(file)}
+                                  alt={`New preview ${index + 1}`}
+                                  style={{
+                                    width: '80px',
+                                    height: '80px',
+                                    objectFit: 'cover',
+                                    borderRadius: '8px',
+                                    border: '1px solid #E4E6EA'
+                                  }}
+                                />
+                              ) : file.type.startsWith('video/') ? (
+                                <div style={{ 
+                                  width: '80px',
+                                  height: '80px',
+                                  background: '#000000',
+                                  borderRadius: '8px',
+                                  border: '1px solid #E4E6EA',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  position: 'relative',
+                                  overflow: 'hidden'
+                                }}>
+                                  <video
+                                    src={URL.createObjectURL(file)}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover'
+                                    }}
+                                    muted
+                                  />
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%)',
+                                    background: 'rgba(0, 0, 0, 0.7)',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                    fontSize: '8px'
+                                  }}>
+                                    ▶
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ 
+                                  width: '80px',
+                                  height: '80px',
+                                  background: '#F0F2F5',
+                                  borderRadius: '8px',
+                                  border: '1px solid #E4E6EA',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '4px',
+                                  textAlign: 'center'
+                                }}>
+                                  <div style={{ fontSize: '12px', marginBottom: '2px' }}>📄</div>
+                                  <div style={{ 
+                                    fontSize: '8px',
+                                    color: '#65676B',
+                                    fontWeight: '500',
+                                    wordBreak: 'break-all',
+                                    lineHeight: '1.1'
+                                  }}>
+                                    {file.name.length > 10 ? `${file.name.substring(0, 8)}...` : file.name}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <button
+                                onClick={() => {
+                                  const newFiles = editMediaFiles.filter((_, i) => i !== index);
+                                  setEditMediaFiles(newFiles);
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  background: 'rgba(0, 0, 0, 0.7)',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: '16px',
+                                  height: '16px',
+                                  color: '#ffffff',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 'bold'
+                                }}
+                                title="Remove this file"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button 
+                        onClick={() => handleEditSave(post.id)} 
+                        style={{ 
+                          background: '#007B7F', 
+                          color: '#ffffff', 
+                          border: 'none', 
+                          borderRadius: '8px', 
+                          padding: '10px 20px', 
+                          fontWeight: '600',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = '#006367'}
+                        onMouseLeave={(e) => e.target.style.background = '#007B7F'}
+                      >
+                        Save Changes
+                      </button>
+                      <button 
+                        onClick={handleEditCancel} 
+                        style={{ 
+                          background: '#F0F2F5', 
+                          color: '#65676B', 
+                          border: '1px solid #E4E6EA', 
+                          borderRadius: '8px', 
+                          padding: '10px 20px', 
+                          fontWeight: '600',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = '#E4E6EA';
+                          e.target.style.color = '#1C1E21';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = '#F0F2F5';
+                          e.target.style.color = '#65676B';
+                        }}
+                      >
+                        Cancel
+                      </button>
                     </div>
-                    <button onClick={() => handleEditSave(post.id)} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, marginRight: 8, cursor: 'pointer' }}>Save</button>
-                    <button onClick={handleEditCancel} style={{ background: '#eee', color: '#444', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
                   </div>
                 ) : (
-              <div style={{ padding: '12px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      <img src={avatarUrl} alt={post.storeName} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontWeight: 600 }}>{post.storeName}</div>
-                        {post.campaign && (
-                          <span style={{
-                            background: '#FFD700',
-                            color: '#222',
-                            fontWeight: 700,
-                            borderRadius: 6,
-                            padding: '2px 8px',
-                            fontSize: '0.95em',
-                            marginLeft: 8,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4
+                  <>
+                    {/* Post Header */}
+                    <div style={{ padding: '20px 24px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
+                        <img 
+                          src={avatarUrl} 
+                          alt={post.storeName} 
+                          style={{ 
+                            width: '48px', 
+                            height: '48px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover',
+                            border: '2px solid #E4E6EA'
+                          }} 
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <h4 style={{ 
+                                fontWeight: '600',
+                                fontSize: '16px',
+                                color: '#1C1E21',
+                                margin: 0
+                              }}>
+                                {post.storeName}
+                              </h4>
+                              {post.campaign && (
+                                <span style={{
+                                  background: '#FFF8DC',
+                                  color: '#B8860B',
+                                  fontWeight: '600',
+                                  borderRadius: '12px',
+                                  padding: '4px 8px',
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  border: '1px solid #FFD700'
+                                }}>
+                                  <span role="img" aria-label="campaign">📢</span>
+                                  Campaign
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ 
+                              color: '#65676B', 
+                              fontSize: '13px',
+                              fontWeight: '400'
+                            }}>
+                              {post.timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                          <div style={{ 
+                            color: '#65676B', 
+                            fontSize: '13px',
+                            fontWeight: '400',
+                            marginBottom: '12px',
+                            textAlign: 'left'
                           }}>
-                            <span role="img" aria-label="campaign">📢</span> Campaign
-                          </span>
-                        )}
+                            {post.timestamp?.toDate().toLocaleDateString('en-GB', { 
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        </div>
                       </div>
+                      
+                      {/* Post Content */}
+                      {post.text && (
+                        <p style={{ 
+                          margin: '0',
+                          fontSize: '16px',
+                          lineHeight: '1.5',
+                          color: '#1C1E21',
+                          whiteSpace: 'pre-wrap',
+                          textAlign: 'left',
+                          paddingLeft: '0'
+                        }}>
+                          {post.text}
+                        </p>
+                      )}
                     </div>
-                    <div style={{ color: '#888', fontSize: '0.9rem' }}>{post.timestamp?.toDate().toLocaleString()}</div>
-                    <p style={{ margin: '8px 0', textAlign: 'left' }}>{post.text}</p>
-                  </div>
+                  </>
                 )}
+                {/* Post Media */}
                 {post.media && post.media.length > 0 && (
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: post.media.length === 1 ? '1fr' : post.media.length === 2 ? '1fr 1fr' : '1fr 1fr 1fr',
-                    gap: 8,
-                    marginBottom: 8
+                    gridTemplateColumns: post.media.length === 1 ? '1fr' : post.media.length === 2 ? '1fr 1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '8px',
+                    marginBottom: '16px'
                   }}>
                     {post.media.map((m, idx) => (
                       m.type === 'image' ? (
                         <img
                           key={idx}
                           src={m.url}
-                          alt="post media"
-                          style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 8, cursor: 'pointer' }}
+                          alt="Post content"
+                          style={{ 
+                            width: '100%', 
+                            height: post.media.length === 1 ? '400px' : '200px', 
+                            objectFit: 'cover', 
+                            borderRadius: '12px', 
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease'
+                          }}
                           onClick={() => handleMediaClick(m.url, 'image')}
+                          onMouseEnter={(e) => e.target.style.transform = 'scale(1.02)'}
+                          onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
                         />
                       ) : m.type === 'video' ? (
                         <video
                           key={idx}
                           src={m.url}
                           controls
-                          style={{ width: '100%', height: 180, borderRadius: 8, cursor: 'pointer' }}
+                          style={{ 
+                            width: '100%', 
+                            height: post.media.length === 1 ? '400px' : '200px', 
+                            borderRadius: '12px',
+                            cursor: 'pointer'
+                          }}
                           onClick={() => handleMediaClick(m.url, 'video')}
                         />
                       ) : null
                     ))}
-              </div>
-              )}
-              <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'space-between', color: '#65676B' }}>
-                <span>{post.likes.length + (likedPosts[post.id] ? 1 : 0)} Likes</span>
-                <span>{post.comments.length} Comments</span>
-              </div>
-              <div style={{ borderTop: '1px solid #E4E6EB', margin: '0 16px', display: 'flex' }}>
-                <button onClick={() => handleLike(post.id)} style={{ flex: 1, background: 'none', border: 'none', padding: '10px', fontWeight: 'bold', color: likedPosts[post.id] ? '#007B7F' : '#65676B', cursor: 'pointer' }}>Like</button>
-                  <button onClick={() => handleToggleComments(post.id)} style={{ flex: 1, background: 'none', border: 'none', padding: '10px', fontWeight: 'bold', color: '#65676B', cursor: 'pointer' }}>Comment</button>
+                  </div>
+                )}
+                
+                {/* Post Stats */}
+                <div style={{ 
+                  padding: '12px 24px', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  color: '#65676B',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}>
+                  <span>
+                    {(post.likes || []).length > 0 && 
+                      `${(post.likes || []).length} ${(post.likes || []).length === 1 ? 'like' : 'likes'}`
+                    }
+                  </span>
+                  <span>
+                    {getTotalCommentCount(post.comments) > 0 && 
+                      `${getTotalCommentCount(post.comments)} ${getTotalCommentCount(post.comments) === 1 ? 'comment' : 'comments'}`
+                    }
+                  </span>
                 </div>
+                
+                {/* Post Actions */}
+                <div style={{ 
+                  borderTop: '1px solid #E4E6EA', 
+                  display: 'flex',
+                  margin: '0 24px'
+                }}>
+                  <button 
+                    onClick={() => handleLike(post.id)} 
+                    style={{ 
+                      flex: 1, 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: '14px 16px', 
+                      fontWeight: '600',
+                      fontSize: '15px',
+                      color: likedPosts[post.id] ? '#007B7F' : '#65676B', 
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      margin: '8px 4px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#F0F2F5';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '16px' }}>{likedPosts[post.id] ? '❤️' : '🤍'}</span>
+                    Like
+                  </button>
+                  <button 
+                    onClick={() => handleToggleComments(post.id)} 
+                    style={{ 
+                      flex: 1, 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: '14px 16px', 
+                      fontWeight: '600',
+                      fontSize: '15px',
+                      color: '#65676B', 
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      margin: '8px 4px',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#F0F2F5';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'none';
+                    }}
+                  >
+                    <span style={{ fontSize: '16px' }}>💬</span>
+                    Comment
+                  </button>
+                </div>
+                {/* Comments Section */}
                 {openComments[post.id] && (
-                  <div style={{ padding: '12px 16px', borderTop: '1px solid #eee', background: '#fafbfc' }}>
-                    <div style={{ marginBottom: 8, fontWeight: 600 }}>Comments</div>
-                    {post.comments && post.comments.length > 0 ? (
-                      post.comments.map((c, i) => (
-                        <div key={i} style={{ marginBottom: 8, padding: 8, background: '#fff', borderRadius: 6, boxShadow: '0 1px 2px #eee', textAlign: 'left', position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <img src={c.photoURL || 'https://via.placeholder.com/32'} alt={c.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-                            <span style={{ fontWeight: 500 }}>{c.name}</span>
-                            <span style={{ color: '#888', fontSize: '0.85em' }}>
-                              {c.timestamp && (c.timestamp.seconds ? new Date(c.timestamp.seconds * 1000).toLocaleString() : new Date(c.timestamp).toLocaleString())}
-                            </span>
-                            {/* Three dots menu for comment owner */}
-                            {user && c.uid === user.uid && (
-                              <div style={{ marginLeft: 'auto', position: 'relative' }}>
-                                <button onClick={() => handleCommentMenuToggle(post.id, i)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', padding: 2 }}>&#8942;</button>
-                                {commentMenuOpen[`${post.id}_${i}`] && (
-                                  <div style={{ position: 'absolute', top: 24, right: 0, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #ccc', minWidth: 80 }}>
-                                    <button onClick={() => handleEditComment(post.id, i, c.text)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', padding: '6px 10px', textAlign: 'left', cursor: 'pointer' }}>Edit</button>
-                                    <button onClick={() => handleDeleteComment(post.id, i)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', padding: '6px 10px', textAlign: 'left', color: '#D92D20', cursor: 'pointer' }}>Delete</button>
+                  <div style={{ 
+                    borderTop: '1px solid #E4E6EA',
+                    background: '#F8F9FA'
+                  }}>
+                    <div style={{ 
+                      padding: '20px 24px 16px',
+                      borderBottom: '1px solid #E4E6EA',
+                      background: '#ffffff'
+                    }}>
+                      <h4 style={{ 
+                        margin: '0 0 16px 0',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        color: '#1C1E21'
+                      }}>
+                        Comments ({getTotalCommentCount(post.comments)})
+                      </h4>
+                      
+                      {/* Add Comment */}
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <img 
+                          src={(() => {
+                            if (!user) return 'https://via.placeholder.com/36x36/007B7F/ffffff?text=U';
+                            if (storeProfile && storeProfile.backgroundImg) return storeProfile.backgroundImg;
+                            if (user.photoURL) return user.photoURL;
+                            const userName = user.displayName || user.email?.split('@')[0] || 'U';
+                            return `https://via.placeholder.com/36x36/007B7F/ffffff?text=${userName.charAt(0).toUpperCase()}`;
+                          })()}
+                          alt="Your avatar"
+                          style={{ 
+                            width: '36px', 
+                            height: '36px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover',
+                            border: '1px solid #E4E6EA'
+                          }}
+                        />
+                        <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
+                          <input
+                            type="text"
+                            value={commentInputs[post.id] || ''}
+                            onChange={e => handleCommentInput(post.id, e.target.value)}
+                            placeholder="Write a comment..."
+                            style={{ 
+                              flex: 1, 
+                              borderRadius: '20px', 
+                              border: '1px solid #E4E6EA', 
+                              padding: '10px 16px',
+                              fontSize: '14px',
+                              outline: 'none',
+                              background: '#ffffff'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.borderColor = '#007B7F';
+                              e.target.style.boxShadow = '0 0 0 2px rgba(0, 123, 127, 0.1)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.borderColor = '#E4E6EA';
+                              e.target.style.boxShadow = 'none';
+                            }}
+                          />
+                          <button 
+                            onClick={() => handleAddComment(post.id)} 
+                            disabled={!(commentInputs[post.id] || '').trim()}
+                            style={{ 
+                              background: (commentInputs[post.id] || '').trim() ? '#007B7F' : '#BDC3C7',
+                              color: '#ffffff', 
+                              border: 'none', 
+                              borderRadius: '20px', 
+                              padding: '10px 20px', 
+                              fontWeight: '600',
+                              fontSize: '14px',
+                              cursor: (commentInputs[post.id] || '').trim() ? 'pointer' : 'not-allowed',
+                              transition: 'background-color 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if ((commentInputs[post.id] || '').trim()) {
+                                e.target.style.background = '#006367';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if ((commentInputs[post.id] || '').trim()) {
+                                e.target.style.background = '#007B7F';
+                              }
+                            }}
+                          >
+                            Post
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Comments List */}
+                    <div style={{ padding: '16px 24px' }}>
+                      {post.comments && post.comments.length > 0 ? (
+                        post.comments.map((c, i) => (
+                          <div key={i} style={{ 
+                            marginBottom: '16px', 
+                            padding: '16px', 
+                            background: '#ffffff', 
+                            borderRadius: '12px', 
+                            border: '1px solid #E4E6EA',
+                            position: 'relative'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                              <img 
+                                src={c.photoURL || 'https://via.placeholder.com/40'} 
+                                alt={c.name} 
+                                style={{ 
+                                  width: '40px', 
+                                  height: '40px', 
+                                  borderRadius: '50%', 
+                                  objectFit: 'cover',
+                                  border: '1px solid #E4E6EA'
+                                }} 
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{ 
+                                    fontWeight: '600',
+                                    fontSize: '14px',
+                                    color: '#1C1E21'
+                                  }}>
+                                    {c.name}
+                                  </span>
+                                  <span style={{ 
+                                    color: '#65676B', 
+                                    fontSize: '12px'
+                                  }}>
+                                    {c.timestamp && (c.timestamp.seconds ? new Date(c.timestamp.seconds * 1000).toLocaleString() : new Date(c.timestamp).toLocaleString())}
+                                  </span>
+                                </div>
+                                
+                                {/* Comment Content */}
+                                {editingComment.postId === post.id && editingComment.commentIdx === i ? (
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <input 
+                                      type="text" 
+                                      value={editCommentText.text} 
+                                      onChange={e => handleEditCommentChange(e.target.value)} 
+                                      style={{ 
+                                        width: '100%', 
+                                        borderRadius: '8px', 
+                                        border: '1px solid #E4E6EA', 
+                                        padding: '8px 12px',
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                        marginBottom: '8px'
+                                      }} 
+                                    />
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                      <button 
+                                        onClick={() => handleEditCommentSave(post.id, i)} 
+                                        style={{ 
+                                          background: '#007B7F', 
+                                          color: '#ffffff', 
+                                          border: 'none', 
+                                          borderRadius: '6px', 
+                                          padding: '6px 12px', 
+                                          fontWeight: '600',
+                                          fontSize: '12px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        Save
+                                      </button>
+                                      <button 
+                                        onClick={handleEditCommentCancel} 
+                                        style={{ 
+                                          background: '#F0F2F5', 
+                                          color: '#65676B', 
+                                          border: '1px solid #E4E6EA', 
+                                          borderRadius: '6px', 
+                                          padding: '6px 12px', 
+                                          fontWeight: '600',
+                                          fontSize: '12px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p style={{ 
+                                    color: '#1C1E21', 
+                                    fontSize: '14px',
+                                    lineHeight: '1.4',
+                                    margin: '0 0 12px 0',
+                                    textAlign: 'left',
+                                    paddingLeft: '0'
+                                  }}>
+                                    {c.text}
+                                  </p>
+                                )}
+                                
+                                {/* Comment Actions */}
+                                <div style={{ display: 'flex', gap: '16px' }}>
+                                  <button 
+                                    onClick={() => handleCommentLike(post.id, i)} 
+                                    style={{ 
+                                      background: 'none', 
+                                      border: 'none', 
+                                      color: (c.likes || []).includes(user?.uid) ? '#007B7F' : '#65676B', 
+                                      fontWeight: '600',
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '14px' }}>{(c.likes || []).includes(user?.uid) ? '❤️' : '🤍'}</span>
+                                    Like {c.likes && c.likes.length > 0 ? `(${c.likes.length})` : ''}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleReply(post.id, i, false, null)} 
+                                    style={{ 
+                                      background: 'none', 
+                                      border: 'none', 
+                                      color: '#65676B', 
+                                      fontWeight: '600',
+                                      fontSize: '12px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    Reply
+                                  </button>
+                                </div>
+                                
+                                {/* Reply Input */}
+                                {replyingTo[post.id] && replyingTo[post.id].type === 'comment' && replyingTo[post.id].commentIdx === i && (
+                                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                    <input
+                                      type="text"
+                                      value={replyInputs[i] || ''}
+                                      onChange={e => handleReplyInput(i, e.target.value)}
+                                      placeholder="Write a reply..."
+                                      style={{ 
+                                        flex: 1, 
+                                        borderRadius: '20px', 
+                                        border: '1px solid #E4E6EA', 
+                                        padding: '8px 12px',
+                                        fontSize: '12px',
+                                        outline: 'none'
+                                      }}
+                                    />
+                                    <button 
+                                      onClick={() => handleAddReply(post.id, i)} 
+                                      style={{ 
+                                        background: '#007B7F', 
+                                        color: '#ffffff', 
+                                        border: 'none', 
+                                        borderRadius: '20px', 
+                                        padding: '8px 16px', 
+                                        fontWeight: '600',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      Reply
+                                    </button>
+                                  </div>
+                                )}
+                                
+                                {/* Replies */}
+                                {c.replies && c.replies.length > 0 && (
+                                  <div style={{ marginTop: '12px' }}>
+                                    {/* View Replies Button */}
+                                    <button
+                                      onClick={() => handleToggleReplies(post.id, i)}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#1877F2',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        padding: '4px 0',
+                                        marginBottom: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <span style={{ fontSize: '10px' }}>
+                                        {expandedReplies[`${post.id}_${i}`] ? '▼' : '▶'}
+                                      </span>
+                                      {expandedReplies[`${post.id}_${i}`] 
+                                        ? `Hide ${c.replies.length} ${c.replies.length === 1 ? 'reply' : 'replies'}`
+                                        : `View ${c.replies.length} ${c.replies.length === 1 ? 'reply' : 'replies'}`
+                                      }
+                                    </button>
+                                    
+                                    {/* Replies Container - Only show when expanded */}
+                                    {expandedReplies[`${post.id}_${i}`] && (
+                                      <div style={{ paddingLeft: '20px', borderLeft: '2px solid #E4E6EA' }}>
+                                        {organizeRepliesIntoThreads(c.replies).map((threadedReply) => (
+                                          <div key={threadedReply.id} style={{ 
+                                            marginBottom: '8px', 
+                                            padding: '8px 12px', 
+                                            background: '#F8F9FA', 
+                                            borderRadius: '8px'
+                                          }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <img 
+                                                  src={threadedReply.photoURL || 'https://via.placeholder.com/24'} 
+                                                  alt={threadedReply.name} 
+                                                  style={{ 
+                                                    width: '24px', 
+                                                    height: '24px', 
+                                                    borderRadius: '50%', 
+                                                    objectFit: 'cover'
+                                                  }} 
+                                                />
+                                                <span style={{ 
+                                                  fontWeight: '600',
+                                                  fontSize: '12px',
+                                                  color: '#1C1E21'
+                                                }}>
+                                                  {threadedReply.name}
+                                                </span>
+                                                <span style={{ 
+                                                  color: '#65676B', 
+                                                  fontSize: '11px'
+                                                }}>
+                                                  {threadedReply.timestamp && (threadedReply.timestamp.seconds ? new Date(threadedReply.timestamp.seconds * 1000).toLocaleString() : new Date(threadedReply.timestamp).toLocaleString())}
+                                                </span>
+                                              </div>
+                                              
+                                              {/* Reply Menu - Only show for reply owner */}
+                                              {user && threadedReply.uid === user.uid && (
+                                                <div style={{ position: 'relative' }}>
+                                                  <button 
+                                                    onClick={() => handleReplyMenuToggle(post.id, i, threadedReply.id)} 
+                                                    style={{ 
+                                                      background: 'none', 
+                                                      border: 'none', 
+                                                      fontSize: '14px', 
+                                                      cursor: 'pointer', 
+                                                      padding: '2px',
+                                                      color: '#65676B',
+                                                      borderRadius: '50%',
+                                                      width: '20px',
+                                                      height: '20px',
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'center'
+                                                    }}
+                                                  >
+                                                    &#8942;
+                                                  </button>
+                                                  {replyMenuOpen[`${post.id}_${i}_${threadedReply.id}`] && (
+                                                    <div style={{ 
+                                                      position: 'absolute', 
+                                                      top: '24px', 
+                                                      right: '0', 
+                                                      background: '#ffffff', 
+                                                      border: '1px solid #E4E6EA', 
+                                                      borderRadius: '8px', 
+                                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)', 
+                                                      minWidth: '80px',
+                                                      overflow: 'hidden',
+                                                      zIndex: 1000
+                                                    }}>
+                                                      <button
+                                                        onClick={() => handleEditReply(post.id, i, threadedReply.id, threadedReply.text)}
+                                                        style={{ 
+                                                          width: '100%', 
+                                                          padding: '8px 12px', 
+                                                          background: 'none', 
+                                                          border: 'none', 
+                                                          textAlign: 'left', 
+                                                          cursor: 'pointer', 
+                                                          fontSize: '12px',
+                                                          color: '#1C1E21'
+                                                        }}
+                                                      >
+                                                        ✏️ Edit
+                                                      </button>
+                                                      <button
+                                                        onClick={() => handleDeleteReply(post.id, i, threadedReply.id)}
+                                                        style={{ 
+                                                          width: '100%', 
+                                                          padding: '8px 12px', 
+                                                          background: 'none', 
+                                                          border: 'none', 
+                                                          textAlign: 'left', 
+                                                          cursor: 'pointer', 
+                                                          fontSize: '12px',
+                                                          color: '#E41E3F'
+                                                        }}
+                                                      >
+                                                        🗑️ Delete
+                                                      </button>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                            
+                                            {/* Reply text */}
+                                            <p style={{ 
+                                              color: '#1C1E21', 
+                                              fontSize: '12px',
+                                              margin: '0 0 8px 0',
+                                              lineHeight: '1.3',
+                                              textAlign: 'left',
+                                              paddingLeft: '0'
+                                            }}>
+                                              {threadedReply.text}
+                                            </p>
+                                            
+                                            {/* Reply actions */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                                              <button 
+                                                onClick={() => handleReplyLike(post.id, i, threadedReply.id)}
+                                                style={{ 
+                                                  background: 'none', 
+                                                  border: 'none', 
+                                                  color: threadedReply.likes && threadedReply.likes.includes(user?.uid) ? '#1877F2' : '#65676B', 
+                                                  cursor: 'pointer', 
+                                                  fontSize: '11px',
+                                                  fontWeight: '600',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: '4px',
+                                                  padding: '2px 4px',
+                                                  borderRadius: '4px',
+                                                  transition: 'background-color 0.2s ease'
+                                                }}
+                                                onMouseEnter={e => e.target.style.backgroundColor = 'rgba(0,0,0,0.05)'}
+                                                onMouseLeave={e => e.target.style.backgroundColor = 'transparent'}
+                                              >
+                                                {threadedReply.likes && threadedReply.likes.includes(user?.uid) ? '❤️' : '🤍'} Like
+                                                {threadedReply.likes && threadedReply.likes.length > 0 && (
+                                                  <span style={{ fontSize: '10px', marginLeft: '2px' }}>
+                                                    ({threadedReply.likes.length})
+                                                  </span>
+                                                )}
+                                              </button>
+                                              
+                                              <button 
+                                                onClick={() => handleReply(post.id, i, true, threadedReply.id)}
+                                                style={{ 
+                                                  background: 'none', 
+                                                  border: 'none', 
+                                                  color: '#65676B', 
+                                                  cursor: 'pointer', 
+                                                  fontSize: '11px',
+                                                  fontWeight: '600',
+                                                  padding: '2px 4px',
+                                                  borderRadius: '4px',
+                                                  transition: 'background-color 0.2s ease'
+                                                }}
+                                                onMouseEnter={e => e.target.style.backgroundColor = 'rgba(0,0,0,0.05)'}
+                                                onMouseLeave={e => e.target.style.backgroundColor = 'transparent'}
+                                              >
+                                                💬 Reply
+                                              </button>
+                                            </div>
+                                            
+                                            {/* Threaded reply input */}
+                                            {replyingTo[post.id] && replyingTo[post.id].type === 'reply' && replyingTo[post.id].replyId === threadedReply.id && (
+                                              <div style={{ marginTop: '8px' }}>
+                                                <textarea 
+                                                  value={threadedReplyInputs[threadedReply.id] || ''}
+                                                  onChange={(e) => handleThreadedReplyInput(threadedReply.id, e.target.value)}
+                                                  placeholder={`Reply to ${threadedReply.name}...`}
+                                                  style={{ 
+                                                    width: '100%', 
+                                                    minHeight: '60px',
+                                                    padding: '8px', 
+                                                    fontSize: '12px',
+                                                    border: '1px solid #E4E6EA', 
+                                                    borderRadius: '6px', 
+                                                    resize: 'vertical',
+                                                    fontFamily: 'inherit'
+                                                  }}
+                                                />
+                                                <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
+                                                  <button 
+                                                    onClick={() => handleAddReply(post.id, i)}
+                                                    style={{ 
+                                                      background: '#1877F2', 
+                                                      color: 'white', 
+                                                      border: 'none', 
+                                                      padding: '4px 12px', 
+                                                      borderRadius: '4px', 
+                                                      fontSize: '11px',
+                                                      cursor: 'pointer'
+                                                    }}
+                                                  >
+                                                    Reply
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => setReplyingTo(prev => ({ ...prev, [post.id]: null }))}
+                                                    style={{ 
+                                                      background: '#E4E6EA', 
+                                                      color: '#65676B', 
+                                                      border: 'none', 
+                                                      padding: '4px 12px', 
+                                                      borderRadius: '4px', 
+                                                      fontSize: '11px',
+                                                      cursor: 'pointer'
+                                                    }}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                            
+                                            {/* Render child replies recursively */}
+                                            {threadedReply.children && threadedReply.children.length > 0 && (
+                                              <div style={{ paddingLeft: '12px', borderLeft: '1px solid #E4E6EA', marginTop: '8px' }}>
+                                                {threadedReply.children.map(childReply => (
+                                                  <div key={childReply.id} style={{ 
+                                                    marginBottom: '6px', 
+                                                    padding: '6px 10px', 
+                                                    background: '#FFFFFF', 
+                                                    borderRadius: '6px',
+                                                    border: '1px solid #E4E6EA'
+                                                  }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                                      <img 
+                                                        src={childReply.photoURL || 'https://via.placeholder.com/20'} 
+                                                        alt={childReply.name} 
+                                                        style={{ 
+                                                          width: '20px', 
+                                                          height: '20px', 
+                                                          borderRadius: '50%', 
+                                                          objectFit: 'cover'
+                                                        }} 
+                                                      />
+                                                      <span style={{ 
+                                                        fontWeight: '600',
+                                                        fontSize: '11px',
+                                                        color: '#1C1E21'
+                                                      }}>
+                                                        {childReply.name}
+                                                      </span>
+                                                      <span style={{ 
+                                                        color: '#65676B', 
+                                                        fontSize: '10px'
+                                                      }}>
+                                                        {childReply.timestamp && (childReply.timestamp.seconds ? new Date(childReply.timestamp.seconds * 1000).toLocaleString() : new Date(childReply.timestamp).toLocaleString())}
+                                                      </span>
+                                                    </div>
+                                                    <p style={{ 
+                                                      color: '#1C1E21', 
+                                                      fontSize: '11px',
+                                                      margin: '0 0 6px 0',
+                                                      lineHeight: '1.3'
+                                                    }}>
+                                                      {childReply.text}
+                                                    </p>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                      <button 
+                                                        onClick={() => handleReplyLike(post.id, i, childReply.id)}
+                                                        style={{ 
+                                                          background: 'none', 
+                                                          border: 'none', 
+                                                          color: childReply.likes && childReply.likes.includes(user?.uid) ? '#1877F2' : '#65676B', 
+                                                          cursor: 'pointer', 
+                                                          fontSize: '10px',
+                                                          fontWeight: '600'
+                                                        }}
+                                                      >
+                                                        {childReply.likes && childReply.likes.includes(user?.uid) ? '❤️' : '🤍'} Like
+                                                        {childReply.likes && childReply.likes.length > 0 && ` (${childReply.likes.length})`}
+                                                      </button>
+                                                      <button 
+                                                        onClick={() => handleReply(post.id, i, true, childReply.id)}
+                                                        style={{ 
+                                                          background: 'none', 
+                                                          border: 'none', 
+                                                          color: '#65676B', 
+                                                          cursor: 'pointer', 
+                                                          fontSize: '10px',
+                                                          fontWeight: '600'
+                                                        }}
+                                                      >
+                                                        💬 Reply
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                        
+                                        {/* Show traditional replies if no threading structure exists */}
+                                        {c.replies.filter(r => !r.id).map((r, ri) => (
+                                      <div key={ri} style={{ 
+                                        marginBottom: '8px', 
+                                        padding: '8px 12px', 
+                                        background: '#F8F9FA', 
+                                        borderRadius: '8px'
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <img 
+                                              src={r.photoURL || 'https://via.placeholder.com/24'} 
+                                              alt={r.name} 
+                                              style={{ 
+                                                width: '24px', 
+                                                height: '24px', 
+                                                borderRadius: '50%', 
+                                                objectFit: 'cover'
+                                              }} 
+                                            />
+                                            <span style={{ 
+                                              fontWeight: '600',
+                                              fontSize: '12px',
+                                              color: '#1C1E21'
+                                            }}>
+                                              {r.name}
+                                            </span>
+                                            <span style={{ 
+                                              color: '#65676B', 
+                                              fontSize: '11px'
+                                            }}>
+                                              {r.timestamp && (r.timestamp.seconds ? new Date(r.timestamp.seconds * 1000).toLocaleString() : new Date(r.timestamp).toLocaleString())}
+                                            </span>
+                                          </div>
+                                          
+                                          {/* Reply Menu - Only show for reply owner */}
+                                          {user && r.uid === user.uid && (
+                                            <div style={{ position: 'relative' }}>
+                                              <button 
+                                                onClick={() => handleReplyMenuToggle(post.id, i, ri)} 
+                                                style={{ 
+                                                  background: 'none', 
+                                                  border: 'none', 
+                                                  fontSize: '14px', 
+                                                  cursor: 'pointer', 
+                                                  padding: '2px',
+                                                  color: '#65676B',
+                                                  borderRadius: '50%',
+                                                  width: '20px',
+                                                  height: '20px',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center'
+                                                }}
+                                              >
+                                                &#8942;
+                                              </button>
+                                              {replyMenuOpen[`${post.id}_${i}_${ri}`] && (
+                                                <div style={{ 
+                                                  position: 'absolute', 
+                                                  top: '24px', 
+                                                  right: '0', 
+                                                  background: '#ffffff', 
+                                                  border: '1px solid #E4E6EA', 
+                                                  borderRadius: '8px', 
+                                                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)', 
+                                                  minWidth: '80px',
+                                                  overflow: 'hidden',
+                                                  zIndex: 1000
+                                                }}>
+                                                  <button
+                                                    onClick={() => handleEditReply(post.id, i, ri, r.text)}
+                                                    style={{ 
+                                                      width: '100%', 
+                                                      padding: '8px 12px', 
+                                                      background: 'none', 
+                                                      border: 'none', 
+                                                      textAlign: 'left', 
+                                                      cursor: 'pointer', 
+                                                      fontSize: '12px',
+                                                      color: '#1C1E21'
+                                                    }}
+                                                  >
+                                                    ✏️ Edit
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleDeleteReply(post.id, i, ri)}
+                                                    style={{ 
+                                                      width: '100%', 
+                                                      padding: '8px 12px', 
+                                                      background: 'none', 
+                                                      border: 'none', 
+                                                      textAlign: 'left', 
+                                                      cursor: 'pointer', 
+                                                      fontSize: '12px',
+                                                      color: '#E41E3F'
+                                                    }}
+                                                  >
+                                                    🗑️ Delete
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {/* Reply text or edit input */}
+                                        {editingReply.postId === post.id && editingReply.commentIdx === i && editingReply.replyIdx === ri ? (
+                                          <div style={{ margin: '0 0 8px 0' }}>
+                                            <textarea 
+                                              value={editReplyText.text || ''}
+                                              onChange={(e) => handleEditReplyChange(e.target.value)}
+                                              style={{ 
+                                                width: '100%', 
+                                                minHeight: '60px',
+                                                padding: '8px', 
+                                                fontSize: '12px',
+                                                border: '1px solid #E4E6EA', 
+                                                borderRadius: '6px', 
+                                                resize: 'vertical',
+                                                fontFamily: 'inherit'
+                                              }}
+                                            />
+                                            <div style={{ marginTop: '6px', display: 'flex', gap: '8px' }}>
+                                              <button 
+                                                onClick={() => handleEditReplySave(post.id, i, ri)}
+                                                style={{ 
+                                                  background: '#1877F2', 
+                                                  color: 'white', 
+                                                  border: 'none', 
+                                                  padding: '4px 12px', 
+                                                  borderRadius: '4px', 
+                                                  fontSize: '11px',
+                                                  cursor: 'pointer'
+                                                }}
+                                              >
+                                                Save
+                                              </button>
+                                              <button 
+                                                onClick={handleEditReplyCancel}
+                                                style={{ 
+                                                  background: '#E4E6EA', 
+                                                  color: '#65676B', 
+                                                  border: 'none', 
+                                                  padding: '4px 12px', 
+                                                  borderRadius: '4px', 
+                                                  fontSize: '11px',
+                                                  cursor: 'pointer'
+                                                }}
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <p style={{ 
+                                            color: '#1C1E21', 
+                                            fontSize: '12px',
+                                            margin: '0 0 8px 0',
+                                            lineHeight: '1.3',
+                                            textAlign: 'left',
+                                            paddingLeft: '0'
+                                          }}>
+                                            {r.text}
+                                          </p>
+                                        )}
+                                        
+                                        {/* Reply actions */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                                          <button 
+                                            onClick={() => handleReplyLike(post.id, i, ri)}
+                                            style={{ 
+                                              background: 'none', 
+                                              border: 'none', 
+                                              color: r.likes && r.likes.includes(user?.uid) ? '#1877F2' : '#65676B', 
+                                              cursor: 'pointer', 
+                                              fontSize: '11px',
+                                              fontWeight: '600',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '2px 4px',
+                                              borderRadius: '4px',
+                                              transition: 'background-color 0.2s ease'
+                                            }}
+                                            onMouseEnter={e => e.target.style.backgroundColor = 'rgba(0,0,0,0.05)'}
+                                            onMouseLeave={e => e.target.style.backgroundColor = 'transparent'}
+                                          >
+                                            {r.likes && r.likes.includes(user?.uid) ? '❤️' : '🤍'} Like
+                                            {r.likes && r.likes.length > 0 && (
+                                              <span style={{ fontSize: '10px', marginLeft: '2px' }}>
+                                                ({r.likes.length})
+                                              </span>
+                                            )}
+                                          </button>
+                                          
+                                          <button 
+                                            onClick={() => {
+                                              // Set up reply to reply functionality if needed
+                                              // For now, we'll use the same reply mechanism
+                                              handleReply(post.id, i);
+                                            }}
+                                            style={{ 
+                                              background: 'none', 
+                                              border: 'none', 
+                                              color: '#65676B', 
+                                              cursor: 'pointer', 
+                                              fontSize: '11px',
+                                              fontWeight: '600',
+                                              padding: '2px 4px',
+                                              borderRadius: '4px',
+                                              transition: 'background-color 0.2s ease'
+                                            }}
+                                            onMouseEnter={e => e.target.style.backgroundColor = 'rgba(0,0,0,0.05)'}
+                                            onMouseLeave={e => e.target.style.backgroundColor = 'transparent'}
+                                          >
+                                            💬 Reply
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          {/* Edit mode for comment */}
-                          {editingComment.postId === post.id && editingComment.commentIdx === i ? (
-                            <div style={{ marginTop: 6 }}>
-                              <input type="text" value={editCommentText.text} onChange={e => handleEditCommentChange(e.target.value)} style={{ width: '100%', borderRadius: 6, border: '1px solid #ccc', padding: 6 }} />
-                              <button onClick={() => handleEditCommentSave(post.id, i)} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.3rem 0.8rem', fontWeight: 600, marginRight: 6, cursor: 'pointer' }}>Save</button>
-                              <button onClick={handleEditCommentCancel} style={{ background: '#eee', color: '#444', border: 'none', borderRadius: 6, padding: '0.3rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div style={{ color: '#444', marginTop: 4 }}>{c.text}</div>
-                          )}
-                          {/* Like and Reply actions */}
-                          <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                            <button onClick={() => handleCommentLike(post.id, i)} style={{ background: 'none', border: 'none', color: (c.likes || []).includes(user?.uid) ? '#007B7F' : '#888', fontWeight: 600, cursor: 'pointer' }}>
-                              Like{c.likes && c.likes.length > 0 ? ` (${c.likes.length})` : ''}
-                            </button>
-                            <button onClick={() => handleReply(post.id, i)} style={{ background: 'none', border: 'none', color: '#888', fontWeight: 600, cursor: 'pointer' }}>Reply</button>
-                          </div>
-                          {/* Reply input */}
-                          {replyingTo[post.id] === i && (
-                            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                              <input
-                                type="text"
-                                value={replyInputs[i] || ''}
-                                onChange={e => handleReplyInput(i, e.target.value)}
-                                placeholder="Write a reply..."
-                                style={{ flex: 1, borderRadius: 6, border: '1px solid #ccc', padding: 6 }}
-                              />
-                              <button onClick={() => handleAddReply(post.id, i)} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.3rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}>Post</button>
-                            </div>
-                          )}
-                          {/* Render replies */}
-                          {c.replies && c.replies.length > 0 && (
-                            <div style={{ marginLeft: 32, marginTop: 8 }}>
-                              {c.replies.map((r, ri) => (
-                                <div key={ri} style={{ marginBottom: 6, padding: 6, background: '#f6f6fa', borderRadius: 6, boxShadow: '0 1px 2px #eee', textAlign: 'left', position: 'relative' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <img src={r.photoURL || 'https://via.placeholder.com/32'} alt={r.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                                    <span style={{ fontWeight: 500 }}>{r.name}</span>
-                                    <span style={{ color: '#888', fontSize: '0.8em' }}>
-                                      {r.timestamp && (r.timestamp.seconds ? new Date(r.timestamp.seconds * 1000).toLocaleString() : new Date(r.timestamp).toLocaleString())}
-                                    </span>
-                                  </div>
-                                  <div style={{ color: '#444', marginTop: 2 }}>{r.text}</div>
+                              
+                              {/* Comment Menu */}
+                              {user && c.uid === user.uid && (
+                                <div style={{ position: 'relative' }}>
+                                  <button 
+                                    onClick={() => handleCommentMenuToggle(post.id, i)} 
+                                    style={{ 
+                                      background: 'none', 
+                                      border: 'none', 
+                                      fontSize: '16px', 
+                                      cursor: 'pointer', 
+                                      padding: '4px',
+                                      color: '#65676B',
+                                      borderRadius: '50%',
+                                      width: '24px',
+                                      height: '24px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                  >
+                                    &#8942;
+                                  </button>
+                                  {commentMenuOpen[`${post.id}_${i}`] && (
+                                    <div style={{ 
+                                      position: 'absolute', 
+                                      top: '28px', 
+                                      right: '0', 
+                                      background: '#ffffff', 
+                                      border: '1px solid #E4E6EA', 
+                                      borderRadius: '8px', 
+                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)', 
+                                      minWidth: '100px',
+                                      overflow: 'hidden',
+                                      zIndex: 100
+                                    }}>
+                                      <button 
+                                        onClick={() => handleEditComment(post.id, i, c.text)} 
+                                        style={{ 
+                                          display: 'block', 
+                                          width: '100%', 
+                                          background: 'none', 
+                                          border: 'none', 
+                                          padding: '8px 12px', 
+                                          textAlign: 'left', 
+                                          cursor: 'pointer',
+                                          fontSize: '12px',
+                                          fontWeight: '500',
+                                          color: '#1C1E21'
+                                        }}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteComment(post.id, i)} 
+                                        style={{ 
+                                          display: 'block', 
+                                          width: '100%', 
+                                          background: 'none', 
+                                          border: 'none', 
+                                          padding: '8px 12px', 
+                                          textAlign: 'left', 
+                                          color: '#E41E3F', 
+                                          cursor: 'pointer',
+                                          fontSize: '12px',
+                                          fontWeight: '500'
+                                        }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          )}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ 
+                          textAlign: 'center',
+                          padding: '40px 20px',
+                          color: '#65676B',
+                          fontSize: '14px'
+                        }}>
+                          <div style={{ fontSize: '32px', marginBottom: '12px' }}>💬</div>
+                          <p style={{ margin: 0 }}>No comments yet. Be the first to comment!</p>
                         </div>
-                      ))
-                    ) : (
-                      <div style={{ color: '#888', marginBottom: 8 }}>No comments yet.</div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <input
-                        type="text"
-                        value={commentInputs[post.id] || ''}
-                        onChange={e => handleCommentInput(post.id, e.target.value)}
-                        placeholder="Write a comment..."
-                        style={{ flex: 1, borderRadius: 6, border: '1px solid #ccc', padding: 8 }}
-                      />
-                      <button onClick={() => handleAddComment(post.id)} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Post</button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -678,7 +2687,7 @@ function FeedPage() {
           })
         )}
       </div>
-      {/* Media popup modal */}
+      {/* Media Popup Modal */}
       {mediaPopup.open && (
         <div style={{
           position: 'fixed',
@@ -686,19 +2695,292 @@ function FeedPage() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(0,0,0,0.7)',
+          background: 'rgba(0, 0, 0, 0.85)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 10000
+          zIndex: 10000,
+          backdropFilter: 'blur(4px)'
         }} onClick={handleClosePopup}>
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
-            <button onClick={handleClosePopup} style={{ position: 'absolute', top: 8, right: 8, background: '#fff', border: 'none', borderRadius: '50%', width: 32, height: 32, fontSize: 20, cursor: 'pointer', zIndex: 2 }}>×</button>
+          <div style={{ 
+            position: 'relative', 
+            maxWidth: '95vw', 
+            maxHeight: '95vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={handleClosePopup} 
+              style={{ 
+                position: 'absolute', 
+                top: '-40px', 
+                right: '0px', 
+                background: 'rgba(255, 255, 255, 0.9)', 
+                border: 'none', 
+                borderRadius: '50%', 
+                width: '36px', 
+                height: '36px', 
+                fontSize: '20px', 
+                cursor: 'pointer', 
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#1C1E21',
+                fontWeight: 'bold',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#ffffff';
+                e.target.style.transform = 'scale(1.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'rgba(255, 255, 255, 0.9)';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              ×
+            </button>
             {mediaPopup.type === 'image' ? (
-              <img src={mediaPopup.url} alt="popup" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 2px 16px #0008' }} />
+              <img 
+                src={mediaPopup.url} 
+                alt="Full size view" 
+                style={{ 
+                  maxWidth: '95vw', 
+                  maxHeight: '95vh', 
+                  borderRadius: '12px', 
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                  objectFit: 'contain'
+                }} 
+              />
             ) : (
-              <video src={mediaPopup.url} controls autoPlay style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 2px 16px #0008' }} />
+              <video 
+                src={mediaPopup.url} 
+                controls 
+                autoPlay 
+                style={{ 
+                  maxWidth: '95vw', 
+                  maxHeight: '95vh', 
+                  borderRadius: '12px', 
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+                }} 
+              />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: 16,
+            padding: '2rem',
+            maxWidth: 500,
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{ margin: 0, color: '#E41E3F', fontSize: '18px', fontWeight: '600' }}>
+                Report Post
+              </h3>
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportDetails('');
+                  setReportingPostId(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#65676B',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#F0F2F5'}
+                onMouseLeave={(e) => e.target.style.background = 'none'}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#1C1E21',
+                fontSize: '14px'
+              }}>
+                Reason for reporting *
+              </label>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #E4E6EA',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  background: '#ffffff',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Select a reason</option>
+                <option value="inappropriate_content">Inappropriate or offensive content</option>
+                <option value="spam">Spam or unwanted promotional content</option>
+                <option value="misleading_info">False or misleading information</option>
+                <option value="harassment">Harassment or bullying</option>
+                <option value="hate_speech">Hate speech or discrimination</option>
+                <option value="violence">Violence or dangerous content</option>
+                <option value="copyright">Copyright infringement</option>
+                <option value="scam">Scam or fraudulent activity</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#1C1E21',
+                fontSize: '14px'
+              }}>
+                Additional details (optional)
+              </label>
+              <textarea
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Please provide any additional information that might help us understand the issue..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #E4E6EA',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  minHeight: 100,
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            <div style={{
+              background: '#FFF8DC',
+              border: '1px solid #FFD700',
+              borderRadius: 8,
+              padding: '16px',
+              marginBottom: '1.5rem',
+              fontSize: '14px'
+            }}>
+              <div style={{ 
+                fontWeight: '600', 
+                color: '#B8860B', 
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                ⚠️ Important Notice
+              </div>
+              <div style={{ color: '#8B7355', lineHeight: '1.4' }}>
+                Please only submit genuine reports. False reports may result in restrictions on your account. 
+                All reports are reviewed by our moderation team within 24-48 hours.
+              </div>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px', 
+              justifyContent: 'flex-end' 
+            }}>
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportDetails('');
+                  setReportingPostId(null);
+                }}
+                style={{
+                  background: '#F0F2F5',
+                  color: '#65676B',
+                  border: '1px solid #E4E6EA',
+                  borderRadius: 8,
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#E4E6EA';
+                  e.target.style.color = '#1C1E21';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#F0F2F5';
+                  e.target.style.color = '#65676B';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReport}
+                disabled={reportSubmitting || !reportReason.trim()}
+                style={{
+                  background: (!reportReason.trim() || reportSubmitting) ? '#BDC3C7' : '#E41E3F',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: (!reportReason.trim() || reportSubmitting) ? 'not-allowed' : 'pointer',
+                  opacity: reportSubmitting ? 0.7 : 1,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (reportReason.trim() && !reportSubmitting) {
+                    e.target.style.background = '#C53030';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (reportReason.trim() && !reportSubmitting) {
+                    e.target.style.background = '#E41E3F';
+                  }
+                }}
+              >
+                {reportSubmitting ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
           </div>
         </div>
       )}

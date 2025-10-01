@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { app, db } from '../firebase';
 import { Link, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, collectionGroup, or } from 'firebase/firestore';
 import { useCart } from '../CartContext';
 import { useMessage } from '../MessageContext';
 
@@ -15,6 +15,9 @@ function Navbar() {
   const [adminCode, setAdminCode] = useState('');
   const [showAdminCodeModal, setShowAdminCodeModal] = useState(false);
   const [adminCodeError, setAdminCodeError] = useState('');
+  const [feedNotificationCount, setFeedNotificationCount] = useState(0);
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
   const { unreadMessageCount } = useMessage();
@@ -44,8 +47,10 @@ function Navbar() {
         const storeDoc = await getDoc(doc(db, 'stores', u.uid));
         if (storeDoc.exists()) {
           setUserType('seller');
+          console.log('👤 User type set to: seller');
         } else {
           setUserType('buyer');
+          console.log('👤 User type set to: buyer');
         }
         // Onboarding guard - only redirect if email is verified
         if (u.emailVerified) {
@@ -59,10 +64,476 @@ function Navbar() {
       } else {
         setUserType('');
         setOnboardingStep('');
+        // Clear notifications when user logs out
+        setFeedNotificationCount(0);
+        setNotifications([]);
+        console.log('👤 User logged out, notifications cleared');
       }
     });
     return () => unsubscribe();
   }, [navigate]);
+
+  // Track feed notifications for buyers
+  useEffect(() => {
+    if (!user || userType !== 'buyer') {
+      setFeedNotificationCount(0);
+      setNotifications([]);
+      return;
+    }
+
+    console.log('🛒 Setting up buyer notifications for:', user.email);
+
+    // Query all stores the user follows using collectionGroup (same as FeedPage.js)
+    const followedStoresQuery = query(
+      collectionGroup(db, 'followers'), 
+      where('uid', '==', user.uid)
+    );
+
+    const unsubscribeFollows = onSnapshot(followedStoresQuery, async (followSnapshot) => {
+      const followedStoreIds = followSnapshot.docs.map(doc => doc.ref.parent.parent.id);
+      
+      // Listen for posts from followed stores AND buyer's own posts
+      const postsQuery = query(
+        collection(db, 'posts'),
+        or(
+          followedStoreIds.length > 0 
+            ? where('storeId', 'in', followedStoreIds.slice(0, 9)) // Leave room for buyer's posts
+            : where('storeId', '==', 'nonexistent'), // Placeholder if no follows
+          where('userId', '==', user.uid) // Buyer's own posts
+        )
+      );
+
+      const unsubscribePosts = onSnapshot(postsQuery, (postsSnapshot) => {
+        let newInteractions = 0;
+        const notificationsList = [];
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        postsSnapshot.docs.forEach(doc => {
+          const post = doc.data();
+          const postId = doc.id;
+          const postTimestamp = post.timestamp?.toDate();
+          const storeProfile = post.storeName || 'Unknown Store';
+          
+          // Add new posts from followed stores
+          if (postTimestamp && postTimestamp >= oneDayAgo) {
+            newInteractions++;
+            notificationsList.push({
+              id: `post_${postId}`,
+              type: 'new_post',
+              title: `New post from ${storeProfile}`,
+              content: post.text?.substring(0, 80) + (post.text?.length > 80 ? '...' : '') || 'New media post',
+              timestamp: postTimestamp,
+              postId: postId,
+              storeId: post.storeId,
+              storeName: storeProfile,
+              avatar: post.storeAvatar || null,
+              isRead: false
+            });
+          }
+          
+          // Track interactions on buyer's own posts
+          if (post.userId === user.uid) {
+            // Check for likes on buyer's posts
+            if (post.likes && post.likes.length > 0) {
+              const likesTimestamp = post.lastLikeTimestamp?.toDate() || postTimestamp;
+              // Count as new if within 24 hours
+              if (likesTimestamp && likesTimestamp >= oneDayAgo) {
+                newInteractions++;
+              }
+              // Show all likes regardless of age
+              notificationsList.push({
+                id: `buyer_post_likes_${postId}`,
+                type: 'post_likes',
+                title: `❤️ ${post.likes.length} ${post.likes.length === 1 ? 'person liked' : 'people liked'} your post`,
+                content: post.text ? post.text.substring(0, 100) + (post.text.length > 100 ? '...' : '') : 'Your post',
+                timestamp: likesTimestamp,
+                postId: postId,
+                storeId: post.storeId,
+                avatar: null,
+                isRead: false,
+                isNew: likesTimestamp && likesTimestamp >= oneDayAgo
+              });
+            }
+          }
+          
+          // Add comments on posts user interacted with (show all, count new ones)
+          if (post.comments) {
+            post.comments.forEach((comment, commentIndex) => {
+              const commentTime = comment.timestamp?.toDate() || new Date(comment.timestamp);
+              
+              // Skip if this is the user's own comment
+              if (comment.uid === user.uid) return;
+              
+              // Check if this is user's own comment to track likes on it
+              if (comment.uid === user.uid) {
+                // Track likes on user's comments
+                if (comment.likes && comment.likes.length > 0) {
+                  const commentLikesTimestamp = comment.lastLikeTimestamp?.toDate() || commentTime;
+                  // Count as new if within 24 hours
+                  if (commentLikesTimestamp && commentLikesTimestamp >= oneDayAgo) {
+                    newInteractions++;
+                  }
+                  // Show all comment likes regardless of age
+                  notificationsList.push({
+                    id: `buyer_comment_likes_${postId}_${commentIndex}`,
+                    type: 'comment_likes',
+                    title: `❤️ ${comment.likes.length} ${comment.likes.length === 1 ? 'person liked' : 'people liked'} your comment`,
+                    content: `Your comment: "${comment.text?.substring(0, 80) + (comment.text?.length > 80 ? '...' : '')}"`,
+                    timestamp: commentLikesTimestamp,
+                    postId: postId,
+                    storeId: post.storeId,
+                    storeName: storeProfile,
+                    avatar: null,
+                    isRead: false,
+                    isNew: commentLikesTimestamp && commentLikesTimestamp >= oneDayAgo
+                  });
+                }
+                return; // Skip other checks for user's own comment
+              }
+              
+              // Check if this is a reply to user's comment or mentions user
+              const isReplyToUser = comment.text?.includes(`@${user.displayName}`) || 
+                                  comment.text?.includes(`@${user.email?.split('@')[0]}`);
+              
+              // Check if user has commented on this post before
+              const userHasCommented = post.comments.some(c => c.uid === user.uid);
+              
+              if (isReplyToUser || userHasCommented) {
+                // Count as new if within 24 hours
+                if (commentTime && commentTime >= oneDayAgo) {
+                  newInteractions++;
+                }
+                // But show all relevant comments regardless of age
+                notificationsList.push({
+                  id: `comment_${postId}_${commentIndex}`,
+                  type: isReplyToUser ? 'mention' : 'comment_on_post',
+                  title: isReplyToUser 
+                    ? `${comment.name} mentioned you` 
+                    : `${comment.name} commented on a post you engaged with`,
+                  content: comment.text?.substring(0, 80) + (comment.text?.length > 80 ? '...' : ''),
+                  timestamp: commentTime,
+                  postId: postId,
+                  storeId: post.storeId,
+                  storeName: storeProfile,
+                  avatar: comment.photoURL || null,
+                  commenterName: comment.name,
+                  isRead: false,
+                  isNew: commentTime && commentTime >= oneDayAgo
+                });
+              }
+              
+              // Check for replies to user's comments (including threaded replies)
+              if (comment.replies) {
+                comment.replies.forEach((reply, replyIndex) => {
+                  const replyTime = reply.timestamp?.toDate() || new Date(reply.timestamp);
+                  
+                  // Check if this is user's own reply to track likes on it
+                  if (reply.uid === user.uid) {
+                    // Track likes on user's replies
+                    if (reply.likes && reply.likes.length > 0 && reply.likes.some(likeUid => likeUid !== user.uid)) {
+                      const replyLikesTimestamp = reply.lastLikeTimestamp?.toDate() || replyTime;
+                      // Count as new if within 24 hours
+                      if (replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo) {
+                        newInteractions++;
+                      }
+                      // Show likes on user's own replies
+                      notificationsList.push({
+                        id: `buyer_reply_likes_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                        type: 'reply_likes',
+                        title: `❤️ ${reply.likes.length} ${reply.likes.length === 1 ? 'person liked' : 'people liked'} your reply`,
+                        content: `Your reply: "${reply.text?.substring(0, 80) + (reply.text?.length > 80 ? '...' : '')}"`,
+                        timestamp: replyLikesTimestamp,
+                        postId: postId,
+                        storeId: post.storeId,
+                        storeName: storeProfile,
+                        avatar: null,
+                        isRead: false,
+                        isNew: replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo
+                      });
+                    }
+                    return; // Skip other checks for user's own reply
+                  }
+                  
+                  // Check if this is a direct reply to the user's comment
+                  if (comment.uid === user.uid && reply.uid !== user.uid && !reply.parentId) {
+                    // Count as new if within 24 hours
+                    if (replyTime && replyTime >= oneDayAgo) {
+                      newInteractions++;
+                    }
+                    // But show all replies regardless of age
+                    notificationsList.push({
+                      id: `reply_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                      type: 'reply',
+                      title: `${reply.name} replied to your comment`,
+                      content: reply.text?.substring(0, 80) + (reply.text?.length > 80 ? '...' : ''),
+                      timestamp: replyTime,
+                      postId: postId,
+                      storeId: post.storeId,
+                      storeName: storeProfile,
+                      avatar: reply.photoURL || null,
+                      commenterName: reply.name,
+                      isRead: false,
+                      isNew: replyTime && replyTime >= oneDayAgo
+                    });
+                  }
+                  
+                  // Check if this is a threaded reply to user's reply
+                  if (reply.parentId && reply.uid !== user.uid) {
+                    // Find the parent reply to see if it belongs to the user
+                    const parentReply = comment.replies.find(r => r.id === reply.parentId);
+                    if (parentReply && parentReply.uid === user.uid) {
+                      // Count as new if within 24 hours
+                      if (replyTime && replyTime >= oneDayAgo) {
+                        newInteractions++;
+                      }
+                      // Show threaded reply notification
+                      notificationsList.push({
+                        id: `threaded_reply_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                        type: 'threaded_reply',
+                        title: `${reply.name} replied to your reply`,
+                        content: reply.text?.substring(0, 80) + (reply.text?.length > 80 ? '...' : ''),
+                        timestamp: replyTime,
+                        postId: postId,
+                        storeId: post.storeId,
+                        storeName: storeProfile,
+                        avatar: reply.photoURL || null,
+                        commenterName: reply.name,
+                        isRead: false,
+                        isNew: replyTime && replyTime >= oneDayAgo
+                      });
+                    }
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        // Sort notifications by timestamp (newest first)
+        notificationsList.sort((a, b) => b.timestamp - a.timestamp);
+        
+        console.log(`🛒 Buyer notifications: ${newInteractions} new, ${notificationsList.length} total`);
+        setFeedNotificationCount(newInteractions);
+        setNotifications(notificationsList);
+      });
+
+      return () => unsubscribePosts();
+    });
+
+    return () => unsubscribeFollows();
+  }, [user, userType]);
+
+  // Track feed notifications for sellers
+  useEffect(() => {
+    if (!user || userType !== 'seller') {
+      setFeedNotificationCount(0);
+      setNotifications([]);
+      return;
+    }
+
+    console.log('🏪 Setting up seller notifications for:', user.email);
+
+    // Listen for interactions on seller's posts
+    const postsQuery = query(
+      collection(db, 'posts'),
+      where('userId', '==', user.uid) // Posts by this seller
+    );
+
+    const unsubscribePosts = onSnapshot(postsQuery, (postsSnapshot) => {
+      let newInteractions = 0;
+      const notificationsList = [];
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // Still use for counting "new" interactions
+
+      postsSnapshot.docs.forEach(postDoc => {
+        const post = postDoc.data();
+        const postId = postDoc.id;
+
+        // Check for likes (show all likes, count new ones)
+        if (post.likes && post.likes.length > 0) {
+          const likesTimestamp = post.lastLikeTimestamp?.toDate() || post.timestamp?.toDate();
+          // Count as new if within 24 hours
+          if (likesTimestamp && likesTimestamp >= oneDayAgo) {
+            newInteractions++;
+          }
+          // But show all likes regardless of age
+          notificationsList.push({
+            id: `likes_${postId}`,
+            type: 'likes',
+            title: `❤️ ${post.likes.length} ${post.likes.length === 1 ? 'person liked' : 'people liked'} your post`,
+            content: post.text ? post.text.substring(0, 100) + (post.text.length > 100 ? '...' : '') : 'Your post',
+            timestamp: likesTimestamp,
+            postId: postId,
+            storeId: post.storeId,
+            avatar: null,
+            isNew: likesTimestamp && likesTimestamp >= oneDayAgo
+          });
+        }
+
+        // Check for comments (show all comments, count new ones)
+        if (post.comments && post.comments.length > 0) {
+          post.comments.forEach((comment, commentIndex) => {
+            // Skip if this is the seller's own comment
+            if (comment.uid === user.uid) return;
+
+            const commentTime = comment.timestamp?.toDate() || new Date(comment.timestamp);
+            // Count as new if within 24 hours
+            if (commentTime && commentTime >= oneDayAgo) {
+              newInteractions++;
+            }
+            // But show all comments regardless of age
+            notificationsList.push({
+              id: `comment_${postId}_${commentIndex}`,
+              type: 'comment',
+              title: `💬 ${comment.name} commented on your post`,
+              content: comment.text?.substring(0, 100) + (comment.text?.length > 100 ? '...' : ''),
+              timestamp: commentTime,
+              postId: postId,
+              storeId: post.storeId,
+              avatar: comment.photoURL || null,
+              isNew: commentTime && commentTime >= oneDayAgo
+            });
+
+            // Check for likes on comments
+            if (comment.likes && comment.likes.length > 0) {
+              const commentLikesTimestamp = comment.lastLikeTimestamp?.toDate() || commentTime;
+              // Count as new if within 24 hours
+              if (commentLikesTimestamp && commentLikesTimestamp >= oneDayAgo) {
+                newInteractions++;
+              }
+              // Show all comment likes regardless of age
+              notificationsList.push({
+                id: `comment_likes_${postId}_${commentIndex}`,
+                type: 'comment_likes',
+                title: `❤️ ${comment.likes.length} ${comment.likes.length === 1 ? 'person liked' : 'people liked'} ${comment.name}'s comment`,
+                content: `On comment: "${comment.text?.substring(0, 80) + (comment.text?.length > 80 ? '...' : '')}"`,
+                timestamp: commentLikesTimestamp,
+                postId: postId,
+                storeId: post.storeId,
+                avatar: null,
+                isNew: commentLikesTimestamp && commentLikesTimestamp >= oneDayAgo
+              });
+            }
+
+            // Check for replies to comments (show all replies, count new ones)
+            if (comment.replies && comment.replies.length > 0) {
+              comment.replies.forEach((reply, replyIndex) => {
+                const replyTime = reply.timestamp?.toDate() || new Date(reply.timestamp);
+                
+                // Check if this reply is relevant to the seller
+                let isRelevantToSeller = false;
+                let replyTitle = '';
+                let notificationType = 'reply';
+                
+                // Skip if this is the seller's own reply, but still process for threaded replies to seller's content
+                if (reply.uid === user.uid) {
+                  // This is seller's own reply, don't notify about it, but check for likes
+                  if (reply.likes && reply.likes.length > 0 && reply.likes.some(likeUid => likeUid !== user.uid)) {
+                    const replyLikesTimestamp = reply.lastLikeTimestamp?.toDate() || replyTime;
+                    // Count as new if within 24 hours
+                    if (replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo) {
+                      newInteractions++;
+                    }
+                    // Show likes on seller's own replies
+                    notificationsList.push({
+                      id: `seller_reply_likes_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                      type: 'seller_reply_likes',
+                      title: `❤️ ${reply.likes.length} ${reply.likes.length === 1 ? 'person liked' : 'people liked'} your reply`,
+                      content: `Your reply: "${reply.text?.substring(0, 80) + (reply.text?.length > 80 ? '...' : '')}"`,
+                      timestamp: replyLikesTimestamp,
+                      postId: postId,
+                      storeId: post.storeId,
+                      avatar: null,
+                      isNew: replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo
+                    });
+                  }
+                  return; // Skip notification for seller's own reply
+                }
+
+                // Determine notification type based on reply structure
+                if (!reply.parentId) {
+                  // Direct reply to comment
+                  const isReplyToSeller = comment.uid === user.uid;
+                  if (isReplyToSeller) {
+                    replyTitle = `↩️ ${reply.name} replied to your comment`;
+                    isRelevantToSeller = true;
+                  } else {
+                    replyTitle = `↩️ ${reply.name} replied to a comment on your post`;
+                    isRelevantToSeller = true; // Still relevant as it's on seller's post
+                  }
+                } else {
+                  // Threaded reply - find the parent
+                  const parentReply = comment.replies.find(r => r.id === reply.parentId);
+                  if (parentReply && parentReply.uid === user.uid) {
+                    replyTitle = `🔗 ${reply.name} replied to your reply`;
+                    notificationType = 'threaded_reply';
+                    isRelevantToSeller = true;
+                  } else if (parentReply) {
+                    replyTitle = `🔗 ${reply.name} replied in a thread on your post`;
+                    notificationType = 'thread_activity';
+                    isRelevantToSeller = true; // Still relevant as it's activity on seller's post
+                  }
+                }
+                
+                if (isRelevantToSeller) {
+                  // Count as new if within 24 hours
+                  if (replyTime && replyTime >= oneDayAgo) {
+                    newInteractions++;
+                  }
+                  
+                  // Show all relevant replies regardless of age
+                  notificationsList.push({
+                    id: `${notificationType}_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                    type: notificationType,
+                    title: replyTitle,
+                    content: reply.text?.substring(0, 100) + (reply.text?.length > 100 ? '...' : ''),
+                    timestamp: replyTime,
+                    postId: postId,
+                    storeId: post.storeId,
+                    avatar: reply.photoURL || null,
+                    isNew: replyTime && replyTime >= oneDayAgo
+                  });
+                }
+
+                // Check for likes on replies (whether seller's or others')
+                if (reply.likes && reply.likes.length > 0) {
+                  const replyLikesTimestamp = reply.lastLikeTimestamp?.toDate() || replyTime;
+                  // Count as new if within 24 hours
+                  if (replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo) {
+                    newInteractions++;
+                  }
+                  // Show all reply likes regardless of age
+                  notificationsList.push({
+                    id: `reply_likes_${postId}_${commentIndex}_${reply.id || replyIndex}`,
+                    type: 'reply_likes',
+                    title: `❤️ ${reply.likes.length} ${reply.likes.length === 1 ? 'person liked' : 'people liked'} ${reply.name}'s reply`,
+                    content: `On reply: "${reply.text?.substring(0, 80) + (reply.text?.length > 80 ? '...' : '')}"`,
+                    timestamp: replyLikesTimestamp,
+                    postId: postId,
+                    storeId: post.storeId,
+                    avatar: null,
+                    isNew: replyLikesTimestamp && replyLikesTimestamp >= oneDayAgo
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Sort notifications by timestamp (newest first)
+      notificationsList.sort((a, b) => {
+        const timeA = a.timestamp || new Date(0);
+        const timeB = b.timestamp || new Date(0);
+        return timeB - timeA;
+      });
+
+      console.log(`🏪 Seller notifications: ${newInteractions} new, ${notificationsList.length} total`);
+      setFeedNotificationCount(newInteractions);
+      setNotifications(notificationsList);
+    });
+
+    return () => unsubscribePosts();
+  }, [user, userType]);
 
   const handleLogout = async () => {
     try {
@@ -147,6 +618,15 @@ function Navbar() {
 
   // Only show cart if userType is 'buyer' and onboardingStep is 'complete' and user is logged in
   const showCart = user && userType === 'buyer' && onboardingStep === 'complete';
+  const showNotificationBell = user && userType && (userType === 'buyer' || userType === 'seller') && onboardingStep === 'complete';
+  
+  console.log('🔔 Notification bell visibility:', {
+    user: !!user,
+    userType,
+    onboardingStep,
+    showNotificationBell,
+    feedNotificationCount
+  });
 
   return (
     <nav style={{ 
@@ -313,6 +793,7 @@ function Navbar() {
                 >
                   <span role="img" aria-label="profile">👤</span>
                 </a>
+
                 {showCart && (
                   <button
                     onClick={() => navigate('/shop-cart')}
@@ -392,6 +873,260 @@ function Navbar() {
                 <span role="img" aria-label="profile">👤</span>
               </a>
             )}
+
+            {/* Feed Notifications Bell - Shows for both buyers and sellers */}
+            {showNotificationBell && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => {
+                    setShowNotificationDropdown(!showNotificationDropdown);
+                    if (!showNotificationDropdown) {
+                      // Reset notification count when opening dropdown
+                      setFeedNotificationCount(0);
+                    }
+                  }}
+                  style={{ 
+                    background: 'rgba(102, 126, 234, 0.1)', 
+                    border: 'none', 
+                    padding: '6px', 
+                    position: 'relative', 
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(102, 126, 234, 0.2)';
+                    e.target.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(102, 126, 234, 0.1)';
+                    e.target.style.transform = 'scale(1)';
+                  }}
+                  title={userType === 'buyer' ? 'Feed Notifications' : 'Post Notifications'}
+                  aria-label={userType === 'buyer' ? 'Feed Notifications' : 'Post Notifications'}
+                >
+                  <span style={{ fontSize: '16px' }}>🔔</span>
+                  {feedNotificationCount > 0 && (
+                    <span style={{ 
+                      position: 'absolute', 
+                      top: -4, 
+                      right: -4, 
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                      color: '#fff', 
+                      borderRadius: '50%', 
+                      padding: '2px 6px', 
+                      fontSize: '12px', 
+                      fontWeight: '700',
+                      minWidth: '18px',
+                      height: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.4)',
+                      animation: 'pulse 2s infinite'
+                    }}>
+                      {feedNotificationCount > 99 ? '99+' : feedNotificationCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                {showNotificationDropdown && (
+                  <>
+                    {/* Backdrop */}
+                    <div 
+                      style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100vw',
+                        height: '100vh',
+                        zIndex: 1000,
+                      }}
+                      onClick={() => setShowNotificationDropdown(false)}
+                    />
+                    
+                    {/* Dropdown Content */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '8px',
+                      width: '350px',
+                      maxWidth: '90vw',
+                      maxHeight: '400px',
+                      background: 'white',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                      zIndex: 1001,
+                      overflow: 'hidden'
+                    }}>
+                      {/* Header */}
+                      <div style={{
+                        padding: '16px 20px',
+                        borderBottom: '1px solid #E5E7EB',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+                            🔔 {userType === 'buyer' ? 'Feed Notifications' : 'Post Interactions'}
+                          </h3>
+                          <button
+                            onClick={() => navigate('/feed')}
+                            style={{
+                              background: 'rgba(255,255,255,0.2)',
+                              border: 'none',
+                              color: 'white',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {userType === 'buyer' ? 'View Feed' : 'Manage Posts'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Notifications List */}
+                      <div style={{
+                        maxHeight: '320px',
+                        overflowY: 'auto'
+                      }}>
+                        {notifications.length === 0 ? (
+                          <div style={{
+                            padding: '40px 20px',
+                            textAlign: 'center',
+                            color: '#6B7280'
+                          }}>
+                            <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔕</div>
+                            <div style={{ fontSize: '14px', fontWeight: '500' }}>No new notifications</div>
+                            <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                              {userType === 'buyer' 
+                                ? "We'll notify you when someone interacts with your followed posts"
+                                : "We'll notify you when someone interacts with your posts"
+                              }
+                            </div>
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <div
+                              key={notification.id}
+                              onClick={() => {
+                                setShowNotificationDropdown(false);
+                                navigate(`/feed?post=${notification.postId}`);
+                              }}
+                              style={{
+                                padding: '12px 20px',
+                                borderBottom: '1px solid #F3F4F6',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '12px',
+                                background: notification.isNew ? 'rgba(102, 126, 234, 0.05)' : 'transparent',
+                                position: 'relative'
+                              }}
+                              onMouseEnter={(e) => e.target.style.backgroundColor = notification.isNew ? 'rgba(102, 126, 234, 0.1)' : '#F9FAFB'}
+                              onMouseLeave={(e) => e.target.style.backgroundColor = notification.isNew ? 'rgba(102, 126, 234, 0.05)' : 'transparent'}
+                            >
+                              {/* New indicator dot */}
+                              {notification.isNew && (
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '8px',
+                                  right: '8px',
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: '#667eea',
+                                  boxShadow: '0 0 0 2px white'
+                                }} />
+                              )}
+                              {/* Avatar */}
+                              <img
+                                src={notification.avatar || 'https://via.placeholder.com/32x32/667eea/ffffff?text=👤'}
+                                alt="Avatar"
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: '1px solid #E5E7EB'
+                                }}
+                              />
+                              
+                              {/* Content */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  fontSize: '14px',
+                                  fontWeight: '600',
+                                  color: '#1F2937',
+                                  marginBottom: '2px',
+                                  lineHeight: '1.4'
+                                }}>
+                                  {notification.title}
+                                </div>
+                                
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#6B7280',
+                                  marginBottom: '4px',
+                                  lineHeight: '1.4'
+                                }}>
+                                  {notification.content}
+                                </div>
+                                
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
+                                }}>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    color: '#9CA3AF'
+                                  }}>
+                                    {notification.timestamp ? new Date(notification.timestamp).toLocaleString() : 'Recently'}
+                                  </span>
+                                  
+                                  <span style={{
+                                    fontSize: '10px',
+                                    color: notification.isNew ? '#667eea' : '#9CA3AF',
+                                    fontWeight: '500',
+                                    backgroundColor: notification.isNew ? '#EEF2FF' : '#F3F4F6',
+                                    padding: '2px 6px',
+                                    borderRadius: '10px'
+                                  }}>
+                                    {notification.type === 'new_post' ? '📝 New Post' :
+                                     notification.type === 'mention' ? '🏷️ Mention' :
+                                     notification.type === 'reply' ? '↩️ Reply' :
+                                     notification.type === 'comment_on_post' ? '💬 Comment' :
+                                     notification.type === 'comment' ? '💬 Comment' :
+                                     notification.type === 'likes' ? '❤️ Post Likes' :
+                                     notification.type === 'reply_likes' ? '❤️ Reply Likes' : '🔔'}
+                                    {notification.isNew && ' • NEW'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <button 
               onClick={handleLogout} 
               style={{ 
@@ -878,6 +1613,11 @@ function Navbar() {
               @keyframes fadeIn {
                 from { opacity: 0; }
                 to { opacity: 1; }
+              }
+              @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.1); }
+                100% { transform: scale(1); }
               }
             `}
           </style>

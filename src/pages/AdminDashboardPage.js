@@ -293,6 +293,9 @@ function AdminDashboardPage() {
   const [conversationSearchTerm, setConversationSearchTerm] = useState('');
   const [filteredConversations, setFilteredConversations] = useState([]);
   
+  // Report filter states
+  const [reportFilter, setReportFilter] = useState('all'); // 'all', 'store_report', 'post_report'
+  
   // Buyer blocking states
   const [isBlockingBuyer, setIsBlockingBuyer] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
@@ -1544,6 +1547,17 @@ function AdminDashboardPage() {
             borderRadius: '8px',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
           }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#6B7280', fontSize: '0.875rem' }}>Post Reports</h3>
+            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#DC2626' }}>
+              {complaints.filter(c => c.type === 'post_report').length}
+            </p>
+          </div>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '8px',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          }}>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#6B7280', fontSize: '0.875rem' }}>New/Unresolved</h3>
             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#EF4444' }}>
               {complaints.filter(c => c.status === 'pending_review' || c.status === 'investigating' || c.status === 'new').length}
@@ -1574,9 +1588,98 @@ function AdminDashboardPage() {
             borderBottom: '1px solid #E5E7EB',
             backgroundColor: '#F9FAFB'
           }}>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#1F2937' }}>
-              Reports & Complaints
-            </h2>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '1rem'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#1F2937' }}>
+                Reports & Complaints
+              </h2>
+            </div>
+            
+            {/* Report Filter Buttons */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setReportFilter('all')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  background: reportFilter === 'all' ? '#007B7F' : '#ffffff',
+                  color: reportFilter === 'all' ? '#ffffff' : '#374151',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (reportFilter !== 'all') {
+                    e.target.style.background = '#F9FAFB';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (reportFilter !== 'all') {
+                    e.target.style.background = '#ffffff';
+                  }
+                }}
+              >
+                All Reports ({complaints.length})
+              </button>
+              <button
+                onClick={() => setReportFilter('store_report')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  background: reportFilter === 'store_report' ? '#7C3AED' : '#ffffff',
+                  color: reportFilter === 'store_report' ? '#ffffff' : '#374151',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (reportFilter !== 'store_report') {
+                    e.target.style.background = '#F9FAFB';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (reportFilter !== 'store_report') {
+                    e.target.style.background = '#ffffff';
+                  }
+                }}
+              >
+                🏪 Store Reports ({complaints.filter(c => c.type === 'store_report').length})
+              </button>
+              <button
+                onClick={() => setReportFilter('post_report')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  background: reportFilter === 'post_report' ? '#DC2626' : '#ffffff',
+                  color: reportFilter === 'post_report' ? '#ffffff' : '#374151',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (reportFilter !== 'post_report') {
+                    e.target.style.background = '#F9FAFB';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (reportFilter !== 'post_report') {
+                    e.target.style.background = '#ffffff';
+                  }
+                }}
+              >
+                📝 Post Reports ({complaints.filter(c => c.type === 'post_report').length})
+              </button>
+            </div>
           </div>
 
           {complaints.length === 0 ? (
@@ -1601,7 +1704,9 @@ function AdminDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {complaints.map((complaint) => (
+                  {complaints
+                    .filter(complaint => reportFilter === 'all' || complaint.type === reportFilter)
+                    .map((complaint) => (
                     <tr key={complaint.id}>
                       <td style={{ padding: '1rem', borderBottom: '1px solid #E5E7EB' }}>
                         {complaint.submittedAt ? new Date(complaint.submittedAt).toLocaleDateString() : 'N/A'}
@@ -1616,7 +1721,12 @@ function AdminDashboardPage() {
                           </div>
                           {complaint.type === 'store_report' && (
                             <div style={{ fontSize: '0.75rem', color: '#7C3AED', fontWeight: '600', marginTop: '0.25rem' }}>
-                              📍 Store Report
+                              🏪 Store Report
+                            </div>
+                          )}
+                          {complaint.type === 'post_report' && (
+                            <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: '600', marginTop: '0.25rem' }}>
+                              📝 Post Report
                             </div>
                           )}
                         </div>
@@ -2973,7 +3083,8 @@ function AdminDashboardPage() {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>
-                {selectedComplaint.type === 'store_report' ? 'Reporter Details' : 'Customer Details'}
+                {selectedComplaint.type === 'store_report' ? 'Reporter Details' : 
+                 selectedComplaint.type === 'post_report' ? 'Reporter Details' : 'Customer Details'}
               </h4>
               <p style={{ margin: '0.25rem 0', color: '#6B7280' }}>
                 <strong>Name:</strong> {selectedComplaint.reporterName || selectedComplaint.customerName || 'Unknown'}
@@ -2985,7 +3096,8 @@ function AdminDashboardPage() {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>
-                {selectedComplaint.type === 'store_report' ? 'Reported Store Details' : 'Shop Details'}
+                {selectedComplaint.type === 'store_report' ? 'Reported Store Details' : 
+                 selectedComplaint.type === 'post_report' ? 'Store Associated with Post' : 'Shop Details'}
               </h4>
               <p style={{ margin: '0.25rem 0', color: '#6B7280' }}>
                 <strong>Business:</strong> {
@@ -3019,7 +3131,8 @@ function AdminDashboardPage() {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>
-                {selectedComplaint.type === 'store_report' ? 'Report Details' : 'Complaint Details'}
+                {selectedComplaint.type === 'store_report' ? 'Store Report Details' : 
+                 selectedComplaint.type === 'post_report' ? 'Post Report Details' : 'Complaint Details'}
               </h4>
               {(selectedComplaint.reason || selectedComplaint.complaintType) && (
                 <p style={{ margin: '0.25rem 0', color: '#6B7280' }}>
@@ -3030,6 +3143,8 @@ function AdminDashboardPage() {
                   }
                 </p>
               )}
+              
+              {/* Store Report Details */}
               {selectedComplaint.type === 'store_report' && (
                 <div style={{ 
                   margin: '0.5rem 0', 
@@ -3045,6 +3160,49 @@ function AdminDashboardPage() {
                       : 'General Report'
                     }
                   </span>
+                </div>
+              )}
+              
+              {/* Post Report Details */}
+              {selectedComplaint.type === 'post_report' && (
+                <div style={{ 
+                  margin: '0.5rem 0', 
+                  padding: '0.75rem', 
+                  backgroundColor: '#FEF2F2', 
+                  border: '1px solid #FECACA',
+                  borderRadius: '6px' 
+                }}>
+                  <strong style={{ color: '#DC2626' }}>Reported Post: </strong>
+                  <div style={{ 
+                    marginTop: '0.5rem', 
+                    padding: '0.5rem', 
+                    backgroundColor: '#F9FAFB', 
+                    borderRadius: '4px',
+                    border: '1px solid #E5E7EB'
+                  }}>
+                    <p style={{ 
+                      margin: '0 0 0.25rem 0', 
+                      fontSize: '0.875rem', 
+                      color: '#6B7280' 
+                    }}>
+                      <strong>Post ID:</strong> {selectedComplaint.reportedPostId}
+                    </p>
+                    {selectedComplaint.reportedPostText && (
+                      <p style={{ 
+                        margin: '0.25rem 0', 
+                        fontSize: '0.875rem', 
+                        color: '#374151',
+                        fontStyle: 'italic',
+                        maxHeight: '100px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        <strong>Post Content:</strong> "{selectedComplaint.reportedPostText.length > 200 
+                          ? selectedComplaint.reportedPostText.substring(0, 200) + '...' 
+                          : selectedComplaint.reportedPostText}"
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
               {selectedComplaint.refundData && (

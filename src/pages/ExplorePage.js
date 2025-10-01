@@ -742,6 +742,12 @@ const responsiveStyles = `
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
 @media (max-width: 768px) {
   .explore-controls {
     flex-direction: row !important;
@@ -948,6 +954,8 @@ function ExplorePage() {
 
   // Analytics notification settings
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+
+
   const [notificationPreferences, setNotificationPreferences] = useState({
     enabled: true,
     frequency: 'weekly', // weekly, biweekly, monthly
@@ -1878,6 +1886,8 @@ function ExplorePage() {
       setAnalyticsLoading(false);
     }
   };
+
+
 
   // Function to fetch detailed viewer information
   const fetchViewerDetails = async () => {
@@ -3865,6 +3875,8 @@ function ExplorePage() {
         </>
       )}
 
+
+
       {/* Analytics Section - Only visible to sellers */}
       {currentUser && userType === 'seller' && sellerStore && (
         <>
@@ -4165,22 +4177,22 @@ function ExplorePage() {
               {/* Enhanced Performance Dashboard */}
               <div style={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderRadius: '20px',
-                padding: window.innerWidth <= 480 ? '1rem' : window.innerWidth <= 768 ? '1.5rem' : '2rem',
-                marginBottom: '2rem',
+                borderRadius: window.innerWidth <= 480 ? '12px' : '20px',
+                padding: window.innerWidth <= 480 ? '0.75rem' : window.innerWidth <= 768 ? '1.5rem' : '2rem',
+                marginBottom: window.innerWidth <= 480 ? '1rem' : '2rem',
                 color: 'white',
-                boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
-                margin: window.innerWidth <= 480 ? '0 0.5rem 2rem' : '0 1rem 2rem'
+                boxShadow: window.innerWidth <= 480 ? '0 4px 16px rgba(102, 126, 234, 0.2)' : '0 8px 32px rgba(102, 126, 234, 0.3)',
+                margin: window.innerWidth <= 480 ? '0 0.5rem 1rem' : '0 1rem 2rem'
               }}>
                 <h3 style={{
-                  margin: '0 0 2rem 0',
-                  fontSize: window.innerWidth <= 480 ? '1.3rem' : window.innerWidth <= 768 ? '1.5rem' : '1.8rem',
+                  margin: window.innerWidth <= 480 ? '0 0 1rem 0' : '0 0 2rem 0',
+                  fontSize: window.innerWidth <= 480 ? '1.2rem' : window.innerWidth <= 768 ? '1.5rem' : '1.8rem',
                   fontWeight: '700',
                   textAlign: 'center',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: window.innerWidth <= 480 ? '8px' : '12px',
+                  gap: window.innerWidth <= 480 ? '6px' : '12px',
                   flexWrap: 'wrap'
                 }}>
                   📊 September 2025 Performance Overview
@@ -4189,7 +4201,7 @@ function ExplorePage() {
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '1fr 1fr',
-                  gap: window.innerWidth <= 480 ? '1.5rem' : '2rem',
+                  gap: window.innerWidth <= 480 ? '1rem' : '2rem',
                   alignItems: window.innerWidth <= 768 ? 'stretch' : 'center'
                 }}>
                   {/* Pie Chart Section */}
