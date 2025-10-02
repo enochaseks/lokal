@@ -701,6 +701,16 @@ function SettingsPage() {
                 <li>Profile information (profile picture, biography)</li>
               </ul>
               
+              <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 16, marginBottom: 8 }}>3.1.1 Stripe Connect for Sellers</h4>
+              <p>All sellers on Lokal are required to use Stripe Connect for payment processing. When you set up your Stripe Connect account, the following information is collected and processed by Stripe:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li><strong>Identity verification:</strong> Full name, date of birth, address, and government-issued ID</li>
+                <li><strong>Business information:</strong> Business name, type, and tax identification number (if applicable)</li>
+                <li><strong>Financial details:</strong> Bank account information for direct deposits</li>
+                <li><strong>Additional verification:</strong> Documents may be required for account verification</li>
+              </ul>
+              <p><strong>Important:</strong> Stripe Connect is a third-party service. While we facilitate the connection to Stripe, Stripe has its own privacy policy and data handling practices. Your Stripe Connect account information is subject to <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#007B7F', textDecoration: 'none' }}>Stripe's Privacy Policy</a>.</p>
+              
               <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 16, marginBottom: 8 }}>3.2 Store Information</h4>
               <p>For sellers, we collect additional information about your store:</p>
               <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
@@ -716,10 +726,21 @@ function SettingsPage() {
               <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
                 <li><strong>Provide our services:</strong> Enable you to buy and sell products, process payments, and communicate with other users</li>
                 <li><strong>Account management:</strong> Create and manage your account, authenticate your identity, and maintain your profile</li>
+                <li><strong>Payment processing:</strong> Facilitate secure payment transactions through Stripe Connect and other payment providers</li>
+                <li><strong>Seller verification:</strong> Verify seller identity and business information for Stripe Connect account creation</li>
                 <li><strong>Communications:</strong> Send you service announcements, updates, security alerts, and support messages</li>
                 <li><strong>Marketing communications:</strong> Send promotional emails and offers about our services (only if you've explicitly provided consent)</li>
                 <li><strong>Improve our platform:</strong> Analyze usage patterns, troubleshoot issues, and develop new features</li>
               </ul>
+              
+              <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: 16, marginBottom: 8 }}>4.1 Third-Party Payment Processing</h4>
+              <p>We work with trusted payment processors to handle financial transactions:</p>
+              <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+                <li><strong>Stripe Connect:</strong> Our primary payment processor for most regions, handling secure payment processing and direct bank transfers</li>
+                <li><strong>Paystack:</strong> Used for sellers in supported African countries</li>
+                <li><strong>Manual processing:</strong> For regions not supported by automated payment processors, our support team facilitates payments</li>
+              </ul>
+              <p>When you use these services, your payment information is processed according to their respective privacy policies and security standards.</p>
               
               <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>5. Your Privacy Rights</h3>
               <p>Depending on your location, you may have rights regarding your personal information, including:</p>
@@ -1593,9 +1614,18 @@ function SettingsPage() {
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>4. Seller Terms</h3>
             <p><strong>4.1 Store Creation:</strong> As a seller, you can create a virtual store on our Platform, add products, set prices, and manage inventory.</p>
             <p><strong>4.2 Product Listings:</strong> All product listings must be accurate, comply with applicable laws, and not infringe on any third-party rights.</p>
-            <p><strong>4.3 Payment Processing:</strong> Sellers can manage payment methods including bank transfers and in-person payments. All payment information must be accurate and kept up-to-date.</p>
-            <p><strong>4.4 Delivery Options:</strong> Sellers can offer delivery services or in-store pickup. The terms of delivery must be clearly communicated to buyers.</p>
-            <p><strong>4.5 Discounts:</strong> Sellers can offer discounts on their products through the Platform's discount system.</p>
+            <p><strong>4.3 Mandatory Payment Processing:</strong> All sellers must set up and maintain a Stripe Connect account for payment processing. This is mandatory for all new sellers and existing sellers must upgrade to Stripe Connect to continue selling.</p>
+            <p><strong>4.4 Stripe Connect Requirements:</strong> By creating a Stripe Connect account, you agree to:</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+              <li>Provide accurate identity and business information</li>
+              <li>Complete all required verification steps</li>
+              <li>Maintain valid bank account information for direct deposits</li>
+              <li>Comply with Stripe's Terms of Service and acceptable use policies</li>
+              <li>Accept responsibility for chargebacks and disputes</li>
+            </ul>
+            <p><strong>4.5 Alternative Payment Providers:</strong> In regions where Stripe Connect is not available, sellers may use approved alternative payment providers such as Paystack or manual processing through our support team.</p>
+            <p><strong>4.6 Delivery Options:</strong> Sellers can offer delivery services or in-store pickup. The terms of delivery must be clearly communicated to buyers.</p>
+            <p><strong>4.7 Discounts:</strong> Sellers can offer discounts on their products through the Platform's discount system.</p>
             
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>5. Buyer Terms</h3>
             <p><strong>5.1 Purchases:</strong> Buyers can browse products, add items to their cart, and complete purchases through the Platform.</p>
@@ -1604,9 +1634,18 @@ function SettingsPage() {
             <p><strong>5.4 Reviews:</strong> Buyers can leave reviews for stores and products. All reviews must be honest, appropriate, and based on actual experiences.</p>
             
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>6. Payments and Fees</h3>
-            <p><strong>6.1 Payment Methods:</strong> The Platform supports various payment methods, including bank transfers and card payments.</p>
-            <p><strong>6.2 Currency:</strong> Transactions may be conducted in multiple currencies, including GBP, USD, EUR, NGN, CAD, AUD, ZAR, GHS, KES, and others.</p>
-            <p><strong>6.3 Platform Fees:</strong> Lokal may charge fees for the use of the Platform. These fees will be clearly communicated to users.</p>
+            <p><strong>6.1 Payment Processing:</strong> All payments are processed through secure third-party payment processors, primarily Stripe Connect. By using our platform, you agree to the terms and conditions of these payment processors.</p>
+            <p><strong>6.2 Payment Methods:</strong> The Platform supports various payment methods through our payment processors, including:</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '15px' }}>
+              <li>Credit and debit cards (Visa, Mastercard, American Express)</li>
+              <li>Digital wallets (Apple Pay, Google Pay)</li>
+              <li>Bank transfers and local payment methods (varies by region)</li>
+              <li>Alternative payment providers for specific regions</li>
+            </ul>
+            <p><strong>6.3 Platform Fees:</strong> Lokal charges a 2.5% platform fee on all transactions. This fee is automatically deducted from payments before they are transferred to sellers' accounts.</p>
+            <p><strong>6.4 Currency:</strong> Transactions may be conducted in multiple currencies, including GBP, USD, EUR, NGN, CAD, AUD, ZAR, GHS, KES, and others, depending on your location and chosen payment provider.</p>
+            <p><strong>6.5 Payout Schedule:</strong> Funds are transferred to sellers' bank accounts according to the payout schedule of the payment processor (typically 2-7 business days for Stripe Connect).</p>
+            <p><strong>6.6 Payment Disputes:</strong> Any payment disputes, chargebacks, or fraud claims will be handled according to the policies of the respective payment processor and may result in temporary holds on funds.</p>
             
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginTop: 20, marginBottom: 12 }}>7. Refunds and Returns</h3>
             <p>Refund and return policies are set by individual sellers. Sellers must clearly communicate their refund and return policies to buyers. Lokal may facilitate the refund process but is not responsible for the outcome of refund requests.</p>

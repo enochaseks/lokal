@@ -895,6 +895,186 @@ function HelpCenterPage() {
             </div>
           )}
 
+          {/* Stripe Connect Guide */}
+          {helpTopic === 'stripe-connect-guide' && (
+            <div>
+              <h1 style={topicStyles.h1}>Stripe Connect for Sellers</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Important:</strong> Stripe Connect is now mandatory for all sellers on Lokal. This ensures secure, professional payment processing and direct deposit to your bank account.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>What is Stripe Connect?</h2>
+              <p style={topicStyles.p}>Stripe Connect is a secure payment platform that allows Lokal to process payments on your behalf while sending money directly to your bank account. It's used by millions of businesses worldwide and is required for all sellers on Lokal.</p>
+              
+              <h2 style={topicStyles.h2}>Benefits of Stripe Connect</h2>
+              <ul style={topicStyles.ul}>
+                <li style={topicStyles.li}><strong>Direct Bank Deposits:</strong> Payments go straight to your bank account - no virtual wallet needed</li>
+                <li style={topicStyles.li}><strong>Professional Processing:</strong> World-class fraud protection and payment security</li>
+                <li style={topicStyles.li}><strong>Global Support:</strong> Accepts payments from customers worldwide</li>
+                <li style={topicStyles.li}><strong>Instant Notifications:</strong> Real-time payment confirmations</li>
+                <li style={topicStyles.li}><strong>Automatic Transfers:</strong> Funds are transferred automatically based on Stripe's schedule</li>
+                <li style={topicStyles.li}><strong>Tax Compliance:</strong> Built-in tax reporting and compliance features</li>
+              </ul>
+              
+              <h2 style={topicStyles.h2}>Setting Up Stripe Connect</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Create Your Shop</h3>
+                  <p>When you try to create a shop, you'll be prompted to set up your Stripe Connect account first. This is mandatory - you cannot create a shop without it.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Location Detection</h3>
+                  <p>Lokal automatically detects your location using Google Maps to determine the best payment provider for your country:</p>
+                  <ul>
+                    <li><strong>Full Stripe Support:</strong> US, UK, Canada, Australia, and 40+ other countries</li>
+                    <li><strong>Paystack Integration:</strong> Nigeria, Ghana, South Africa, and other African countries</li>
+                    <li><strong>Limited Support:</strong> Some regions with manual payout assistance</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Account Verification</h3>
+                  <p>Depending on your location, you'll need to provide:</p>
+                  <ul>
+                    <li>Personal information (name, address, date of birth)</li>
+                    <li>Business information (if applicable)</li>
+                    <li>Tax identification number</li>
+                    <li>Bank account details for direct deposits</li>
+                    <li>Identity verification documents</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Account Activation</h3>
+                  <p>Once your information is verified:</p>
+                  <ul>
+                    <li>Your Stripe Connect account will be activated</li>
+                    <li>You can create your shop and start selling</li>
+                    <li>Payments will be processed automatically</li>
+                    <li>Funds will be deposited to your bank account</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Payment Processing</h2>
+              <p style={topicStyles.p}>Here's how payments work with Stripe Connect:</p>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>When Customers Pay</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Customer pays through Lokal's secure checkout</li>
+                  <li style={topicStyles.li}>Stripe processes the payment with fraud protection</li>
+                  <li style={topicStyles.li}>Lokal takes a 2.5% platform fee</li>
+                  <li style={topicStyles.li}>The remaining amount goes to your Stripe account</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Payout Schedule</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Stripe automatically transfers funds to your bank account</li>
+                  <li style={topicStyles.li}>Default schedule is every 2 business days</li>
+                  <li style={topicStyles.li}>You can change this to weekly or monthly in your Stripe dashboard</li>
+                  <li style={topicStyles.li}>First payout may take 7-14 days for new accounts</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Managing Your Stripe Account</h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Account Dashboard</h3>
+                <p>In your Lokal settings, you can:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>View your current account balance</li>
+                  <li style={topicStyles.li}>See recent transactions</li>
+                  <li style={topicStyles.li}>Request instant payouts (if eligible)</li>
+                  <li style={topicStyles.li}>Hide/show your account ID for privacy</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Privacy Features</h3>
+                <p>We protect your sensitive information:</p>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>Account IDs are hidden by default</li>
+                  <li style={topicStyles.li}>Click the eye icon to show/hide your account details</li>
+                  <li style={topicStyles.li}>Copy account ID securely when needed</li>
+                  <li style={topicStyles.li}>All financial data is encrypted</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Supported Countries</h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Full Stripe Connect Support</h3>
+                <p>These countries have full Stripe Connect functionality:</p>
+                <p style={{ fontSize: '0.95rem', color: '#666' }}>United States, United Kingdom, Canada, Australia, Germany, France, Netherlands, Sweden, Norway, Denmark, Finland, Switzerland, Austria, Belgium, Ireland, Luxembourg, Portugal, Spain, Italy, Poland, Estonia, Latvia, Lithuania, Slovenia, Slovakia, Czech Republic, Hungary, Romania, Bulgaria, Croatia, Cyprus, Malta, Japan, Singapore, Hong Kong, New Zealand, Brazil, Mexico, and more.</p>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Alternative Payment Providers</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Paystack:</strong> For sellers in Nigeria, Ghana, South Africa, and other African countries</li>
+                  <li style={topicStyles.li}><strong>Limited Stripe:</strong> Countries where customers can pay but seller accounts need manual setup</li>
+                  <li style={topicStyles.li}><strong>Manual Processing:</strong> Our support team handles payments for unsupported regions</li>
+                </ul>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Troubleshooting</h2>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#007B7F', marginBottom: '10px' }}>Common Issues</h3>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}><strong>Account Under Review:</strong> Stripe may review new accounts - this is normal and usually resolves within 1-3 business days</li>
+                  <li style={topicStyles.li}><strong>Additional Information Required:</strong> Stripe may request additional documents for verification</li>
+                  <li style={topicStyles.li}><strong>Payout Delays:</strong> First payouts take longer due to verification processes</li>
+                  <li style={topicStyles.li}><strong>Location Detection Issues:</strong> If Lokal can't detect your location, contact support for manual setup</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#FEF9C3', borderLeft: '4px solid #EAB308', borderRadius: '4px', marginBottom: '20px' }}>
+                <p style={{ margin: 0, fontWeight: 500 }}>⚠️ Important Notes:</p>
+                <ul style={{ marginTop: '10px', marginBottom: 0, paddingLeft: '20px' }}>
+                  <li>Stripe Connect is mandatory for all new sellers</li>
+                  <li>Existing sellers using virtual wallets must upgrade to Stripe Connect</li>
+                  <li>Keep your account information up to date for smooth payouts</li>
+                  <li>Contact support if you have issues with account verification</li>
+                </ul>
+              </div>
+              
+              <div style={{ marginTop: '30px' }}>
+                <p style={{ fontStyle: 'italic', color: '#666' }}>Need help setting up your Stripe Connect account?</p>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Contact Support Form */}
           {helpTopic === 'contact-support' && (
             <div>
@@ -2629,6 +2809,15 @@ function HelpCenterPage() {
                   style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
                 >
                   Setting up payment methods
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('stripe-connect-guide'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Stripe Connect for sellers
                 </a>
               </li>
               <li style={{ marginBottom: '8px' }}>
