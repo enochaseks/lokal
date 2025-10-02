@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import QRCodeModal from '../components/QRCodeModal';
+import PaymentProviderSelector from '../components/PaymentProviderSelector';
 import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
@@ -32,6 +33,15 @@ function CreateShopPage() {
       localStorage.setItem('sellerData', JSON.stringify(sellerData));
     }
   }, [sellerData]);
+
+  // Get current user for Stripe Connect
+  useEffect(() => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, []);
 
   const [backgroundImg, setBackgroundImg] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -71,15 +81,41 @@ function CreateShopPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [createdStoreId, setCreatedStoreId] = useState('');
   const [createdStoreName, setCreatedStoreName] = useState('');
+  
+  // Stripe Connect states
+  const [stripeConnectAccountId, setStripeConnectAccountId] = useState(null);
+  const [stripeConnectRequired, setStripeConnectRequired] = useState(true);
+  const [showStripeConnectStep, setShowStripeConnectStep] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const handleBackgroundImgChange = (e) => {
     setBackgroundImg(e.target.files[0]);
+  };
+
+  // Stripe Connect callback functions
+  const handleStripeConnectAccountCreated = (accountId) => {
+    console.log('✅ Stripe Connect account created:', accountId);
+    setStripeConnectAccountId(accountId);
+    setShowStripeConnectStep(false);
+  };
+
+  const handleStripeConnectBalanceUpdate = (balance) => {
+    console.log('💰 Stripe Connect balance updated:', balance);
+    // Balance will be handled in the wallet section
   };
 
   const handleCreateShop = async (e) => {
     e.preventDefault();
     if (!backgroundImg) {
       alert('Background image is required.');
+      setLoading(false);
+      return;
+    }
+
+    // MANDATORY: All sellers must have Stripe Connect - no virtual wallet
+    if (!stripeConnectAccountId) {
+      alert('⚠️ Payment Account Required: You must set up your Stripe Connect account to create a shop. This is how you will receive real money directly from customers into your bank account. Virtual wallets are no longer supported.');
+      setShowStripeConnectStep(true);
       setLoading(false);
       return;
     }
@@ -226,7 +262,8 @@ function CreateShopPage() {
         alcoholLicense: alcoholLicenseUrl,
         openingTime: sellerData.openingTime || '',
         closingTime: sellerData.closingTime || '',
-        live: true, // Mark new stores as live by default
+        live: false, // Mark new stores as live by default
+        stripeConnectAccountId: stripeConnectAccountId, // Required for receiving payments
         // Add any other fields you want to persist for settings
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
@@ -432,7 +469,84 @@ function CreateShopPage() {
               </div>
             </div>
           )}
-          <button type="submit" style={{ width: '100%', background: '#D92D20', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.2rem', letterSpacing: '0.5px', marginTop: '0.5rem', boxShadow: '0 2px 8px #B8B8B8', transition: 'background 0.2s' }} disabled={loading}>{loading ? 'Creating...' : 'Create Shop'}</button>
+
+          {/* Mandatory Stripe Connect Setup */}
+          <div style={{ 
+            width: '100%', 
+            margin: '2rem 0',
+            padding: '1.5rem',
+            background: stripeConnectAccountId ? '#f0f9ff' : '#fff3cd',
+            border: stripeConnectAccountId ? '2px solid #0ea5e9' : '2px solid #ffc107',
+            borderRadius: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+              <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>
+                {stripeConnectAccountId ? '✅' : '🔗'}
+              </span>
+              <h3 style={{ margin: 0, color: stripeConnectAccountId ? '#0ea5e9' : '#856404' }}>
+                {stripeConnectAccountId ? 'Payment Account Connected!' : 'Payment Account Setup Required'}
+              </h3>
+            </div>
+            
+            {stripeConnectAccountId ? (
+              <div>
+                <p style={{ margin: '0 0 10px 0', color: '#0ea5e9' }}>
+                  ✅ Your Stripe account is connected! Customers will pay directly into your account, and you can withdraw to your bank instantly.
+                </p>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                  Account ID: {stripeConnectAccountId.substring(0, 20)}...
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p style={{ margin: '0 0 15px 0', color: '#856404', fontWeight: '500' }}>
+                  ⚠️ Set up your payment account to receive money directly from customers
+                </p>
+                <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Why this is required:</h4>
+                  <ul style={{ margin: 0, paddingLeft: '20px', color: '#666' }}>
+                    <li>💰 <strong>Get real money instantly</strong> - No waiting for platform payouts</li>
+                    <li>🏦 <strong>Withdraw to your bank</strong> - Direct access to your earnings</li>
+                    <li>📊 <strong>Professional reporting</strong> - Tax documents and analytics</li>
+                    <li>🛡️ <strong>Fraud protection</strong> - Enterprise-grade security</li>
+                  </ul>
+                </div>
+                
+                {showStripeConnectStep ? (
+                  <div style={{ background: 'white', padding: '15px', borderRadius: '8px' }}>
+                    <PaymentProviderSelector
+                      currentUser={currentUser}
+                      onAccountCreated={handleStripeConnectAccountCreated}
+                      onBalanceUpdate={handleStripeConnectBalanceUpdate}
+                      showAccountCreation={true}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowStripeConnectStep(true)}
+                    style={{
+                      width: '100%',
+                      background: '#0ea5e9',
+                      color: 'white',
+                      padding: '12px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      fontSize: '1rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🚀 Set Up Payment Account
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button type="submit" style={{ width: '100%', background: stripeConnectAccountId ? '#D92D20' : '#666', color: '#fff', padding: '1rem', border: 'none', borderRadius: 8, fontWeight: 'bold', fontSize: '1.2rem', letterSpacing: '0.5px', marginTop: '0.5rem', boxShadow: '0 2px 8px #B8B8B8', transition: 'background 0.2s' }} disabled={loading || !stripeConnectAccountId}>
+            {loading ? 'Creating...' : !stripeConnectAccountId ? 'Complete Payment Setup First' : 'Create Shop'}
+          </button>
         </form>
       </div>
       {showPaymentModal && (

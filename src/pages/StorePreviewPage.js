@@ -11,7 +11,7 @@ import StripePaymentForm from '../components/StripePaymentForm';
 
 // Load Stripe outside of component render
 // Using the REACT_APP_STRIPE_PUBLIC_KEY from .env file
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
 
 const currencySymbols = {
   GBP: "£",

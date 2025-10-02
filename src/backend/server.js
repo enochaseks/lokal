@@ -65,6 +65,200 @@ app.post('/create-payment-intent', async (req, res) => {
   }
 });
 
+// Create payment intent with Connect account (for marketplace payments)
+app.post('/create-connect-payment-intent', async (req, res) => {
+  try {
+    const { amount, currency, sellerStripeAccountId, applicationFeeAmount = 0 } = req.body;
+
+    if (!sellerStripeAccountId) {
+      return res.status(400).send({ error: 'Seller Stripe account ID is required' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+      application_fee_amount: Math.round(applicationFeeAmount * 100), // Platform fee in cents
+      transfer_data: {
+        destination: sellerStripeAccountId,
+      },
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
+  } catch (error) {
+    console.error('Connect Payment Intent Error:', error);
+    res.status(400).send({ error: error.message });
+  }
+});
+
+// ============================================================================
+// STRIPE CONNECT ENDPOINTS
+// ============================================================================
+
+// Create Stripe Connect account for seller
+app.post('/api/stripe/create-connect-account', async (req, res) => {
+  try {
+    const { email, country = 'GB', type = 'standard' } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const account = await stripe.accounts.create({
+      type: type,
+      country: country,
+      email: email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+    });
+
+    res.json({ 
+      accountId: account.id,
+      success: true 
+    });
+  } catch (error) {
+    console.error('Error creating Connect account:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Create account link for onboarding
+app.post('/api/stripe/create-account-link', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+
+    if (!accountId) {
+      return res.status(400).json({ error: 'Account ID is required' });
+    }
+
+    // Use production URLs for live mode, localhost for test mode
+    const isLiveMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_');
+    const baseUrl = isLiveMode ? 'https://lokalshops.co.uk' : (process.env.FRONTEND_URL || 'http://localhost:3000');
+    
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${baseUrl}/messages?tab=wallet&refresh=true`,
+      return_url: `${baseUrl}/messages?tab=wallet&setup=complete`,
+      type: 'account_onboarding',
+    });
+
+    res.json({ 
+      url: accountLink.url,
+      success: true 
+    });
+  } catch (error) {
+    console.error('Error creating account link:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Get Connect account status
+app.post('/api/stripe/account-status', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+
+    if (!accountId) {
+      return res.status(400).json({ error: 'Account ID is required' });
+    }
+
+    const account = await stripe.accounts.retrieve(accountId);
+    
+    res.json({
+      accountId: account.id,
+      detailsSubmitted: account.details_submitted,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      requirements: account.requirements,
+      capabilities: account.capabilities,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching account status:', error);
+    
+    // Check if account was deleted from Stripe
+    if (error.code === 'resource_missing' || error.message.includes('No such account')) {
+      return res.status(404).json({ 
+        error: 'Account not found in Stripe', 
+        accountDeleted: true,
+        success: false 
+      });
+    }
+    
+    res.status(400).json({ error: error.message, success: false });
+  }
+});
+
+// Get Connect account balance
+app.post('/api/stripe/account-balance', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+
+    if (!accountId) {
+      return res.status(400).json({ error: 'Account ID is required' });
+    }
+
+    const balance = await stripe.balance.retrieve({
+      stripeAccount: accountId,
+    });
+
+    // Get available balance in primary currency (usually GBP for UK accounts)
+    const availableBalance = balance.available.find(b => b.currency === 'gbp') || balance.available[0] || { amount: 0, currency: 'gbp' };
+    const pendingBalance = balance.pending.find(b => b.currency === 'gbp') || balance.pending[0] || { amount: 0, currency: 'gbp' };
+
+    res.json({
+      available: {
+        amount: availableBalance.amount / 100, // Convert from cents
+        currency: availableBalance.currency.toUpperCase()
+      },
+      pending: {
+        amount: pendingBalance.amount / 100, // Convert from cents  
+        currency: pendingBalance.currency.toUpperCase()
+      },
+      success: true
+    });
+  } catch (error) {
+    console.error('Error fetching account balance:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Create manual payout (instant transfer to bank)
+app.post('/api/stripe/create-payout', async (req, res) => {
+  try {
+    const { accountId, amount, currency = 'gbp' } = req.body;
+
+    if (!accountId || !amount) {
+      return res.status(400).json({ error: 'Account ID and amount are required' });
+    }
+
+    const payout = await stripe.payouts.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+    }, {
+      stripeAccount: accountId,
+    });
+
+    res.json({
+      payoutId: payout.id,
+      amount: payout.amount / 100,
+      currency: payout.currency.toUpperCase(),
+      status: payout.status,
+      arrivalDate: payout.arrival_date,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error creating payout:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // Create store boost payment intent
 app.post('/create-boost-payment-intent', async (req, res) => {
   try {
@@ -278,6 +472,37 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
         console.error('Error processing boost payment:', error);
       }
     }
+    
+    // Handle Connect marketplace payments
+    if (paymentIntent.transfer_data && paymentIntent.transfer_data.destination) {
+      console.log('Connect marketplace payment succeeded:', {
+        paymentIntentId: paymentIntent.id,
+        amount: paymentIntent.amount / 100,
+        sellerAccount: paymentIntent.transfer_data.destination,
+        applicationFee: paymentIntent.application_fee_amount / 100
+      });
+    }
+  }
+  
+  // Handle Connect account updates
+  if (event.type === 'account.updated') {
+    const account = event.data.object;
+    console.log('Connect account updated:', {
+      accountId: account.id,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      detailsSubmitted: account.details_submitted
+    });
+  }
+  
+  // Handle transfer events
+  if (event.type === 'transfer.created') {
+    const transfer = event.data.object;
+    console.log('Transfer created:', {
+      transferId: transfer.id,
+      amount: transfer.amount / 100,
+      destination: transfer.destination
+    });
   }
 
   // Return success response

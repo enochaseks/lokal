@@ -10,6 +10,7 @@ import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
 import StripeGooglePayButton from '../components/StripeGooglePayButton';
 import BankTransferForm from '../components/BankTransferForm';
+import PaymentProviderSelector from '../components/PaymentProviderSelector';
 import { useMessage } from '../MessageContext';
 
 // Function to save store info to localStorage
@@ -216,6 +217,10 @@ function MessagesPage() {
   const [refundReason, setRefundReason] = useState('');
   const [refundDetails, setRefundDetails] = useState('');
   const [pendingRefundOrder, setPendingRefundOrder] = useState(null);
+
+  // Stripe Connect states
+  const [sellerConnectAccount, setSellerConnectAccount] = useState(null);
+  const [stripeConnectBalance, setStripeConnectBalance] = useState({ available: 0, pending: 0 });
   
   // Refund transfer confirmation states
   const [showRefundTransferModal, setShowRefundTransferModal] = useState(false);
@@ -1415,6 +1420,64 @@ function MessagesPage() {
     }
   }, [isSeller, currentUser]);
 
+  // Check for Stripe Connect account and sync balance
+  useEffect(() => {
+    if (!isSeller || !currentUser) return;
+
+    const checkConnectAccount = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const userData = userDoc.data();
+        
+        if (userData?.stripeConnectAccountId) {
+          setSellerConnectAccount({
+            accountId: userData.stripeConnectAccountId,
+            email: userData.email || currentUser.email
+          });
+
+          // Sync Stripe balance with wallet
+          await syncStripeBalance(userData.stripeConnectAccountId);
+        }
+      } catch (error) {
+        console.error('Error checking Connect account:', error);
+      }
+    };
+
+    checkConnectAccount();
+  }, [isSeller, currentUser]);
+
+  // Function to sync Stripe Connect balance with local wallet
+  const syncStripeBalance = async (accountId) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stripe/account-balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setStripeConnectBalance({
+          available: data.available.amount,
+          pending: data.pending.amount,
+          currency: data.available.currency
+        });
+
+        // Update Firestore wallet to sync with Stripe balance
+        const walletRef = doc(db, 'wallets', currentUser.uid);
+        await updateDoc(walletRef, {
+          stripeBalance: data.available.amount,
+          stripePending: data.pending.amount,
+          lastStripeSync: serverTimestamp()
+        });
+
+        console.log('💰 Synced Stripe balance:', data.available.amount);
+      }
+    } catch (error) {
+      console.error('Error syncing Stripe balance:', error);
+    }
+  };
+
   // Check for delivery reminders every 30 seconds
   useEffect(() => {
     if (!isSeller || !currentUser || !messages.length) return;
@@ -2212,18 +2275,70 @@ function MessagesPage() {
       };
 
       let paymentIntentId = `default_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Initialize with default value
+      let useConnectPayment = false;
+
+      // ALL sellers must have Stripe Connect account - no virtual wallet
+      const sellerDoc = await getDoc(doc(db, 'users', sellerId));
+      const sellerData = sellerDoc.data();
+      const sellerStripeAccountId = sellerData?.stripeConnectAccountId;
+
+      if (!sellerStripeAccountId) {
+        throw new Error('This seller has not set up their payment account yet. Please ask them to complete their Stripe Connect setup to receive payments.');
+      }
+
+      console.log('🔗 Using seller Connect account:', sellerStripeAccountId);
+      useConnectPayment = true;
 
       if (selectedPaymentMethod === 'card' && stripePaymentData) {
-        // Real Stripe payment from Stripe Elements
-        paymentIntentId = stripePaymentData.paymentIntentId || `backup_${Date.now()}`;
+        // ALL payments go through Stripe Connect - no fallback
+        const platformFeeAmount = paymentData.total * 0.025; // 2.5% platform fee
+        
+        const connectResponse = await fetch(`${process.env.REACT_APP_API_URL}/create-connect-payment-intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: paymentData.total,
+            currency: paymentData.currency,
+            sellerStripeAccountId: sellerStripeAccountId,
+            applicationFeeAmount: platformFeeAmount
+          })
+        });
+        
+        if (!connectResponse.ok) {
+          throw new Error('Failed to create payment. Seller may need to complete their account setup.');
+        }
+        
+        const connectData = await connectResponse.json();
+        paymentIntentId = connectData.paymentIntentId;
+        console.log('💳 Using Connect payment with real money transfer:', paymentIntentId);
+        
         paymentDetails.cardInfo = stripePaymentData.cardInfo;
-        console.log('✅ Using Real Stripe Elements payment:', paymentIntentId);
+        console.log('✅ Using Stripe Elements payment:', paymentIntentId);
 
       } else if (selectedPaymentMethod === 'google_pay' && stripePaymentData) {
-        // Real Google Pay payment from Stripe
-        paymentIntentId = stripePaymentData.paymentIntentId || `backup_google_${Date.now()}`;
+        // ALL Google Pay payments go through Stripe Connect
+        const platformFeeAmount = paymentData.total * 0.025; // 2.5% platform fee
+        
+        const connectResponse = await fetch(`${process.env.REACT_APP_API_URL}/create-connect-payment-intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: paymentData.total,
+            currency: paymentData.currency,
+            sellerStripeAccountId: sellerStripeAccountId,
+            applicationFeeAmount: platformFeeAmount
+          })
+        });
+        
+        if (!connectResponse.ok) {
+          throw new Error('Failed to create Google Pay payment. Seller may need to complete their account setup.');
+        }
+        
+        const connectData = await connectResponse.json();
+        paymentIntentId = connectData.paymentIntentId;
+        console.log('💳 Using Connect Google Pay with real money transfer:', paymentIntentId);
+        
         paymentDetails.googlePayInfo = stripePaymentData.googlePayInfo;
-        console.log('✅ Using Real Google Pay payment:', paymentIntentId);
 
       } else if (selectedPaymentMethod === 'card') {
         // Fallback for custom card form (validate first)
@@ -2268,36 +2383,48 @@ function MessagesPage() {
       
       // Only apply platform fees for card and Google Pay payments
       if (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'google_pay') {
-        const platformFeeRate = 0.03; // 3% platform fee
+        const platformFeeRate = useConnectPayment ? 0.025 : 0.03; // 2.5% for Connect, 3% for regular
         platformFee = paymentData.total * platformFeeRate;
         sellerEarnings = paymentData.total - platformFee;
-        console.log(`💰 Platform fee applied: ${platformFee} (${selectedPaymentMethod})`);
+        console.log(`💰 Platform fee applied: ${platformFee} (${selectedPaymentMethod}, Connect: ${useConnectPayment})`);
       } else {
         console.log(`💰 No platform fee for: ${selectedPaymentMethod}`);
       }
 
-      // Update seller's wallet (only for immediate payment methods, not bank transfers)
+      // Update seller's wallet 
       if (selectedPaymentMethod !== 'bank_transfer') {
         const sellerWalletRef = doc(db, 'wallets', sellerId);
         const sellerWalletSnap = await getDoc(sellerWalletRef);
         
+        const walletUpdate = {
+          totalEarnings: (sellerWalletSnap.exists() ? (sellerWalletSnap.data().totalEarnings || 0) : 0) + sellerEarnings,
+          lastUpdated: serverTimestamp()
+        };
+
+        if (useConnectPayment) {
+          // For Connect payments, money goes directly to Stripe - just track it
+          walletUpdate.stripeEarnings = (sellerWalletSnap.exists() ? (sellerWalletSnap.data().stripeEarnings || 0) : 0) + sellerEarnings;
+          walletUpdate.lastConnectPayment = serverTimestamp();
+          console.log(`💳 Connect payment: ${sellerEarnings} goes directly to seller's Stripe account`);
+        } else {
+          // ALL payments now go through Stripe Connect - no virtual wallet
+          console.log(`💰 Connect payment: ${sellerEarnings} goes directly to seller's Stripe account`);
+        }
+        
         if (sellerWalletSnap.exists()) {
-          const currentData = sellerWalletSnap.data();
-          await updateDoc(sellerWalletRef, {
-            balance: (currentData.balance || 0) + sellerEarnings,
-            totalEarnings: (currentData.totalEarnings || 0) + sellerEarnings,
-            lastUpdated: serverTimestamp()
-          });
+          await updateDoc(sellerWalletRef, walletUpdate);
         } else {
           await setDoc(sellerWalletRef, {
-            balance: sellerEarnings,
+            balance: useConnectPayment ? 0 : sellerEarnings,
             pendingBalance: 0,
             totalEarnings: sellerEarnings,
+            stripeEarnings: useConnectPayment ? sellerEarnings : 0,
             createdAt: serverTimestamp(),
-            lastUpdated: serverTimestamp()
+            ...walletUpdate
           });
         }
-        console.log(`💰 Seller wallet updated with ${sellerEarnings} ${paymentData.currency}`);
+        
+        console.log(`💰 Seller wallet updated (Connect: ${useConnectPayment})`);
       } else {
         console.log(`⏳ Bank transfer pending verification - wallet will be updated after confirmation`);
       }
@@ -9951,21 +10078,115 @@ I hereby confirm this is a formal report and all information provided is accurat
               <div className="loading-state">Loading wallet...</div>
             ) : (
               <>
+                {/* Stripe Connect Setup Alert for Existing Sellers */}
+                {!sellerConnectAccount && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    border: '2px solid #f59e0b',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginBottom: '20px',
+                    position: 'relative'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px' }}>
+                      <div style={{ fontSize: '2rem', flexShrink: 0 }}>🚀</div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#92400e', fontSize: '1.3rem' }}>
+                          Upgrade to Real Money Payments!
+                        </h3>
+                        <p style={{ margin: '0 0 15px 0', color: '#92400e', lineHeight: '1.5' }}>
+                          <strong>Get paid instantly!</strong> Set up your Stripe Connect account to receive real money directly from customers into your bank account. No more waiting for platform payouts!
+                        </p>
+                        
+                        <div style={{ background: 'rgba(255,255,255,0.7)', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '0.9rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>💰</span>
+                              <span><strong>Instant real money</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>🏦</span>
+                              <span><strong>Direct bank withdrawals</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>📊</span>
+                              <span><strong>Professional tax docs</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>🛡️</span>
+                              <span><strong>Fraud protection</strong></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <PaymentProviderSelector
+                            currentUser={currentUser}
+                            onAccountCreated={(accountId) => {
+                              setSellerConnectAccount({ accountId });
+                              console.log('✅ Connect account created in Messages:', accountId);
+                            }}
+                            onBalanceUpdate={(balance) => {
+                              setStripeConnectBalance(balance);
+                            }}
+                            showAccountCreation={true}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="wallet-overview">
                   <div className="wallet-header">
                     <h3 className="section-title">Wallet Overview</h3>
                     <div className="wallet-actions">
-                      <button
-                        onClick={() => {
-                          checkWithdrawalEligibility();
-                          setShowWithdrawModal(true);
-                        }}
-                        className="withdraw-btn"
-                        disabled={!withdrawalEligibility.eligible || walletData.balance < 5}
-                        title={!withdrawalEligibility.eligible ? withdrawalEligibility.reason : walletData.balance < 5 ? 'Minimum withdrawal amount is £5' : 'Withdraw your earnings'}
-                      >
-                        💸 Withdraw
-                      </button>
+                      {/* Stripe Connect withdrawal button - shows when seller has Connect account */}
+                      {sellerConnectAccount && (
+                        <button
+                          onClick={async () => {
+                            if (stripeConnectBalance.available <= 0) {
+                              alert('No funds available for withdrawal. You need to have earnings from sales before you can withdraw.');
+                              return;
+                            }
+                            
+                            // Trigger withdrawal through Stripe Connect
+                            const confirmed = window.confirm(
+                              `Withdraw £${stripeConnectBalance.available.toFixed(2)} to your bank account?\n\n` +
+                              `This will transfer your available balance. The money should arrive in your account within 1-2 business days.`
+                            );
+                            if (confirmed) {
+                              try {
+                                const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stripe/connect-payout/${sellerConnectAccount.accountId}`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({
+                                    amount: Math.round(stripeConnectBalance.available * 100), // Convert to cents
+                                    currency: 'gbp'
+                                  }),
+                                });
+                                const data = await response.json();
+                                if (data.success) {
+                                  alert(`✅ Withdrawal successful! £${stripeConnectBalance.available.toFixed(2)} is being transferred to your bank account.`);
+                                  // Refresh balance
+                                  setStripeConnectBalance(prev => ({ ...prev, available: 0 }));
+                                } else {
+                                  throw new Error(data.error || 'Withdrawal failed');
+                                }
+                              } catch (error) {
+                                alert(`❌ Withdrawal failed: ${error.message}`);
+                              }
+                            }
+                          }}
+                          className="withdraw-btn"
+                          disabled={stripeConnectBalance.available <= 0}
+                          title={stripeConnectBalance.available <= 0 ? 'No funds available to withdraw' : `Withdraw £${stripeConnectBalance.available.toFixed(2)} to your bank account`}
+                        >
+                          💸 Withdraw £{stripeConnectBalance.available.toFixed(2)}
+                        </button>
+                      )}
                       <button
                         onClick={() => setShowFeeSettings(true)}
                         className="fee-settings-btn"
@@ -9974,29 +10195,55 @@ I hereby confirm this is a formal report and all information provided is accurat
                       </button>
                     </div>
                   </div>
+
+                  {/* Payment Provider Integration */}
+                  <PaymentProviderSelector
+                    currentUser={currentUser}
+                    onAccountCreated={(accountId) => {
+                      setSellerConnectAccount({ accountId, email: currentUser.email });
+                      console.log('✅ Connect account created:', accountId);
+                    }}
+                    onBalanceUpdate={(balanceData) => {
+                      setStripeConnectBalance({
+                        available: balanceData.stripeBalance || balanceData.available || 0,
+                        pending: balanceData.stripePending || balanceData.pending || 0
+                      });
+                      // Set the account as connected if we have balance data
+                      if (balanceData.accountId && !sellerConnectAccount) {
+                        setSellerConnectAccount({ accountId: balanceData.accountId });
+                      }
+                    }}
+                    showAccountCreation={true}
+                  />
                   
-                  <div className="balance-cards">
-                    <div className="balance-card available">
-                      <div className="balance-label">Available Balance</div>
-                      <div className="balance-amount">
-                        {formatCurrency(walletData.balance)}
+                  {/* Show balance cards only if seller has Connect account */}
+                  {sellerConnectAccount && (
+                    <div className="balance-cards">
+                      <div className="balance-card stripe">
+                        <div className="balance-label">💰 Available Balance</div>
+                        <div className="balance-amount">
+                          £{stripeConnectBalance.available.toFixed(2)}
+                        </div>
+                        <div className="balance-subtitle">Ready to withdraw</div>
                       </div>
-                    </div>
 
-                    <div className="balance-card pending">
-                      <div className="balance-label">Pending</div>
-                      <div className="balance-amount">
-                        {formatCurrency(walletData.pendingBalance)}
+                      <div className="balance-card pending">
+                        <div className="balance-label">⏳ Pending Balance</div>
+                        <div className="balance-amount">
+                          £{stripeConnectBalance.pending.toFixed(2)}
+                        </div>
+                        <div className="balance-subtitle">Processing payments</div>
                       </div>
-                    </div>
 
-                    <div className="balance-card total">
-                      <div className="balance-label">Total Earnings</div>
-                      <div className="balance-amount">
-                        {formatCurrency(walletData.totalEarnings)}
+                      <div className="balance-card total">
+                        <div className="balance-label">📊 Total Balance</div>
+                        <div className="balance-amount">
+                          £{(stripeConnectBalance.available + stripeConnectBalance.pending).toFixed(2)}
+                        </div>
+                        <div className="balance-subtitle">In your Stripe account</div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Pickup Code Validation Section */}
                   <div className="pickup-validation-section">
@@ -12407,6 +12654,7 @@ I hereby confirm this is a formal report and all information provided is accurat
         .balance-card.available .balance-label { color: #16A34A; }
         .balance-card.pending .balance-label { color: #D97706; }
         .balance-card.total .balance-label { color: #007B7F; }
+        .balance-card.stripe .balance-label { color: #635BFF; }
 
         .balance-amount {
           font-size: 1.5rem;
@@ -12416,6 +12664,15 @@ I hereby confirm this is a formal report and all information provided is accurat
         .balance-card.available .balance-amount { color: #15803D; }
         .balance-card.pending .balance-amount { color: #B45309; }
         .balance-card.total .balance-amount { color: #005a5d; }
+        .balance-card.stripe .balance-amount { color: #4338CA; }
+
+        .balance-subtitle {
+          font-size: 12px;
+          color: #666;
+          margin-top: 4px;
+          font-style: italic;
+          text-align: center;
+        }
 
         .withdraw-button {
           width: 100%;
