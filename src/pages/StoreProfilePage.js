@@ -3144,13 +3144,17 @@ function StoreProfilePage() {
                             style={{
                               background: '#fee2e2',
                               border: '1px solid #fecaca',
-                              borderRadius: '8px',
+                              borderRadius: '50%',
                               color: '#dc2626',
-                              padding: '6px 10px',
-                              fontSize: '12px',
+                              padding: '8px',
+                              width: '32px',
+                              height: '32px',
+                              fontSize: '14px',
                               cursor: 'pointer',
                               transition: 'all 0.2s ease',
-                              fontWeight: '500'
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
                             }}
                             onMouseOver={(e) => {
                               e.currentTarget.style.background = '#fecaca';
@@ -3162,7 +3166,7 @@ function StoreProfilePage() {
                             }}
                             title={`Remove ${f.name || f.email || 'user'} from followers`}
                           >
-                            Remove
+                            ✕
                           </button>
                         )}
                         
@@ -3177,14 +3181,18 @@ function StoreProfilePage() {
                             style={{
                               background: '#fef3c7',
                               border: '1px solid #fde047',
-                              borderRadius: '8px',
+                              borderRadius: '50%',
                               color: '#d97706',
-                              padding: '6px 10px',
-                              fontSize: '12px',
+                              padding: '8px',
+                              width: '32px',
+                              height: '32px',
+                              fontSize: '14px',
                               cursor: 'pointer',
                               transition: 'all 0.2s ease',
-                              fontWeight: '500',
-                              marginLeft: '8px'
+                              marginLeft: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
                             }}
                             onMouseOver={(e) => {
                               e.currentTarget.style.background = '#fde047';
@@ -3196,7 +3204,7 @@ function StoreProfilePage() {
                             }}
                             title={`Block ${f.name || f.email || 'user'} from your store`}
                           >
-                            Block
+                            🚫
                           </button>
                         )}
                       </li>
