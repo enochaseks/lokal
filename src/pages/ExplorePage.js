@@ -10,6 +10,25 @@ import { loadStripe } from '@stripe/stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
 // import { generateMonthlyAnalyticsPDF, scheduleMonthlyReport, generateCustomRangePDF } from '../utils/pdfGenerator';
 
+// Utility function to get user's IP address
+const getUserIPAddress = async () => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    return data.ip;
+  } catch (error) {
+    console.warn('Failed to get IP from ipify, trying backup...', error);
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      return data.ip;
+    } catch (backupError) {
+      console.error('Failed to get IP address:', backupError);
+      return null;
+    }
+  }
+};
+
 // Working PDF generation functions using browser's built-in capabilities
 const generateAnalyticsPDF = async (store, analytics, type, orderDetails = []) => {
   try {
@@ -863,6 +882,75 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   return R * c; // Distance in km
 }
 
+// Function to check if current user is blocked by a store (includes IP blocking)
+async function isUserBlockedByStore(storeId, userId) {
+  if (!storeId || !userId) return false;
+  
+  try {
+    // Check regular user blocking
+    const blockedRef = doc(db, 'stores', storeId, 'blocked', userId);
+    const blockedDoc = await getDoc(blockedRef);
+    if (blockedDoc.exists()) {
+      return true;
+    }
+
+    // Check IP blocking
+    const userIP = await getUserIPAddress();
+    if (userIP) {
+      // Check store-specific IP blocks
+      const ipBlocksQuery = query(
+        collection(db, `stores/${storeId}/blocked_ips`),
+        where('ipAddress', '==', userIP),
+        where('isActive', '==', true)
+      );
+      const ipBlocksSnapshot = await getDocs(ipBlocksQuery);
+      
+      for (const ipBlockDoc of ipBlocksSnapshot.docs) {
+        const blockData = ipBlockDoc.data();
+        // Check if block is still active (not expired)
+        if (blockData.blockedUntil === 'permanent') {
+          console.log(`🚫 IP ${userIP} permanently blocked from store ${storeId}`);
+          return true;
+        } else if (new Date(blockData.blockedUntil) > new Date()) {
+          console.log(`🚫 IP ${userIP} temporarily blocked from store ${storeId} until ${blockData.blockedUntil}`);
+          return true;
+        }
+      }
+
+      // Also check seller-level IP blocks (blocks access to all stores owned by the seller)
+      const storeDoc = await getDoc(doc(db, 'stores', storeId));
+      if (storeDoc.exists()) {
+        const sellerId = storeDoc.data().sellerId;
+        if (sellerId) {
+          const sellerIPBlocksQuery = query(
+            collection(db, `users/${sellerId}/blocked_ips`),
+            where('ipAddress', '==', userIP),
+            where('isActive', '==', true)
+          );
+          const sellerIPBlocksSnapshot = await getDocs(sellerIPBlocksQuery);
+          
+          for (const ipBlockDoc of sellerIPBlocksSnapshot.docs) {
+            const blockData = ipBlockDoc.data();
+            // Check if block is still active (not expired)
+            if (blockData.blockedUntil === 'permanent') {
+              console.log(`🚫 IP ${userIP} permanently blocked from all stores by seller ${sellerId}`);
+              return true;
+            } else if (new Date(blockData.blockedUntil) > new Date()) {
+              console.log(`🚫 IP ${userIP} temporarily blocked from all stores by seller ${sellerId} until ${blockData.blockedUntil}`);
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error checking if user is blocked:', error);
+    return false;
+  }
+}
+
 function ExplorePage() {
   const [userLocation, setUserLocation] = useState(null);
   const [city, setCity] = useState('');
@@ -873,6 +961,7 @@ function ExplorePage() {
   const [recentlyViewedShops, setRecentlyViewedShops] = useState([]);
   const [previouslyPurchasedItems, setPreviouslyPurchasedItems] = useState([]);
   const [purchasedFromStores, setPurchasedFromStores] = useState([]);
+  const [similarStores, setSimilarStores] = useState([]);
   const [ratings, setRatings] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('');
   const [filterBy, setFilterBy] = useState('');
@@ -891,6 +980,7 @@ function ExplorePage() {
   const [manualLocation, setManualLocation] = useState('');
   const [userType, setUserType] = useState('');
   const [sellerStore, setSellerStore] = useState(null);
+  const [blockedStores, setBlockedStores] = useState(new Set());
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [boostDuration, setBoostDuration] = useState(7);
   const [boostProcessing, setBoostProcessing] = useState(false);
@@ -1022,14 +1112,18 @@ function ExplorePage() {
             const recentlyViewedResults = await Promise.all(recentlyViewedStorePromises);
             const validRecentlyViewedStores = recentlyViewedResults
               .filter(docSnap => docSnap.exists())
-              .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+              .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
+              // Filter out stores that are not live, disabled, or deleted
+              .filter(shop => shop.live && !shop.disabled && !shop.deleted);
             
             setRecentlyViewedShops(validRecentlyViewedStores);
           }
           
-          // Fetch user's purchase history
+          // Fetch user's purchase history (only stores purchased from 3+ days ago)
           const purchaseStores = new Map(); // To track unique stores the user has purchased from
           const purchasedItems = new Map(); // To track unique items the user has purchased
+          const threeDaysAgo = new Date();
+          threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
           
           // First check the orders collection
           const ordersQuery = query(
@@ -1047,38 +1141,66 @@ function ExplorePage() {
             for (const orderDoc of ordersSnapshot.docs) {
               const orderData = orderDoc.data();
               
-              // Add the store to our purchase history if we have the storeId
-              if (orderData.sellerId) {
-                try {
-                  const storeDoc = await getDoc(doc(db, 'stores', orderData.sellerId));
-                  if (storeDoc.exists() && !purchaseStores.has(orderData.sellerId)) {
-                    purchaseStores.set(orderData.sellerId, { 
-                      id: orderData.sellerId, 
-                      ...storeDoc.data(),
-                      purchaseCount: 1  
-                    });
-                  } else if (purchaseStores.has(orderData.sellerId)) {
-                    // Increment purchase count for this store
-                    const storeData = purchaseStores.get(orderData.sellerId);
-                    storeData.purchaseCount += 1;
-                    purchaseStores.set(orderData.sellerId, storeData);
-                  }
-                } catch (error) {
-                  console.error('Error fetching store data:', error);
+              // Check if order is at least 3 days old
+              let orderDate = null;
+              if (orderData.createdAt) {
+                if (orderData.createdAt.toDate) {
+                  // Firestore timestamp
+                  orderDate = orderData.createdAt.toDate();
+                } else if (typeof orderData.createdAt === 'string') {
+                  // String date
+                  orderDate = new Date(orderData.createdAt);
+                } else if (orderData.createdAt instanceof Date) {
+                  // Already a Date object
+                  orderDate = orderData.createdAt;
                 }
               }
               
-              // Process each item in the order
-              if (orderData.items && Array.isArray(orderData.items)) {
-                orderData.items.forEach(item => {
-                  if (item.id && !purchasedItems.has(item.id)) {
-                    purchasedItems.set(item.id, { 
-                      ...item, 
-                      storeId: orderData.sellerId,
-                      storeName: orderData.storeName || 'Store'
-                    });
+              // Only process orders that are at least 3 days old
+              if (orderDate && orderDate <= threeDaysAgo) {
+                // Add the store to our purchase history if we have the storeId
+                if (orderData.sellerId) {
+                  try {
+                    const storeDoc = await getDoc(doc(db, 'stores', orderData.sellerId));
+                    if (storeDoc.exists() && !purchaseStores.has(orderData.sellerId)) {
+                      const storeData = storeDoc.data();
+                      // Only add store if it's live and not disabled/deleted
+                      if (storeData.live && !storeData.disabled && !storeData.deleted) {
+                        purchaseStores.set(orderData.sellerId, { 
+                          id: orderData.sellerId, 
+                          ...storeData,
+                          purchaseCount: 1,
+                          lastPurchaseDate: orderDate
+                        });
+                      }
+                    } else if (purchaseStores.has(orderData.sellerId)) {
+                      // Increment purchase count for this store
+                      const storeData = purchaseStores.get(orderData.sellerId);
+                      storeData.purchaseCount += 1;
+                      // Update to the most recent (but still 3+ days old) purchase date
+                      if (orderDate > storeData.lastPurchaseDate) {
+                        storeData.lastPurchaseDate = orderDate;
+                      }
+                      purchaseStores.set(orderData.sellerId, storeData);
+                    }
+                  } catch (error) {
+                    console.error('Error fetching store data:', error);
                   }
-                });
+                }
+                
+                // Process each item in the order (only for orders 3+ days old)
+                if (orderData.items && Array.isArray(orderData.items)) {
+                  orderData.items.forEach(item => {
+                    if (item.id && !purchasedItems.has(item.id)) {
+                      purchasedItems.set(item.id, { 
+                        ...item, 
+                        storeId: orderData.sellerId,
+                        storeName: orderData.storeName || 'Store',
+                        purchaseDate: orderDate
+                      });
+                    }
+                  });
+                }
               }
             }
             
@@ -1086,12 +1208,12 @@ function ExplorePage() {
             setPurchasedFromStores(Array.from(purchaseStores.values()));
             setPreviouslyPurchasedItems(Array.from(purchasedItems.values()));
             
-            console.log(`Found ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from purchase history`);
+            console.log(`Found ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from purchase history (3+ days old)`);
           } else {
             console.log('No orders found for user');
           }
           
-          // Also check transactions collection for more purchase history
+          // Also check transactions collection for more purchase history (3+ days old)
           const transactionsQuery = query(
             collection(db, 'transactions'),
             where('buyerId', '==', user.uid),
@@ -1108,33 +1230,66 @@ function ExplorePage() {
             for (const transDoc of transactionsSnapshot.docs) {
               const transData = transDoc.data();
               
-              // Add the store to our purchase history if we have the storeId
-              if (transData.sellerId && !purchaseStores.has(transData.sellerId)) {
-                try {
-                  const storeDoc = await getDoc(doc(db, 'stores', transData.sellerId));
-                  if (storeDoc.exists()) {
-                    purchaseStores.set(transData.sellerId, { 
-                      id: transData.sellerId, 
-                      ...storeDoc.data(),
-                      purchaseCount: (purchaseStores.get(transData.sellerId)?.purchaseCount || 0) + 1  
-                    });
-                  }
-                } catch (error) {
-                  console.error('Error fetching store data from transaction:', error);
+              // Check if transaction is at least 3 days old
+              let transactionDate = null;
+              if (transData.timestamp) {
+                if (transData.timestamp.toDate) {
+                  // Firestore timestamp
+                  transactionDate = transData.timestamp.toDate();
+                } else if (typeof transData.timestamp === 'string') {
+                  // String date
+                  transactionDate = new Date(transData.timestamp);
+                } else if (transData.timestamp instanceof Date) {
+                  // Already a Date object
+                  transactionDate = transData.timestamp;
                 }
               }
               
-              // Process each item in the transaction
-              if (transData.items && Array.isArray(transData.items)) {
-                transData.items.forEach(item => {
-                  if (item.id && !purchasedItems.has(item.id)) {
-                    purchasedItems.set(item.id, { 
-                      ...item, 
-                      storeId: transData.sellerId,
-                      storeName: transData.storeName || transData.sellerName || 'Store'
-                    });
+              // Only process transactions that are at least 3 days old
+              if (transactionDate && transactionDate <= threeDaysAgo) {
+                // Add the store to our purchase history if we have the storeId
+                if (transData.sellerId && !purchaseStores.has(transData.sellerId)) {
+                  try {
+                    const storeDoc = await getDoc(doc(db, 'stores', transData.sellerId));
+                    if (storeDoc.exists()) {
+                      const storeData = storeDoc.data();
+                      // Only add store if it's live and not disabled/deleted
+                      if (storeData.live && !storeData.disabled && !storeData.deleted) {
+                        purchaseStores.set(transData.sellerId, { 
+                          id: transData.sellerId, 
+                          ...storeData,
+                          purchaseCount: (purchaseStores.get(transData.sellerId)?.purchaseCount || 0) + 1,
+                          lastPurchaseDate: transactionDate
+                        });
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error fetching store data from transaction:', error);
                   }
-                });
+                } else if (transData.sellerId && purchaseStores.has(transData.sellerId)) {
+                  // Update existing store data
+                  const storeData = purchaseStores.get(transData.sellerId);
+                  storeData.purchaseCount += 1;
+                  // Update to the most recent (but still 3+ days old) purchase date
+                  if (transactionDate > storeData.lastPurchaseDate) {
+                    storeData.lastPurchaseDate = transactionDate;
+                  }
+                  purchaseStores.set(transData.sellerId, storeData);
+                }
+                
+                // Process each item in the transaction (only for transactions 3+ days old)
+                if (transData.items && Array.isArray(transData.items)) {
+                  transData.items.forEach(item => {
+                    if (item.id && !purchasedItems.has(item.id)) {
+                      purchasedItems.set(item.id, { 
+                        ...item, 
+                        storeId: transData.sellerId,
+                        storeName: transData.storeName || transData.sellerName || 'Store',
+                        purchaseDate: transactionDate
+                      });
+                    }
+                  });
+                }
               }
             }
             
@@ -1142,7 +1297,128 @@ function ExplorePage() {
             setPurchasedFromStores(Array.from(purchaseStores.values()));
             setPreviouslyPurchasedItems(Array.from(purchasedItems.values()));
             
-            console.log(`Updated to ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from all purchase history`);
+            console.log(`Updated to ${purchaseStores.size} unique stores and ${purchasedItems.size} unique items from all purchase history (3+ days old)`);
+          }
+          
+          // Find similar stores based on purchased item categories and types
+          if (purchasedItems.size > 0) {
+            console.log('Finding similar stores based on purchased items...');
+            
+            // Extract categories and item names from purchased items
+            const purchasedCategories = new Set();
+            const purchasedItemNames = new Set();
+            const purchasedKeywords = new Set();
+            
+            Array.from(purchasedItems.values()).forEach(item => {
+              if (item.category) {
+                purchasedCategories.add(item.category.toLowerCase());
+              }
+              if (item.name) {
+                purchasedItemNames.add(item.name.toLowerCase());
+                // Extract keywords from item names
+                item.name.toLowerCase().split(/[\s,.-]+/).forEach(word => {
+                  if (word.length > 2) { // Only words longer than 2 characters
+                    purchasedKeywords.add(word);
+                  }
+                });
+              }
+            });
+            
+            console.log('Purchased categories:', Array.from(purchasedCategories));
+            console.log('Purchased item names:', Array.from(purchasedItemNames).slice(0, 5)); // Log first 5
+            console.log('Keywords:', Array.from(purchasedKeywords).slice(0, 10)); // Log first 10
+            
+            // Find stores with similar items
+            const similarStoresMap = new Map();
+            
+            try {
+              // Get all live stores
+              const allStoresQuery = query(
+                collection(db, 'stores'),
+                where('live', '==', true)
+              );
+              const allStoresSnapshot = await getDocs(allStoresQuery);
+              
+              // Check each store's items
+              for (const storeDoc of allStoresSnapshot.docs) {
+                const storeData = storeDoc.data();
+                const storeId = storeDoc.id;
+                
+                // Skip stores we already purchased from
+                if (purchaseStores.has(storeId)) continue;
+                
+                // Skip disabled or deleted stores
+                if (storeData.disabled || storeData.deleted) continue;
+                
+                // Get store's items
+                const storeItemsQuery = query(
+                  collection(db, 'stores', storeId, 'items')
+                );
+                const storeItemsSnapshot = await getDocs(storeItemsQuery);
+                
+                let matchScore = 0;
+                const matchedItems = [];
+                
+                storeItemsSnapshot.docs.forEach(itemDoc => {
+                  const itemData = itemDoc.data();
+                  let itemScore = 0;
+                  
+                  // Check category match (highest priority)
+                  if (itemData.category && purchasedCategories.has(itemData.category.toLowerCase())) {
+                    itemScore += 5;
+                  }
+                  
+                  // Check exact item name match (high priority)
+                  if (itemData.name && purchasedItemNames.has(itemData.name.toLowerCase())) {
+                    itemScore += 3;
+                  }
+                  
+                  // Check keyword matches (medium priority)
+                  if (itemData.name) {
+                    const itemWords = itemData.name.toLowerCase().split(/[\s,.-]+/);
+                    itemWords.forEach(word => {
+                      if (word.length > 2 && purchasedKeywords.has(word)) {
+                        itemScore += 1;
+                      }
+                    });
+                  }
+                  
+                  if (itemScore > 0) {
+                    matchScore += itemScore;
+                    matchedItems.push({
+                      name: itemData.name,
+                      category: itemData.category,
+                      score: itemScore
+                    });
+                  }
+                });
+                
+                // Add store if it has good matches
+                if (matchScore >= 3) { // Minimum threshold for recommendation
+                  similarStoresMap.set(storeId, {
+                    id: storeId,
+                    ...storeData,
+                    matchScore: matchScore,
+                    matchedItems: matchedItems.slice(0, 3) // Keep top 3 matched items
+                  });
+                }
+              }
+              
+              // Sort by match score and limit to top 10
+              const sortedSimilarStores = Array.from(similarStoresMap.values())
+                .sort((a, b) => b.matchScore - a.matchScore)
+                .slice(0, 10);
+              
+              setSimilarStores(sortedSimilarStores);
+              
+              console.log(`Found ${sortedSimilarStores.length} similar stores based on purchase history`);
+              sortedSimilarStores.forEach(store => {
+                console.log(`- ${store.storeName}: Score ${store.matchScore}, Matches: ${store.matchedItems.map(i => i.name).join(', ')}`);
+              });
+              
+            } catch (error) {
+              console.error('Error finding similar stores:', error);
+            }
           }
           
         } catch (error) {
@@ -1291,14 +1567,18 @@ function ExplorePage() {
         const boostedStoresQuery = query(
           collection(db, 'stores'),
           where('isBoosted', '==', true),
-          where('boostExpiryDate', '>', now)
+          where('boostExpiryDate', '>', now),
+          where('live', '==', true)
         );
         
         const boostedStoresSnap = await getDocs(boostedStoresQuery);
-        const boostedStoresData = boostedStoresSnap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const boostedStoresData = boostedStoresSnap.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          // Filter out disabled and deleted stores
+          .filter(shop => !shop.disabled && !shop.deleted);
         
         // Sort by boost amount (higher boosted stores first)
         boostedStoresData.sort((a, b) => (b.boostAmount || 0) - (a.boostAmount || 0));
@@ -1311,6 +1591,37 @@ function ExplorePage() {
     
     fetchBoostedStores();
   }, []);
+
+  // Check which stores have blocked the current user
+  useEffect(() => {
+    const checkBlockedStores = async () => {
+      if (!currentUser) {
+        setBlockedStores(new Set());
+        return;
+      }
+
+      try {
+        // Get all stores and check if they have blocked this user
+        const storesQuery = query(collection(db, 'stores'));
+        const storesSnapshot = await getDocs(storesQuery);
+        const blockedStoreIds = new Set();
+
+        for (const storeDoc of storesSnapshot.docs) {
+          const storeId = storeDoc.id;
+          const isBlocked = await isUserBlockedByStore(storeId, currentUser.uid);
+          if (isBlocked) {
+            blockedStoreIds.add(storeId);
+          }
+        }
+
+        setBlockedStores(blockedStoreIds);
+      } catch (error) {
+        console.error('Error checking blocked stores:', error);
+      }
+    };
+
+    checkBlockedStores();
+  }, [currentUser]);
   
   // Function to make fetchBoostedStores accessible
   const fetchBoostedStores = async () => {
@@ -1319,14 +1630,18 @@ function ExplorePage() {
       const boostedStoresQuery = query(
         collection(db, 'stores'),
         where('isBoosted', '==', true),
-        where('boostExpiryDate', '>', now)
+        where('boostExpiryDate', '>', now),
+        where('live', '==', true)
       );
       
       const boostedStoresSnap = await getDocs(boostedStoresQuery);
-      const boostedStoresData = boostedStoresSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const boostedStoresData = boostedStoresSnap.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        // Filter out disabled and deleted stores
+        .filter(shop => !shop.disabled && !shop.deleted);
       
       boostedStoresData.sort((a, b) => (b.boostAmount || 0) - (a.boostAmount || 0));
       setBoostedShops(boostedStoresData);
@@ -2618,8 +2933,13 @@ function ExplorePage() {
     );
   }
 
-  // FINAL: Filter by distance (radius) LAST
+  // FINAL: Filter by distance (radius) and blocked stores
   const filteredShops = displayedShops.filter(shop => {
+    // Filter out stores that have blocked the current user
+    if (blockedStores.has(shop.id)) {
+      return false;
+    }
+    
     if (!shop.latitude || !shop.longitude || !userLocation) return false;
     const distance = getDistanceFromLatLonInKm(
       Number(userLocation.lat), Number(userLocation.lng),
@@ -3516,7 +3836,7 @@ function ExplorePage() {
         </div>
       ) : (
         <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '0 1rem 2rem', scrollbarWidth: 'thin' }}>
-          {boostedShops.map(shop => {
+          {boostedShops.filter(shop => !blockedStores.has(shop.id)).map(shop => {
             // Use the same store card logic from spotlight section
             const today = daysOfWeek[new Date().getDay()];
             const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
@@ -6538,6 +6858,14 @@ function ExplorePage() {
 
       {/* Recommended Stores Section */}
       {/* Only show Recommended section for buyers (authenticated) */}
+      {console.log('Debug - Recommendations:', {
+        currentUser: !!currentUser,
+        userType: userType,
+        boostedShops: boostedShops.length,
+        purchased: purchasedFromStores.length,
+        similar: similarStores.length,
+        items: previouslyPurchasedItems.length
+      })}
       {currentUser && userType === 'buyer' && (
         <>
           <h2 style={{ 
@@ -6570,7 +6898,7 @@ function ExplorePage() {
               }
             `}</style>
             
-            {boostedShops.length === 0 && recentlyViewedShops.length === 0 && purchasedFromStores.length === 0 && previouslyPurchasedItems.length === 0 ? (
+            {boostedShops.length === 0 && purchasedFromStores.length === 0 && similarStores.length === 0 && previouslyPurchasedItems.length === 0 ? (
               <div style={{
                 width: '100%',
                 padding: '2rem',
@@ -6580,18 +6908,20 @@ function ExplorePage() {
                 borderRadius: '12px',
                 border: '2px dashed #E5E7EB',
               }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>�️</div>
                 <h3 style={{ marginBottom: '0.5rem', fontWeight: '600' }}>No recommendations yet</h3>
-                <p>Browse more stores and products to get personalized recommendations</p>
+                <p>Make some purchases to get personalized store recommendations based on your buying history</p>
               </div>
             ) : (
               <>
-                {/* Combine and deduplicate boosted, purchased from, and recently viewed shops */}
-                {[...boostedShops, ...purchasedFromStores, ...recentlyViewedShops]
+                {/* Combine and deduplicate boosted, purchased from, and similar shops */}
+                {[...boostedShops, ...purchasedFromStores, ...similarStores]
                   // Filter out duplicates by keeping the first occurrence of each store ID
                   .filter((shop, index, self) => 
                     shop && shop.id && index === self.findIndex((s) => s && s.id === shop.id)
                   )
+                  // Filter out stores that are not live, disabled, or deleted
+                  .filter(shop => shop.live && !shop.disabled && !shop.deleted)
                   // Limit to 10 shops max
                   .slice(0, 10)
                   .map(shop => {
@@ -6695,6 +7025,49 @@ function ExplorePage() {
                         }}>
                           {shop.storeName || shop.businessName || shop.name || 'Shop'}
                         </div>
+                        
+                        {/* Recommendation reason indicator */}
+                        {shop.matchScore ? (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#007B7F',
+                            background: 'rgba(0, 123, 127, 0.1)',
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            marginBottom: '6px',
+                            display: 'inline-block',
+                            fontWeight: '600'
+                          }}>
+                            🎯 Similar items you bought
+                          </div>
+                        ) : boostedShops.some(b => b.id === shop.id) ? (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#F59E0B',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            marginBottom: '6px',
+                            display: 'inline-block',
+                            fontWeight: '600'
+                          }}>
+                            🚀 Featured
+                          </div>
+                        ) : purchasedFromStores.some(p => p.id === shop.id) ? (
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#10B981',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            marginBottom: '6px',
+                            display: 'inline-block',
+                            fontWeight: '600'
+                          }}>
+                            🛍️ You shopped here
+                          </div>
+                        ) : null}
+                        
                         <div style={{ 
                           fontSize: '0.85rem',
                           color: '#555',

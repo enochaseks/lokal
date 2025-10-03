@@ -77,6 +77,7 @@ function StorePreviewPage() {
   const [message, setMessage] = useState('');
   const [messageSent, setMessageSent] = useState(false);
   const [following, setFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   const [userType, setUserType] = useState('');
   const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = not logged in, object = logged in
   const [avgRating, setAvgRating] = useState(0);
@@ -112,6 +113,10 @@ function StorePreviewPage() {
   const [stripeClientSecret, setStripeClientSecret] = useState('');
   const [stripePaymentIntentId, setStripePaymentIntentId] = useState('');
   const [processing, setProcessing] = useState(false);
+  
+  // Social sharing states
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
   
   const [storeFeeSettings, setStoreFeeSettings] = useState({
     deliveryEnabled: false,
@@ -166,8 +171,30 @@ function StorePreviewPage() {
     if (!id) return;
     
     setLoading(true);
-    const unsubStore = onSnapshot(doc(db, 'stores', id), (docSnap) => {
+    const unsubStore = onSnapshot(doc(db, 'stores', id), async (docSnap) => {
       if (docSnap.exists()) {
+        // Check if current user is blocked by this store
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+        
+        if (currentUser) {
+          try {
+            const blockedRef = doc(db, 'stores', id, 'blocked', currentUser.uid);
+            const blockedDoc = await getDoc(blockedRef);
+            
+            if (blockedDoc.exists()) {
+              // User is blocked - redirect or show access denied
+              setStore(null);
+              setLoading(false);
+              // Optionally show a message or redirect
+              console.log('Access denied: You have been blocked by this store');
+              navigate('/explore'); // Redirect to explore page
+              return;
+            }
+          } catch (error) {
+            console.error('Error checking if user is blocked:', error);
+          }
+        }
         const storeData = docSnap.data();
         setStore(storeData);
         
@@ -307,19 +334,154 @@ function StorePreviewPage() {
   }, [id]);
 
   const handleFollow = async () => {
-    if (!authUser || !id) return;
-    const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
-    await setDoc(followerRef, {
-      uid: authUser.uid,
-      email: authUser.email || '',
-      followedAt: new Date().toISOString(),
-    });
+    if (!authUser || !id || following || followLoading) return; // Prevent if already following or loading
+    
+    setFollowLoading(true);
+    try {
+      // First check if already following to prevent duplicates
+      const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
+      const followerDoc = await getDoc(followerRef);
+      
+      if (followerDoc.exists()) {
+        console.log('User is already following this store');
+        setFollowing(true); // Update local state
+        return;
+      }
+      
+      // Create follower document with merge option to prevent overwriting
+      await setDoc(followerRef, {
+        uid: authUser.uid,
+        email: authUser.email || '',
+        followedAt: new Date().toISOString(),
+      }, { merge: true });
+      
+      console.log('Successfully followed store');
+    } catch (error) {
+      console.error('Error following store:', error);
+      alert('Failed to follow store. Please try again.');
+    } finally {
+      setFollowLoading(false);
+    }
   };
 
   const handleUnfollow = async () => {
-    if (!authUser || !id) return;
-    const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
-    await deleteDoc(followerRef);
+    if (!authUser || !id || !following || followLoading) return; // Prevent if not following or loading
+    
+    setFollowLoading(true);
+    try {
+      const followerRef = doc(db, 'stores', id, 'followers', authUser.uid);
+      
+      // Check if document exists before trying to delete
+      const followerDoc = await getDoc(followerRef);
+      if (followerDoc.exists()) {
+        await deleteDoc(followerRef);
+        console.log('Successfully unfollowed store');
+      } else {
+        console.log('User was not following this store');
+        setFollowing(false); // Update local state
+      }
+    } catch (error) {
+      console.error('Error unfollowing store:', error);
+      alert('Failed to unfollow store. Please try again.');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+  
+  // Helper function to check if store is open
+  const isStoreOpen = () => {
+    if (!store) return false;
+    return isStoreOpenForToday(store);
+  };
+
+  // Social sharing functions
+  const generateShareableStoreCard = (store) => {
+    const storeUrl = `${window.location.origin}/store-preview/${store.id}`;
+    return {
+      title: `Check out ${store.storeName || store.businessName} on Lokal!`,
+      description: `Discover amazing local ${store.category || 'products'} in ${store.storeLocation}. ${isStoreOpen() ? 'Open now!' : 'Visit when they reopen!'}`,
+      image: store.backgroundImg || store.logoImg,
+      url: storeUrl,
+      hashtags: ['#LokalUK', '#LocalBusiness', '#SupportLocal', `#${(store.category || '').replace(/\s+/g, '')}`]
+    };
+  };
+
+  const handleShareToInstagram = () => {
+    const shareData = generateShareableStoreCard(store);
+    
+    // Instagram Stories sharing
+    const instagramText = `${shareData.title}\n\n${shareData.description}\n\n${shareData.hashtags.join(' ')}\n\n${shareData.url}`;
+    
+    // Copy to clipboard for Instagram
+    navigator.clipboard.writeText(instagramText).then(() => {
+      // Open Instagram
+      window.open('https://instagram.com/stories/camera/', '_blank');
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
+    });
+  };
+
+  const handleShareToFacebook = () => {
+    const shareData = generateShareableStoreCard(store);
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareData.url)}&quote=${encodeURIComponent(shareData.title + ' - ' + shareData.description)}`;
+    window.open(facebookUrl, '_blank', 'width=600,height=400');
+    setShareSuccess(true);
+    setTimeout(() => setShareSuccess(false), 3000);
+  };
+
+  const handleShareToSnapchat = () => {
+    const shareData = generateShareableStoreCard(store);
+    const snapchatText = `${shareData.title}\n${shareData.description}\n${shareData.url}`;
+    
+    // Copy to clipboard for Snapchat
+    navigator.clipboard.writeText(snapchatText).then(() => {
+      // Try to open Snapchat web or mobile app
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = 'snapchat://';
+      } else {
+        window.open('https://web.snapchat.com/', '_blank');
+      }
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
+    });
+  };
+
+  const handleShareToTikTok = () => {
+    const shareData = generateShareableStoreCard(store);
+    const tiktokText = `${shareData.title}\n${shareData.description}\n${shareData.hashtags.join(' ')}\n${shareData.url}`;
+    
+    // Copy to clipboard for TikTok
+    navigator.clipboard.writeText(tiktokText).then(() => {
+      // Try to open TikTok
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = 'tiktok://';
+      } else {
+        window.open('https://www.tiktok.com/', '_blank');
+      }
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
+    });
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      const shareData = generateShareableStoreCard(store);
+      try {
+        await navigator.share({
+          title: shareData.title,
+          text: shareData.description,
+          url: shareData.url
+        });
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 3000);
+      } catch (err) {
+        console.log('Share cancelled or failed');
+      }
+    } else {
+      setShowShareModal(true);
+    }
   };
   
   // Handle boosting a store
@@ -547,12 +709,27 @@ function StorePreviewPage() {
 
   // Add this line to define storeIsOpen
   const storeIsOpen = isStoreOpenForToday(store);
+  
+  // Check if store is both live and open for purchases
+  const canPurchase = store && store.live && storeIsOpen;
 
   // Helper to check if current user is the store owner
   const isStoreOwner = authUser && store && store.ownerId && authUser.uid === store.ownerId;
 
   // Add to cart handler
   function handleAddToCart(item) {
+    // Check if store is live before allowing purchases
+    if (!store.live) {
+      alert('This store is currently offline and not accepting orders. Please try again later.');
+      return;
+    }
+    
+    // Check if store is open
+    if (!storeIsOpen) {
+      alert('This store is currently closed. Please check the opening hours and try again later.');
+      return;
+    }
+    
     addToCart({
       storeId: id,
       storeName: store.storeName,
@@ -1249,8 +1426,8 @@ function StorePreviewPage() {
         }
         
         .help-button {
-          background: #F0F9FF;
-          border: 1px solid #007B7F;
+          background: transparent;
+          border: none;
           border-radius: 50%;
           width: 36px;
           height: 36px;
@@ -1260,14 +1437,13 @@ function StorePreviewPage() {
           cursor: pointer;
           font-size: 1.2rem;
           color: #007B7F;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
           transition: all 0.2s ease;
           margin-left: 10px;
         }
         
         .help-button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+          background: rgba(0, 123, 127, 0.1);
+          transform: translateY(-2px) scale(1.05);
         }
         
         .store-header {
@@ -2011,23 +2187,51 @@ function StorePreviewPage() {
                   <button 
                     onClick={handleUnfollow} 
                     className="action-button unfollow-button"
+                    title="Unfollow store"
+                    disabled={followLoading}
+                    style={{ opacity: followLoading ? 0.6 : 1 }}
                   >
-                    Unfollow
+                    {followLoading ? '⏳' : '❤️'}
                   </button>
                 ) : (
                   <button 
                     onClick={handleFollow} 
                     className="action-button follow-button"
+                    title="Follow store"
+                    disabled={followLoading}
+                    style={{ opacity: followLoading ? 0.6 : 1 }}
                   >
-                    Follow
+                    {followLoading ? '⏳' : '🤍'}
                   </button>
                 )
               )}
+              
+              {/* Share button - shown to all users */}
+              <button 
+                onClick={handleNativeShare}
+                className="action-button share-button"
+                title="Share this store"
+              >
+                📤
+              </button>
               
               <style>{`
                 .store-action-buttons {
                   display: flex;
                   gap: 10px;
+                  flex-wrap: wrap;
+                }
+                
+                @media (max-width: 640px) {
+                  .store-action-buttons {
+                    gap: 8px;
+                  }
+                  
+                  .action-button {
+                    padding: 10px 14px;
+                    font-size: 0.9rem;
+                    min-width: 100px;
+                  }
                 }
                 
                 .action-button {
@@ -2050,29 +2254,115 @@ function StorePreviewPage() {
                 }
                 
                 .follow-button {
-                  background: linear-gradient(135deg, #D92D20, #b91c1c);
-                  color: #fff;
+                  background: transparent;
+                  color: #D92D20;
+                  border: none;
+                  width: 44px;
+                  height: 44px;
+                  border-radius: 50%;
+                  padding: 0;
+                  font-size: 1.4rem;
+                  min-width: unset;
                 }
                 
                 .follow-button:hover {
-                  background: linear-gradient(135deg, #b91c1c, #991b1b);
+                  background: rgba(217, 45, 32, 0.1);
+                  color: #b91c1c;
                 }
                 
                 .unfollow-button {
-                  background: #ccc;
-                  color: #555;
+                  background: transparent;
+                  color: #6b7280;
+                  border: none;
+                  width: 44px;
+                  height: 44px;
+                  border-radius: 50%;
+                  padding: 0;
+                  font-size: 1.4rem;
+                  min-width: unset;
                 }
                 
                 .unfollow-button:hover {
-                  background: #bbb;
+                  background: rgba(107, 114, 128, 0.1);
+                  color: #4b5563;
+                }
+                
+                .share-button {
+                  background: transparent;
+                  color: #667eea;
+                  border: none;
+                  width: 44px;
+                  height: 44px;
+                  border-radius: 50%;
+                  padding: 0;
+                  font-size: 1.2rem;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  min-width: unset;
+                  transition: all 0.2s ease;
+                }
+                
+                .share-button:hover {
+                  background: rgba(102, 126, 234, 0.1);
+                  color: #5a67d8;
+                  transform: translateY(-2px) scale(1.05);
+                }
+                
+                .message-button {
+                  background: transparent;
+                  color: #007B7F;
+                  border: none;
+                  width: 44px;
+                  height: 44px;
+                  border-radius: 50%;
+                  padding: 0;
+                  font-size: 1.3rem;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  min-width: unset;
+                  transition: all 0.2s ease;
+                  cursor: pointer;
+                }
+                
+                .message-button:hover {
+                  background: rgba(0, 123, 127, 0.1);
+                  color: #005a5d;
+                  transform: translateY(-2px) scale(1.05);
+                }
+                
+                .boost-button {
+                  background: transparent;
+                  color: #FFD700;
+                  border: none;
+                  width: 40px;
+                  height: 40px;
+                  border-radius: 50%;
+                  padding: 0;
+                  font-size: 1.3rem;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  cursor: pointer;
+                  transition: all 0.2s ease;
+                }
+                
+                .boost-button:hover {
+                  background: rgba(255, 215, 0, 0.1);
+                  transform: translateY(-2px) scale(1.05);
                 }
               `}</style>
               
               {/* Message button - shown to authenticated users (buyers and sellers) */}
               {authUser && (
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
-                    Message
+                  <button 
+                    onClick={handleSendMessage} 
+                    className="message-button"
+                    title="Send message to store"
+                  >
+                    💬
                   </button>
                   
                   {/* Help Icon for desktop buyers */}
@@ -2110,49 +2400,44 @@ function StorePreviewPage() {
             }}>
               <button
                 onClick={() => setShowBoostModal(true)}
-                style={{ 
-                  background: store.isBoosted ? '#FEF9C3' : '#FFD700',
-                  color: '#333', 
-                  border: 'none', 
-                  borderRadius: '50%', 
-                  width: '40px',
-                  height: '40px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'transform 0.2s, box-shadow 0.2s'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.transform = 'scale(1.1)';
-                  e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.transform = 'none';
-                  e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
-                }}
-                title={store.isBoosted ? 'Store is boosted' : 'Boost this store'}
-                disabled={boostProcessing}
-                aria-label={store.isBoosted ? 'Store is boosted' : 'Boost this store'}
+                className="boost-button"
+                title={store.isBoosted ? 'Store is boosted' : 'Boost your store'}
               >
-                <span style={{ fontSize: '1.2rem' }}>⭐</span>
+                {store.isBoosted ? '⭐' : '🚀'}
               </button>
             </div>
           )}
           {/* Message button for store owners */}
           {isStoreOwner && (
             <div className="store-action-buttons">
-              <button onClick={handleSendMessage} style={{ background: '#007B7F', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 1.2rem', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
-                Messages
+              <button 
+                onClick={handleSendMessage} 
+                className="message-button"
+                title="View messages"
+              >
+                💬
               </button>
             </div>
           )}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <span style={{ background: isClosedToday ? '#fbe8e8' : (storeIsOpen ? '#e8fbe8' : '#fbe8e8'), color: isClosedToday ? '#D92D20' : (storeIsOpen ? '#3A8E3A' : '#D92D20'), borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
-            {isClosedToday ? 'Closed Today' : (storeIsOpen ? 'Open' : 'Closed')}
-          </span>
+          {!store.live ? (
+            <span style={{ 
+              background: '#fbe8e8', 
+              color: '#D92D20', 
+              borderRadius: 8, 
+              padding: '4px 16px', 
+              fontWeight: 600, 
+              fontSize: '1.1rem',
+              marginRight: '8px'
+            }}>
+              🚫 Store Offline
+            </span>
+          ) : (
+            <span style={{ background: isClosedToday ? '#fbe8e8' : (storeIsOpen ? '#e8fbe8' : '#fbe8e8'), color: isClosedToday ? '#D92D20' : (storeIsOpen ? '#3A8E3A' : '#D92D20'), borderRadius: 8, padding: '4px 16px', fontWeight: 600, fontSize: '1.1rem' }}>
+              {isClosedToday ? 'Closed Today' : (storeIsOpen ? 'Open' : 'Closed')}
+            </span>
+          )}
           {!isClosedToday && todayOpening && todayClosing && (
             <div className="store-hours">
               <div className="hours-icon">🕒</div>
@@ -2362,8 +2647,8 @@ function StorePreviewPage() {
                   key={item.id} 
                   className="product-card"
                   style={{ 
-                    opacity: storeIsOpen && (!item.stock || item.stock === 'in-stock') ? 1 : 0.5, 
-                    filter: storeIsOpen && (!item.stock || item.stock === 'in-stock') ? 'none' : 'grayscale(0.7)',
+                    opacity: canPurchase && (!item.stock || item.stock === 'in-stock') ? 1 : 0.5, 
+                    filter: canPurchase && (!item.stock || item.stock === 'in-stock') ? 'none' : 'grayscale(0.7)',
                     background: item.stock === 'out-of-stock' ? '#ffebee' : item.stock === 'low-stock' ? '#fff8e1' : '',
                     border: item.stock === 'out-of-stock' ? '1px solid #ffcdd2' : item.stock === 'low-stock' ? '1px solid #ffecb3' : '',
                     position: 'relative'
@@ -2439,15 +2724,15 @@ function StorePreviewPage() {
                     </div>
                     
                     {/* Show these buttons for buyers and unauthenticated users who are not the store owner */}
-                    {(userType === 'buyer' || !authUser) && !isStoreOwner && storeIsOpen && (
+                    {(userType === 'buyer' || !authUser) && !isStoreOwner && canPurchase && (
                       <div className="product-actions">
                         <button
                           className="add-to-cart-button"
-                          disabled={item.stock === 'out-of-stock'}
+                          disabled={item.stock === 'out-of-stock' || !store.live || !storeIsOpen}
                           style={{
-                            opacity: item.stock === 'out-of-stock' ? 0.5 : 1,
-                            cursor: item.stock === 'out-of-stock' ? 'not-allowed' : 'pointer',
-                            background: item.stock === 'out-of-stock' ? '#ccc' : ''
+                            opacity: (item.stock === 'out-of-stock' || !store.live || !storeIsOpen) ? 0.5 : 1,
+                            cursor: (item.stock === 'out-of-stock' || !store.live || !storeIsOpen) ? 'not-allowed' : 'pointer',
+                            background: (item.stock === 'out-of-stock' || !store.live || !storeIsOpen) ? '#ccc' : ''
                           }}
                           onClick={() => {
                             if (item.stock === 'out-of-stock') {
@@ -2463,7 +2748,10 @@ function StorePreviewPage() {
                             }
                           }}
                         >
-                          {item.stock === 'out-of-stock' ? 'Out of Stock' : 'Add to Cart'}
+                          {!store.live ? 'Store Offline' : 
+                           !storeIsOpen ? 'Store Closed' :
+                           item.stock === 'out-of-stock' ? 'Out of Stock' : 
+                           'Add to Cart'}
                         </button>
                       </div>
                     )}
@@ -2652,7 +2940,7 @@ function StorePreviewPage() {
                 box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
               }
             `}</style>
-            {userType === 'buyer' && selectedItems.length > 0 && storeIsOpen && (
+            {userType === 'buyer' && selectedItems.length > 0 && canPurchase && (
               <div className="cart-total-floating">
                 <div className="cart-total-amount">
                   Total: {getCurrencySymbol(selectedItems[0].currency)}
@@ -2660,7 +2948,7 @@ function StorePreviewPage() {
                 </div>
               </div>
             )}
-            {!authUser && storeIsOpen && (
+            {!authUser && canPurchase && (
               <div className="cart-total-floating sign-in-prompt" onClick={() => {
                 
               <style>{`
@@ -3458,6 +3746,223 @@ function StorePreviewPage() {
           </div>
         </div>
       )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: 20,
+            padding: '2.5rem',
+            maxWidth: 450,
+            width: '90%',
+            color: 'white',
+            textAlign: 'center',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '2rem'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700' }}>
+                📤 Share {store?.storeName || 'Store'}
+              </h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 35,
+                  height: 35,
+                  color: 'white',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <p style={{ 
+              margin: '0 0 2rem 0', 
+              opacity: 0.9,
+              fontSize: '1rem',
+              lineHeight: 1.5
+            }}>
+              Share this amazing local store with your friends and help support the community!
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <button
+                onClick={handleShareToInstagram}
+                style={{
+                  background: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
+                  border: 'none',
+                  borderRadius: 15,
+                  padding: '1rem',
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                📸 Instagram
+              </button>
+
+              <button
+                onClick={handleShareToFacebook}
+                style={{
+                  background: '#1877F2',
+                  border: 'none',
+                  borderRadius: 15,
+                  padding: '1rem',
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                👥 Facebook
+              </button>
+
+              <button
+                onClick={handleShareToSnapchat}
+                style={{
+                  background: '#FFFC00',
+                  border: 'none',
+                  borderRadius: 15,
+                  padding: '1rem',
+                  color: '#000',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                👻 Snapchat
+              </button>
+
+              <button
+                onClick={handleShareToTikTok}
+                style={{
+                  background: 'linear-gradient(45deg, #ff0050, #ff0050 50%, #000 50%, #000)',
+                  border: 'none',
+                  borderRadius: 15,
+                  padding: '1rem',
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                🎵 TikTok
+              </button>
+            </div>
+
+            <div style={{
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: 12,
+              padding: '1rem',
+              marginTop: '1rem',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <p style={{ 
+                margin: 0, 
+                fontSize: '0.9rem', 
+                opacity: 0.8,
+                lineHeight: 1.4
+              }}>
+                💡 Tip: Text will be copied to your clipboard for easy sharing on Instagram and Snapchat Stories!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Success Message */}
+      {shareSuccess && (
+        <div style={{
+          position: 'fixed',
+          top: 20,
+          right: 20,
+          background: 'linear-gradient(135deg, #10B981, #059669)',
+          color: 'white',
+          padding: '1rem 1.5rem',
+          borderRadius: 12,
+          zIndex: 1001,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)',
+          animation: 'slideInRight 0.3s ease-out'
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>✅</span>
+          <span style={{ fontWeight: '600' }}>Ready to share! Link copied to clipboard</span>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
   }

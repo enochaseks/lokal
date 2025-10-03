@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, collectionGroup, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, collectionGroup, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function FeedPage() {
+  const navigate = useNavigate();
   const [postText, setPostText] = useState('');
   const [mediaFiles, setMediaFiles] = useState([]);
   const [storeProfile, setStoreProfile] = useState(null);
@@ -41,6 +43,14 @@ function FeedPage() {
   const [reportDetails, setReportDetails] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportingPostId, setReportingPostId] = useState(null);
+
+  // Share Store Item Post states
+  const [showShareItemModal, setShowShareItemModal] = useState(false);
+  const [storeItems, setStoreItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [shareItemText, setShareItemText] = useState('');
+  const [shareItemLoading, setShareItemLoading] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -681,6 +691,101 @@ function FeedPage() {
     setIsCampaign(prev => !prev);
   };
 
+  // Share Store Item functions
+  const fetchStoreItems = async () => {
+    if (!user || !storeProfile) return;
+    
+    setLoadingItems(true);
+    try {
+      const itemsQuery = query(
+        collection(db, 'stores', user.uid, 'items'),
+        orderBy('createdAt', 'desc')
+      );
+      const itemsSnapshot = await getDocs(itemsQuery);
+      const items = itemsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setStoreItems(items);
+    } catch (error) {
+      console.error("Error fetching store items:", error);
+      alert("Failed to load store items. Please try again.");
+    }
+    setLoadingItems(false);
+  };
+
+  const handleSelectItem = (item) => {
+    setSelectedItem(item);
+    // Generate default share text
+    const defaultText = `Check out this amazing item from our store! 🛍️
+
+📦 ${item.name}
+💰 £${item.price}
+${item.category ? `🏷️ ${item.category}` : ''}
+
+${item.description || 'Available now at our store!'}
+
+#${storeProfile?.storeName?.replace(/\s+/g, '') || 'Store'} #LocalBusiness #SupportLocal`;
+
+    setShareItemText(defaultText);
+  };
+
+  const handleShareItem = async () => {
+    if (!selectedItem || !shareItemText.trim()) {
+      alert('Please select an item and add some text to share.');
+      return;
+    }
+
+    setShareItemLoading(true);
+
+    try {
+      // Create the post with filtered data (remove undefined values)
+      const itemData = {};
+      if (selectedItem.id) itemData.itemId = selectedItem.id;
+      if (selectedItem.name) itemData.name = selectedItem.name;
+      if (selectedItem.price !== undefined) itemData.price = selectedItem.price;
+      if (selectedItem.category) itemData.category = selectedItem.category;
+      if (selectedItem.description) itemData.description = selectedItem.description;
+      if (selectedItem.image) itemData.image = selectedItem.image;
+
+      await addDoc(collection(db, 'posts'), {
+        storeId: user.uid,
+        storeName: storeProfile.storeName,
+        storeAvatar: storeProfile.backgroundImg || '',
+        text: shareItemText,
+        media: selectedItem.image ? [{ type: 'image', url: selectedItem.image }] : [],
+        timestamp: serverTimestamp(),
+        likes: [],
+        comments: [],
+        campaign: false,
+        postType: 'shared-item',
+        itemData: itemData
+      });
+
+      // Reset form
+      setSelectedItem(null);
+      setShareItemText('');
+      setShowShareItemModal(false);
+
+      alert('Item shared successfully!');
+    } catch (error) {
+      console.error("Error sharing item:", error);
+      alert("Failed to share item. Please try again.");
+    }
+    setShareItemLoading(false);
+  };
+
+  const resetShareForm = () => {
+    setSelectedItem(null);
+    setShareItemText('');
+    setShowShareItemModal(false);
+  };
+
+  const openShareModal = () => {
+    setShowShareItemModal(true);
+    fetchStoreItems();
+  };
+
   // Handle report post functionality
   const handleReportPost = (postId) => {
     setReportingPostId(postId);
@@ -849,6 +954,37 @@ function FeedPage() {
                   />
                 </label>
                 
+                <button
+                  type="button"
+                  onClick={openShareModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    border: '1px solid #E4E6EA',
+                    borderRadius: '8px',
+                    background: '#F8F9FA',
+                    color: '#606770',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#E4E6EA';
+                    e.target.style.borderColor = '#BDC3C7';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = '#F8F9FA';
+                    e.target.style.borderColor = '#E4E6EA';
+                  }}
+                  title="Share an item from your store"
+                >
+                  <span style={{ fontSize: '16px' }}>🛍️</span>
+                  Share Item
+                </button>
+
                 <button
                   type="button"
                   onClick={handleToggleCampaign}
@@ -1623,6 +1759,26 @@ function FeedPage() {
                         </div>
                       </div>
                       
+                      {/* Shared Item Badge */}
+                      {post.postType === 'shared-item' && (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: '#E6F7F7',
+                          color: '#007B7F',
+                          padding: '6px 12px',
+                          borderRadius: '20px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          marginBottom: '12px',
+                          border: '1px solid #B8E6E6'
+                        }}>
+                          <span>🛍️</span>
+                          Shared Store Item
+                        </div>
+                      )}
+                      
                       {/* Post Content */}
                       {post.text && (
                         <p style={{ 
@@ -1637,6 +1793,58 @@ function FeedPage() {
                           {post.text}
                         </p>
                       )}
+                      
+                      {/* Shared Item Details */}
+                      {post.postType === 'shared-item' && post.itemData && (
+                        <div style={{
+                          background: '#F8F9FA',
+                          border: '1px solid #E4E6EA',
+                          borderRadius: '12px',
+                          padding: '16px',
+                          marginTop: '12px'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '8px'
+                          }}>
+                            <h4 style={{
+                              margin: '0',
+                              fontSize: '18px',
+                              fontWeight: '700',
+                              color: '#1C1E21'
+                            }}>
+                              {post.itemData.name}
+                            </h4>
+                            <span style={{
+                              fontSize: '18px',
+                              fontWeight: '700',
+                              color: '#007B7F'
+                            }}>
+                              £{post.itemData.price}
+                            </span>
+                          </div>
+                          {post.itemData.category && (
+                            <div style={{
+                              fontSize: '14px',
+                              color: '#65676B',
+                              marginBottom: '8px'
+                            }}>
+                              Category: {post.itemData.category}
+                            </div>
+                          )}
+                          {post.itemData.description && (
+                            <div style={{
+                              fontSize: '14px',
+                              color: '#65676B',
+                              lineHeight: '1.4'
+                            }}>
+                              {post.itemData.description}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1650,22 +1858,57 @@ function FeedPage() {
                   }}>
                     {post.media.map((m, idx) => (
                       m.type === 'image' ? (
-                        <img
-                          key={idx}
-                          src={m.url}
-                          alt="Post content"
-                          style={{ 
-                            width: '100%', 
-                            height: post.media.length === 1 ? '400px' : '200px', 
-                            objectFit: 'cover', 
-                            borderRadius: '12px', 
-                            cursor: 'pointer',
-                            transition: 'transform 0.2s ease'
-                          }}
-                          onClick={() => handleMediaClick(m.url, 'image')}
-                          onMouseEnter={(e) => e.target.style.transform = 'scale(1.02)'}
-                          onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-                        />
+                        <div key={idx} style={{ position: 'relative' }}>
+                          <img
+                            src={m.url}
+                            alt="Post content"
+                            style={{ 
+                              width: '100%', 
+                              height: post.media.length === 1 ? '400px' : '200px', 
+                              objectFit: 'cover', 
+                              borderRadius: '12px', 
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s ease'
+                            }}
+                            onClick={() => post.postType === 'shared-item' ? navigate(`/store-preview/${post.storeId}`) : handleMediaClick(m.url, 'image')}
+                            onMouseEnter={(e) => e.target.style.transform = 'scale(1.02)'}
+                            onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                          />
+                          {/* Store redirect icon for shared items */}
+                          {post.postType === 'shared-item' && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '12px',
+                              right: '12px',
+                              background: 'rgba(0, 0, 0, 0.7)',
+                              borderRadius: '50%',
+                              width: '40px',
+                              height: '40px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              zIndex: 2
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/store-preview/${post.storeId}`);
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = 'rgba(0, 123, 127, 0.9)';
+                              e.target.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = 'rgba(0, 0, 0, 0.7)';
+                              e.target.style.transform = 'scale(1)';
+                            }}
+                            title="Visit Store"
+                          >
+                            <span style={{ color: 'white', fontSize: '18px' }}>🛍️</span>
+                          </div>
+                          )}
+                        </div>
                       ) : m.type === 'video' ? (
                         <video
                           key={idx}
@@ -1769,6 +2012,38 @@ function FeedPage() {
                     <span style={{ fontSize: '16px' }}>💬</span>
                     Comment
                   </button>
+                  {/* View in Store button for shared items */}
+                  {post.postType === 'shared-item' && (
+                    <button 
+                      onClick={() => navigate(`/store-preview/${post.storeId}`)} 
+                      style={{ 
+                        flex: 1, 
+                        background: 'none', 
+                        border: 'none', 
+                        padding: '14px 16px', 
+                        fontWeight: '600',
+                        fontSize: '15px',
+                        color: '#007B7F', 
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        margin: '8px 4px',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#E6F7F7';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'none';
+                      }}
+                    >
+                      <span style={{ fontSize: '16px' }}>🛍️</span>
+                      View in Store
+                    </button>
+                  )}
                 </div>
                 {/* Comments Section */}
                 {openComments[post.id] && (
@@ -2981,6 +3256,356 @@ function FeedPage() {
                 {reportSubmitting ? 'Submitting...' : 'Submit Report'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Store Item Modal */}
+      {showShareItemModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 20,
+            padding: '2rem',
+            maxWidth: 500,
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem',
+              paddingBottom: '1rem',
+              borderBottom: '2px solid #f0f0f0'
+            }}>
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: '1.5rem', 
+                fontWeight: '700',
+                color: '#1C1E21',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                🛍️ Share Store Item
+              </h3>
+              <button
+                onClick={resetShareForm}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#65676B',
+                  padding: '4px',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
+                onMouseLeave={(e) => e.target.style.background = 'none'}
+              >
+                ×
+              </button>
+            </div>
+
+            {!selectedItem ? (
+              <>
+                {/* Store Items List */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ 
+                    margin: '0 0 1rem 0', 
+                    fontSize: '1.1rem', 
+                    fontWeight: '600',
+                    color: '#1C1E21'
+                  }}>
+                    Select an item from your store:
+                  </h4>
+                  
+                  {loadingItems ? (
+                    <div style={{ 
+                      textAlign: 'center', 
+                      padding: '2rem',
+                      color: '#65676B'
+                    }}>
+                      Loading your store items...
+                    </div>
+                  ) : storeItems.length === 0 ? (
+                    <div style={{ 
+                      textAlign: 'center', 
+                      padding: '2rem',
+                      color: '#65676B',
+                      background: '#F8F9FA',
+                      borderRadius: '8px',
+                      border: '2px dashed #E4E6EA'
+                    }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📦</div>
+                      <h4 style={{ margin: '0 0 0.5rem 0' }}>No items found</h4>
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                        Add items to your store inventory first, then come back to share them on your feed!
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      maxHeight: '400px', 
+                      overflowY: 'auto',
+                      border: '1px solid #E4E6EA',
+                      borderRadius: '8px'
+                    }}>
+                      {storeItems.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => handleSelectItem(item)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px',
+                            borderBottom: '1px solid #F0F2F5',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#F8F9FA'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                        >
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              style={{
+                                width: '60px',
+                                height: '60px',
+                                objectFit: 'cover',
+                                borderRadius: '8px',
+                                background: '#F0F2F5'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '60px',
+                              height: '60px',
+                              background: '#F0F2F5',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1.5rem'
+                            }}>
+                              📦
+                            </div>
+                          )}
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ 
+                              fontWeight: '600', 
+                              fontSize: '1rem',
+                              color: '#1C1E21',
+                              marginBottom: '4px'
+                            }}>
+                              {item.name}
+                            </div>
+                            <div style={{ 
+                              color: '#007B7F', 
+                              fontWeight: '600',
+                              fontSize: '0.9rem',
+                              marginBottom: '2px'
+                            }}>
+                              £{item.price}
+                            </div>
+                            {item.category && (
+                              <div style={{ 
+                                color: '#65676B', 
+                                fontSize: '0.8rem'
+                              }}>
+                                {item.category}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div style={{
+                            color: '#007B7F',
+                            fontSize: '1.2rem'
+                          }}>
+                            →
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Selected Item Preview & Post Composer */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '1rem'
+                  }}>
+                    <button
+                      onClick={() => setSelectedItem(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#65676B',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        padding: '4px'
+                      }}
+                    >
+                      ← Back
+                    </button>
+                    <h4 style={{ margin: 0, color: '#1C1E21' }}>
+                      Sharing: {selectedItem.name}
+                    </h4>
+                  </div>
+
+                  {/* Item Preview */}
+                  <div style={{
+                    background: '#F8F9FA',
+                    border: '1px solid #E4E6EA',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '1rem'
+                  }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {selectedItem.image ? (
+                        <img
+                          src={selectedItem.image}
+                          alt={selectedItem.name}
+                          style={{
+                            width: '80px',
+                            height: '80px',
+                            objectFit: 'cover',
+                            borderRadius: '8px'
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '80px',
+                          height: '80px',
+                          background: '#E4E6EA',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '2rem'
+                        }}>
+                          📦
+                        </div>
+                      )}
+                      
+                      <div>
+                        <div style={{ fontWeight: '600', fontSize: '1.1rem', marginBottom: '4px' }}>
+                          {selectedItem.name}
+                        </div>
+                        <div style={{ color: '#007B7F', fontWeight: '600', marginBottom: '2px' }}>
+                          £{selectedItem.price}
+                        </div>
+                        {selectedItem.category && (
+                          <div style={{ color: '#65676B', fontSize: '0.9rem' }}>
+                            {selectedItem.category}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Post Text */}
+                  <div>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontWeight: '600',
+                      color: '#1C1E21'
+                    }}>
+                      Your post text:
+                    </label>
+                    <textarea
+                      value={shareItemText}
+                      onChange={(e) => setShareItemText(e.target.value)}
+                      placeholder="Write something about this item..."
+                      rows={6}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        border: '2px solid #E4E6EA',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Share Button */}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '1rem',
+                  justifyContent: 'flex-end',
+                  paddingTop: '1rem',
+                  borderTop: '1px solid #E4E6EA'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItem(null)}
+                    disabled={shareItemLoading}
+                    style={{
+                      background: '#F0F2F5',
+                      color: shareItemLoading ? '#BDC3C7' : '#65676B',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '12px 24px',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: shareItemLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleShareItem}
+                    disabled={shareItemLoading || !shareItemText.trim()}
+                    style={{
+                      background: (shareItemLoading || !shareItemText.trim()) ? '#BDC3C7' : '#007B7F',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '12px 24px',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: (shareItemLoading || !shareItemText.trim()) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      minWidth: '120px'
+                    }}
+                  >
+                    {shareItemLoading ? 'Sharing...' : 'Share Item'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -26,6 +26,25 @@ const saveStoreInfoToLocalStorage = (conversationId, storeData) => {
   }
 };
 
+// Utility function to get user's IP address
+const getUserIPAddress = async () => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    return data.ip;
+  } catch (error) {
+    console.warn('Failed to get IP from ipify, trying backup...', error);
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      return data.ip;
+    } catch (backupError) {
+      console.error('Failed to get IP address:', backupError);
+      return null;
+    }
+  }
+};
+
 // Function to load store info from localStorage
 const loadStoreInfoFromLocalStorage = (conversationId) => {
   try {
@@ -114,6 +133,13 @@ function MessagesPage() {
   const [loadingStoreHistory, setLoadingStoreHistory] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [editableReportText, setEditableReportText] = useState('');
+
+  // Block request states
+  const [showBlockRequestModal, setShowBlockRequestModal] = useState(false);
+  const [blockRequestReason, setBlockRequestReason] = useState('');
+  const [blockRequestDetails, setBlockRequestDetails] = useState('');
+  const [blockRequestDuration, setBlockRequestDuration] = useState('7');
+  const [submittingBlockRequest, setSubmittingBlockRequest] = useState(false);
 
   // Collapsible sections state
   const [cartSectionsCollapsed, setCartSectionsCollapsed] = useState({
@@ -1247,6 +1273,26 @@ function MessagesPage() {
     return () => unsubscribe();
   }, [selectedConversation, currentUser]);
 
+  // Check blocking status when conversation is selected
+  useEffect(() => {
+    const checkConversationBlockStatus = async () => {
+      if (!selectedConversation || !currentUser) {
+        setUserBlockStatus(null);
+        return;
+      }
+
+      try {
+        const blockCheck = await checkIfUserBlocked(currentUser.uid, selectedConversation.otherUserId);
+        setUserBlockStatus(blockCheck);
+      } catch (error) {
+        console.error('Error checking block status:', error);
+        setUserBlockStatus(null);
+      }
+    };
+
+    checkConversationBlockStatus();
+  }, [selectedConversation, currentUser]);
+
   // Fetch store info when conversation is selected (for displaying correct email and refunds policy)
   useEffect(() => {
     if (!selectedConversation) return;
@@ -1730,6 +1776,7 @@ function MessagesPage() {
   // Check if user is blocked from messaging
   const checkIfUserBlocked = async (senderId, receiverId) => {
     try {
+      // First check old system (temporary block system)
       const blockedUsersQuery = query(
         collection(db, 'blocked_users'),
         where('buyerId', '==', senderId),
@@ -1751,7 +1798,8 @@ function MessagesPage() {
             isBlocked: true,
             reason: blockData.reason,
             remainingHours: remainingTime,
-            blockUntil: blockUntil
+            blockUntil: blockUntil,
+            blockType: 'temporary'
           };
         } else {
           // Block has expired, deactivate it
@@ -1760,6 +1808,158 @@ function MessagesPage() {
             expiredAt: serverTimestamp()
           });
         }
+      }
+
+      // Check for permanent store-level blocks
+      // Check if sender is blocked by receiver (store owner blocking buyer)
+      try {
+        const storeBlockedRef = doc(db, 'stores', receiverId, 'blocked', senderId);
+        const storeBlockedDoc = await getDoc(storeBlockedRef);
+        
+        if (storeBlockedDoc.exists()) {
+          const blockData = storeBlockedDoc.data();
+          return {
+            isBlocked: true,
+            reason: 'You have been blocked by this store owner',
+            blockType: 'permanent',
+            blockedAt: blockData.blockedAt,
+            blockedBy: blockData.blockedBy
+          };
+        }
+      } catch (error) {
+        console.error('Error checking store-level blocks:', error);
+      }
+
+      // Check if receiver is blocked by sender's store (if sender is a store owner)
+      try {
+        const senderStoreBlockedRef = doc(db, 'stores', senderId, 'blocked', receiverId);
+        const senderStoreBlockedDoc = await getDoc(senderStoreBlockedRef);
+        
+        if (senderStoreBlockedDoc.exists()) {
+          const blockData = senderStoreBlockedDoc.data();
+          return {
+            isBlocked: true,
+            reason: 'You have blocked this user from your store',
+            blockType: 'permanent',
+            blockedAt: blockData.blockedAt,
+            blockedBy: blockData.blockedBy
+          };
+        }
+      } catch (error) {
+        console.error('Error checking sender store blocks:', error);
+      }
+
+      // Check for admin blocks
+      try {
+        const adminBlocksQuery = query(
+          collection(db, 'admin_blocks'),
+          where('userId', '==', senderId),
+          where('storeId', '==', receiverId),
+          where('isActive', '==', true)
+        );
+        
+        const adminBlocksSnapshot = await getDocs(adminBlocksQuery);
+        
+        for (const adminBlockDoc of adminBlocksSnapshot.docs) {
+          const blockData = adminBlockDoc.data();
+          
+          // Check if block has expired (for non-permanent blocks)
+          if (blockData.expiresAt && blockData.expiresAt.toDate() < new Date()) {
+            // Block has expired, deactivate it
+            await updateDoc(doc(db, 'admin_blocks', adminBlockDoc.id), {
+              isActive: false,
+              expiredAt: serverTimestamp()
+            });
+            continue;
+          }
+          
+          // Block is still active
+          return {
+            isBlocked: true,
+            reason: `You have been suspended from this store by admin.\nReason: ${blockData.reason}`,
+            blockType: 'admin_block',
+            duration: blockData.duration,
+            adminResponse: blockData.adminResponse,
+            blockedAt: blockData.createdAt,
+            expiresAt: blockData.expiresAt
+          };
+        }
+      } catch (error) {
+        console.error('Error checking admin blocks:', error);
+      }
+
+      // Check for IP blocks
+      try {
+        const userIP = await getUserIPAddress();
+        if (userIP) {
+          // Check store-specific IP blocks
+          const storeIPBlocksQuery = query(
+            collection(db, `stores/${receiverId}/blocked_ips`),
+            where('ipAddress', '==', userIP),
+            where('isActive', '==', true)
+          );
+          const storeIPBlocksSnapshot = await getDocs(storeIPBlocksQuery);
+          
+          for (const ipBlockDoc of storeIPBlocksSnapshot.docs) {
+            const blockData = ipBlockDoc.data();
+            // Check if block is still active (not expired)
+            if (blockData.blockedUntil === 'permanent') {
+              return {
+                isBlocked: true,
+                reason: `Your IP address has been permanently blocked from this store.\nReason: ${blockData.reason}`,
+                blockType: 'ip_permanent',
+                adminId: blockData.adminId,
+                adminName: blockData.adminName
+              };
+            } else if (new Date(blockData.blockedUntil) > new Date()) {
+              const remainingHours = Math.ceil((new Date(blockData.blockedUntil) - new Date()) / (1000 * 60 * 60));
+              return {
+                isBlocked: true,
+                reason: `Your IP address has been temporarily blocked from this store.\nReason: ${blockData.reason}`,
+                blockType: 'ip_temporary',
+                remainingHours: remainingHours,
+                blockUntil: new Date(blockData.blockedUntil),
+                adminId: blockData.adminId,
+                adminName: blockData.adminName
+              };
+            }
+          }
+
+          // Check seller-level IP blocks (blocks access to all stores owned by the seller)
+          const sellerIPBlocksQuery = query(
+            collection(db, `users/${receiverId}/blocked_ips`),
+            where('ipAddress', '==', userIP),
+            where('isActive', '==', true)
+          );
+          const sellerIPBlocksSnapshot = await getDocs(sellerIPBlocksQuery);
+          
+          for (const ipBlockDoc of sellerIPBlocksSnapshot.docs) {
+            const blockData = ipBlockDoc.data();
+            // Check if block is still active (not expired)
+            if (blockData.blockedUntil === 'permanent') {
+              return {
+                isBlocked: true,
+                reason: `Your IP address has been permanently blocked from all stores owned by this seller.\nReason: ${blockData.reason}`,
+                blockType: 'seller_ip_permanent',
+                adminId: blockData.adminId,
+                adminName: blockData.adminName
+              };
+            } else if (new Date(blockData.blockedUntil) > new Date()) {
+              const remainingHours = Math.ceil((new Date(blockData.blockedUntil) - new Date()) / (1000 * 60 * 60));
+              return {
+                isBlocked: true,
+                reason: `Your IP address has been temporarily blocked from all stores owned by this seller.\nReason: ${blockData.reason}`,
+                blockType: 'seller_ip_temporary',
+                remainingHours: remainingHours,
+                blockUntil: new Date(blockData.blockedUntil),
+                adminId: blockData.adminId,
+                adminName: blockData.adminName
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking IP blocks:', error);
       }
       
       return { isBlocked: false };
@@ -1777,11 +1977,28 @@ function MessagesPage() {
       const blockCheck = await checkIfUserBlocked(currentUser.uid, selectedConversation.otherUserId);
       
       if (blockCheck.isBlocked) {
-        const remainingTime = blockCheck.remainingHours > 24 ? 
-          `${Math.ceil(blockCheck.remainingHours / 24)} day(s)` : 
-          `${blockCheck.remainingHours} hour(s)`;
-          
-        alert(`❌ You are temporarily blocked from messaging this seller.\n\nReason: ${blockCheck.reason}\n\nTime remaining: ${remainingTime}\n\nThis restriction was put in place to protect our sellers. If you believe this was done in error, please contact support.`);
+        if (blockCheck.blockType === 'permanent') {
+          // Permanent store-level block
+          if (blockCheck.reason === 'You have blocked this user from your store') {
+            alert(`🚫 You have blocked this user from your store.\n\nTo send messages to them, you need to unblock them first.\n\nYou can manage blocked users in your store profile under "Manage Blocked Users".`);
+          } else {
+            alert(`🚫 You have been permanently blocked by this store.\n\nReason: ${blockCheck.reason}\n\nYou cannot send messages to this store. If you believe this was done in error, please contact support.`);
+          }
+        } else if (blockCheck.blockType === 'admin_block') {
+          // Admin imposed block
+          const expiryText = blockCheck.duration === 'permanent' ? 
+            'This is a permanent suspension.' : 
+            `This suspension will expire on ${blockCheck.expiresAt?.toDate().toLocaleDateString()}.`;
+            
+          alert(`🚨 You have been suspended from this store by admin.\n\n${blockCheck.reason}\n\n${expiryText}\n\nAdmin Response: ${blockCheck.adminResponse || 'No additional comments.'}\n\nIf you believe this was done in error, please contact support with your case details.`);
+        } else {
+          // Temporary block (old system)
+          const remainingTime = blockCheck.remainingHours > 24 ? 
+            `${Math.ceil(blockCheck.remainingHours / 24)} day(s)` : 
+            `${blockCheck.remainingHours} hour(s)`;
+            
+          alert(`❌ You are temporarily blocked from messaging this seller.\n\nReason: ${blockCheck.reason}\n\nTime remaining: ${remainingTime}\n\nThis restriction was put in place to protect our sellers. If you believe this was done in error, please contact support.`);
+        }
         return;
       }
 
@@ -1802,6 +2019,80 @@ function MessagesPage() {
     } catch (error) {
       console.error('Error sending message:', error);
       alert('Failed to send message. Please try again.');
+    }
+  };
+
+  // Handle block request to admin
+  const handleBlockRequest = async () => {
+    if (!currentUser || !selectedConversation || !isSeller) return;
+    
+    if (!blockRequestReason.trim() || !blockRequestDetails.trim()) {
+      alert('Please provide both a reason and detailed description for the block request.');
+      return;
+    }
+
+    setSubmittingBlockRequest(true);
+    
+    try {
+      // Create block request document
+      const blockRequestData = {
+        requesterId: currentUser.uid,
+        requesterName: currentUser.displayName || currentUser.email,
+        requesterStoreId: currentUser.uid, // Store ID is same as seller's user ID
+        targetUserId: selectedConversation.otherUserId,
+        targetUserName: selectedConversation.otherUserName,
+        targetUserEmail: selectedConversation.otherUserEmail,
+        reason: blockRequestReason.trim(),
+        details: blockRequestDetails.trim(),
+        requestedDuration: parseInt(blockRequestDuration),
+        status: 'pending',
+        requestType: 'seller_block_request',
+        createdAt: serverTimestamp(),
+        conversationId: selectedConversation.id
+      };
+
+      // Add to block_requests collection
+      await addDoc(collection(db, 'block_requests'), blockRequestData);
+
+      // Send message to admin about the block request
+      const adminConversationId = `admin_${currentUser.uid}`;
+      
+      await addDoc(collection(db, 'messages'), {
+        conversationId: adminConversationId,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email,
+        senderEmail: currentUser.email,
+        receiverId: 'admin',
+        receiverName: 'Admin',
+        message: `🚫 BLOCK REQUEST SUBMITTED\n\nSeller: ${currentUser.displayName || currentUser.email}\nTarget User: ${selectedConversation.otherUserName}\nEmail: ${selectedConversation.otherUserEmail}\n\nReason: ${blockRequestReason}\n\nDetails: ${blockRequestDetails}\n\nRequested Duration: ${blockRequestDuration} days\n\nStatus: Pending Admin Review\n\nPlease review this request and take appropriate action.`,
+        timestamp: serverTimestamp(),
+        isRead: false,
+        messageType: 'block_request',
+        blockRequestData: blockRequestData
+      });
+
+      // Create/update admin conversation
+      await setDoc(doc(db, 'conversations', adminConversationId), {
+        participants: [currentUser.uid, 'admin'],
+        lastMessage: 'Block request submitted',
+        lastMessageTime: serverTimestamp(),
+        isAdminChat: true,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Reset form and close modal
+      setBlockRequestReason('');
+      setBlockRequestDetails('');
+      setBlockRequestDuration('7');
+      setShowBlockRequestModal(false);
+      
+      alert('✅ Block request submitted successfully!\n\nYour request has been sent to the admin for review. You will be notified once a decision is made.');
+      
+    } catch (error) {
+      console.error('Error submitting block request:', error);
+      alert('Failed to submit block request. Please try again.');
+    } finally {
+      setSubmittingBlockRequest(false);
     }
   };
 
@@ -7634,6 +7925,39 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                       )}
                     </div>
                   )}
+                  
+                  {isSeller && !isAdminConversation && (
+                    <div className="header-buttons">
+                      <button
+                        onClick={() => setShowBlockRequestModal(true)}
+                        className="block-request-btn"
+                        style={{
+                          backgroundColor: '#EF4444',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.backgroundColor = '#DC2626';
+                          e.target.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.backgroundColor = '#EF4444';
+                          e.target.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        🚫 Request Block
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="chat-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -9652,11 +9976,308 @@ I hereby confirm this is a formal report and all information provided is accurat
                       </div>
                     )}
 
-                    {/* Block Status Warning */}
-                    {userBlockStatus && (
+                    {/* Block Request Modal */}
+                    {showBlockRequestModal && (
                       <div style={{
-                        backgroundColor: '#FEF2F2',
-                        border: '2px solid #FECACA',
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 10000,
+                        padding: '20px'
+                      }}>
+                        <div style={{
+                          backgroundColor: 'white',
+                          borderRadius: '12px',
+                          padding: '25px',
+                          maxWidth: '600px',
+                          width: '100%',
+                          maxHeight: '80vh',
+                          overflowY: 'auto',
+                          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+                          border: '2px solid #EF4444'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '20px',
+                            paddingBottom: '15px',
+                            borderBottom: '2px solid #FEE2E2'
+                          }}>
+                            <h2 style={{
+                              margin: 0,
+                              color: '#DC2626',
+                              fontSize: '1.5rem',
+                              fontWeight: 'bold',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              🚫 Request User Block
+                            </h2>
+                            <button
+                              onClick={() => setShowBlockRequestModal(false)}
+                              style={{
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                fontSize: '24px',
+                                cursor: 'pointer',
+                                color: '#6B7280',
+                                padding: '4px',
+                                borderRadius: '4px',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#FEE2E2';
+                                e.target.style.color = '#DC2626';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = 'transparent';
+                                e.target.style.color = '#6B7280';
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div style={{
+                            backgroundColor: '#FFFBEB',
+                            border: '1px solid #FDE68A',
+                            borderRadius: '8px',
+                            padding: '15px',
+                            marginBottom: '20px'
+                          }}>
+                            <h3 style={{
+                              color: '#92400E',
+                              fontSize: '16px',
+                              margin: '0 0 8px 0',
+                              fontWeight: 'bold'
+                            }}>
+                              ⚠️ Request Admin Block for User
+                            </h3>
+                            <p style={{
+                              color: '#92400E',
+                              fontSize: '14px',
+                              margin: 0,
+                              lineHeight: '1.4'
+                            }}>
+                              This will send a request to the admin to temporarily suspend <strong>{selectedConversation?.otherUserName}</strong> from accessing your store. The admin will review your request and decide whether to grant the block.
+                            </p>
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              color: '#374151',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              marginBottom: '8px'
+                            }}>
+                              Reason for Block Request *
+                            </label>
+                            <select
+                              value={blockRequestReason}
+                              onChange={(e) => setBlockRequestReason(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #D1D5DB',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                backgroundColor: 'white',
+                                color: '#374151',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="">Select a reason...</option>
+                              <option value="Harassment or Abusive Behavior">Harassment or Abusive Behavior</option>
+                              <option value="Fraudulent Activity">Fraudulent Activity</option>
+                              <option value="Spam or Unwanted Messages">Spam or Unwanted Messages</option>
+                              <option value="Inappropriate Content">Inappropriate Content</option>
+                              <option value="Repeated Policy Violations">Repeated Policy Violations</option>
+                              <option value="Payment Issues">Payment Issues</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              color: '#374151',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              marginBottom: '8px'
+                            }}>
+                              Detailed Description *
+                            </label>
+                            <textarea
+                              value={blockRequestDetails}
+                              onChange={(e) => setBlockRequestDetails(e.target.value)}
+                              style={{
+                                width: '100%',
+                                minHeight: '120px',
+                                padding: '12px',
+                                border: '2px solid #D1D5DB',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                backgroundColor: 'white',
+                                color: '#374151',
+                                resize: 'vertical',
+                                outline: 'none',
+                                fontFamily: 'inherit'
+                              }}
+                              placeholder="Please provide specific details about the behavior or incident that led to this block request. Include dates, specific messages, or actions if relevant..."
+                            />
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            <label style={{
+                              display: 'block',
+                              color: '#374151',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              marginBottom: '8px'
+                            }}>
+                              Requested Block Duration
+                            </label>
+                            <select
+                              value={blockRequestDuration}
+                              onChange={(e) => setBlockRequestDuration(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #D1D5DB',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                backgroundColor: 'white',
+                                color: '#374151',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="1">1 Day</option>
+                              <option value="3">3 Days</option>
+                              <option value="7">7 Days (1 Week)</option>
+                              <option value="14">14 Days (2 Weeks)</option>
+                              <option value="30">30 Days (1 Month)</option>
+                              <option value="90">90 Days (3 Months)</option>
+                              <option value="365">365 Days (1 Year)</option>
+                              <option value="permanent">Permanent</option>
+                            </select>
+                          </div>
+
+                          <div style={{
+                            backgroundColor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            marginBottom: '20px'
+                          }}>
+                            <p style={{
+                              color: '#7F1D1D',
+                              fontSize: '13px',
+                              margin: 0,
+                              lineHeight: '1.4'
+                            }}>
+                              <strong>Note:</strong> This request will be reviewed by our admin team. False or frivolous requests may result in penalties to your store account. The admin has the final decision on whether to approve the block and for what duration.
+                            </p>
+                          </div>
+
+                          <div style={{
+                            display: 'flex',
+                            gap: '12px',
+                            marginTop: '20px',
+                            justifyContent: 'flex-end'
+                          }}>
+                            <button
+                              onClick={() => {
+                                setShowBlockRequestModal(false);
+                                setBlockRequestReason('');
+                                setBlockRequestDetails('');
+                                setBlockRequestDuration('7');
+                              }}
+                              disabled={submittingBlockRequest}
+                              style={{
+                                backgroundColor: '#6B7280',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '12px 20px',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: submittingBlockRequest ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s ease',
+                                opacity: submittingBlockRequest ? 0.6 : 1
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!submittingBlockRequest) {
+                                  e.target.style.backgroundColor = '#4B5563';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!submittingBlockRequest) {
+                                  e.target.style.backgroundColor = '#6B7280';
+                                }
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            
+                            <button
+                              onClick={handleBlockRequest}
+                              disabled={submittingBlockRequest || !blockRequestReason || !blockRequestDetails.trim()}
+                              style={{
+                                backgroundColor: submittingBlockRequest || !blockRequestReason || !blockRequestDetails.trim() ? '#9CA3AF' : '#EF4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '12px 20px',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: submittingBlockRequest || !blockRequestReason || !blockRequestDetails.trim() ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!submittingBlockRequest && blockRequestReason && blockRequestDetails.trim()) {
+                                  e.target.style.backgroundColor = '#DC2626';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!submittingBlockRequest && blockRequestReason && blockRequestDetails.trim()) {
+                                  e.target.style.backgroundColor = '#EF4444';
+                                }
+                              }}
+                            >
+                              {submittingBlockRequest && (
+                                <div style={{
+                                  width: '16px',
+                                  height: '16px',
+                                  border: '2px solid transparent',
+                                  borderTop: '2px solid white',
+                                  borderRadius: '50%',
+                                  animation: 'spin 1s linear infinite'
+                                }}></div>
+                              )}
+                              {submittingBlockRequest ? 'Submitting...' : 'Submit Request'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Block Status Warning */}
+                    {userBlockStatus && userBlockStatus.isBlocked && (
+                      <div style={{
+                        backgroundColor: userBlockStatus.blockType === 'permanent' ? '#FEF2F2' : '#FEF2F2',
+                        border: userBlockStatus.blockType === 'permanent' ? '2px solid #F87171' : '2px solid #FECACA',
                         borderRadius: '8px',
                         padding: '1rem',
                         margin: '1rem 0',
@@ -9668,7 +10289,9 @@ I hereby confirm this is a formal report and all information provided is accurat
                           fontSize: '1rem',
                           marginBottom: '0.5rem'
                         }}>
-                          🚫 You are temporarily blocked from messaging this seller
+                          {userBlockStatus.blockType === 'admin_block' ? '🚨 You have been suspended from this store by admin' :
+                           userBlockStatus.blockType === 'permanent' ? '🚫 You are blocked from messaging this store' : 
+                           '🚫 You are temporarily blocked from messaging this seller'}
                         </div>
                         <div style={{
                           color: '#7F1D1D',
@@ -9677,22 +10300,86 @@ I hereby confirm this is a formal report and all information provided is accurat
                         }}>
                           <strong>Reason:</strong> {userBlockStatus.reason}
                         </div>
-                        <div style={{
-                          color: '#7F1D1D',
-                          fontSize: '0.875rem'
-                        }}>
-                          <strong>Time remaining:</strong> {userBlockStatus.remainingHours > 24 ? 
-                            `${Math.ceil(userBlockStatus.remainingHours / 24)} day(s)` : 
-                            `${userBlockStatus.remainingHours} hour(s)`}
-                        </div>
-                        <div style={{
-                          color: '#7F1D1D',
-                          fontSize: '0.75rem',
-                          marginTop: '0.5rem',
-                          fontStyle: 'italic'
-                        }}>
-                          This restriction was put in place to protect sellers. Contact support if you believe this was done in error.
-                        </div>
+                        
+                        {userBlockStatus.blockType === 'admin_block' ? (
+                          <div>
+                            {userBlockStatus.adminResponse && (
+                              <div style={{
+                                color: '#7F1D1D',
+                                fontSize: '0.875rem',
+                                marginBottom: '0.5rem'
+                              }}>
+                                <strong>Admin Response:</strong> {userBlockStatus.adminResponse}
+                              </div>
+                            )}
+                            <div style={{
+                              color: '#7F1D1D',
+                              fontSize: '0.875rem',
+                              marginBottom: '0.5rem'
+                            }}>
+                              <strong>Duration:</strong> {userBlockStatus.duration === 'permanent' ? 'Permanent' : `${userBlockStatus.duration} days`}
+                            </div>
+                            {userBlockStatus.expiresAt && userBlockStatus.duration !== 'permanent' && (
+                              <div style={{
+                                color: '#7F1D1D',
+                                fontSize: '0.875rem',
+                                marginBottom: '0.5rem'
+                              }}>
+                                <strong>Expires on:</strong> {new Date(userBlockStatus.expiresAt.toDate()).toLocaleDateString()}
+                              </div>
+                            )}
+                            <div style={{
+                              color: '#7F1D1D',
+                              fontSize: '0.75rem',
+                              marginTop: '0.5rem',
+                              fontStyle: 'italic'
+                            }}>
+                              This suspension was imposed by admin. Contact support if you believe this was done in error.
+                            </div>
+                          </div>
+                        ) : userBlockStatus.blockType === 'permanent' ? (
+                          <div>
+                            {userBlockStatus.blockedAt && (
+                              <div style={{
+                                color: '#7F1D1D',
+                                fontSize: '0.875rem',
+                                marginBottom: '0.5rem'
+                              }}>
+                                <strong>Blocked on:</strong> {new Date(userBlockStatus.blockedAt).toLocaleDateString()}
+                              </div>
+                            )}
+                            <div style={{
+                              color: '#7F1D1D',
+                              fontSize: '0.75rem',
+                              marginTop: '0.5rem',
+                              fontStyle: 'italic'
+                            }}>
+                              {userBlockStatus.reason === 'You have blocked this user from your store' ? 
+                                'You have blocked this user. To send messages, unblock them in your store profile under "Manage Blocked Users".' :
+                                'This is a permanent block. Contact support if you believe this was done in error.'
+                              }
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div style={{
+                              color: '#7F1D1D',
+                              fontSize: '0.875rem'
+                            }}>
+                              <strong>Time remaining:</strong> {userBlockStatus.remainingHours > 24 ? 
+                                `${Math.ceil(userBlockStatus.remainingHours / 24)} day(s)` : 
+                                `${userBlockStatus.remainingHours} hour(s)`}
+                            </div>
+                            <div style={{
+                              color: '#7F1D1D',
+                              fontSize: '0.75rem',
+                              marginTop: '0.5rem',
+                              fontStyle: 'italic'
+                            }}>
+                              This restriction was put in place to protect sellers. Contact support if you believe this was done in error.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -9716,26 +10403,30 @@ I hereby confirm this is a formal report and all information provided is accurat
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && !userBlockStatus && sendMessage()}
-                        placeholder={userBlockStatus ? "You are blocked from messaging this seller" : "Type your message..."}
+                        onKeyPress={(e) => e.key === 'Enter' && !userBlockStatus?.isBlocked && sendMessage()}
+                        placeholder={userBlockStatus?.isBlocked ? 
+                          (userBlockStatus.blockType === 'admin_block' ? "You are suspended from messaging this store" :
+                           userBlockStatus.blockType === 'permanent' ? "You are blocked from messaging this store" : 
+                           "You are temporarily blocked from messaging this seller") : 
+                          "Type your message..."}
                         className="message-input"
-                        disabled={!!userBlockStatus}
+                        disabled={!!userBlockStatus?.isBlocked}
                         style={{
-                          backgroundColor: userBlockStatus ? '#F3F4F6' : '',
-                          color: userBlockStatus ? '#6B7280' : '',
-                          cursor: userBlockStatus ? 'not-allowed' : 'text'
+                          backgroundColor: userBlockStatus?.isBlocked ? '#F3F4F6' : '',
+                          color: userBlockStatus?.isBlocked ? '#6B7280' : '',
+                          cursor: userBlockStatus?.isBlocked ? 'not-allowed' : 'text'
                         }}
                       />
                       <button
                         onClick={sendMessage}
-                        disabled={!newMessage.trim() || !!userBlockStatus}
+                        disabled={!newMessage.trim() || !!userBlockStatus?.isBlocked}
                         className="send-button"
                         style={{
-                          backgroundColor: userBlockStatus ? '#9CA3AF' : '',
-                          cursor: userBlockStatus ? 'not-allowed' : 'pointer'
+                          backgroundColor: userBlockStatus?.isBlocked ? '#9CA3AF' : '',
+                          cursor: userBlockStatus?.isBlocked ? 'not-allowed' : 'pointer'
                         }}
                       >
-                        {userBlockStatus ? 'Blocked' : 'Send'}
+                        {userBlockStatus?.isBlocked ? 'Blocked' : 'Send'}
                       </button>
                       
                       {!isSeller && (

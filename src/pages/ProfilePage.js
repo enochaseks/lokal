@@ -37,7 +37,7 @@ function ProfilePage() {
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Add new state for active tab
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState('following');
 
   const navigate = useNavigate();
 
@@ -627,11 +627,9 @@ function ProfilePage() {
         {/* Tab Navigation */}
         <div style={{ display: 'flex', borderBottom: '2px solid #eee' }}>
           {[
-            { key: 'profile', label: 'Overview' },
             { key: 'following', label: 'Following' },
             { key: 'viewed', label: 'Recently Viewed' },
-            { key: 'orders', label: 'Orders' },
-            { key: 'preferences', label: 'Preferences' }
+            { key: 'orders', label: 'Orders' }
           ].map(tab => (
             <button
               key={tab.key}
@@ -657,14 +655,6 @@ function ProfilePage() {
 
         {/* Tab Content */}
         <div style={{ padding: '2rem' }}>
-          {activeTab === 'profile' && (
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ color: '#666', fontSize: '0.95rem' }}>
-                Welcome to your profile! Use the tabs above to navigate between different sections.
-              </p>
-            </div>
-          )}
-
           {activeTab === 'following' && (
             <div>
               <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Following Stores</h3>
@@ -934,12 +924,7 @@ function ProfilePage() {
             </div>
           )}
 
-          {activeTab === 'preferences' && (
-            <div style={{ textAlign: 'center' }}>
-              <h3 style={{ color: '#007B7F', marginBottom: '1rem' }}>Preferences</h3>
-              <p style={{ color: '#666' }}>Your account preferences and settings will appear here.</p>
-            </div>
-          )}
+
         </div>
       </div>
 

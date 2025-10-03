@@ -4,6 +4,27 @@ import { getAuth, signOut } from 'firebase/auth';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, getDocs, addDoc, serverTimestamp, where, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 
+const auth = getAuth();
+
+// Utility function to get user's IP address
+const getUserIPAddress = async () => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    return data.ip;
+  } catch (error) {
+    console.warn('Failed to get IP from ipify, trying backup...', error);
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      return data.ip;
+    } catch (backupError) {
+      console.error('Failed to get IP address:', backupError);
+      return null;
+    }
+  }
+};
+
 // Add pulse animation for online status
 const pulseKeyframes = `
   @keyframes pulse {
@@ -269,7 +290,7 @@ function AdminDashboardPage() {
   const [updateLoading, setUpdateLoading] = useState(false);
   
   // Admin messaging states
-  const [activeTab, setActiveTab] = useState('reports'); // 'reports', 'messages', 'stores', 'conversations'
+  const [activeTab, setActiveTab] = useState('reports'); // 'reports', 'messages', 'stores', 'conversations', 'block-requests'
   const [adminMessages, setAdminMessages] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [showMessagingModal, setShowMessagingModal] = useState(false);
@@ -302,6 +323,13 @@ function AdminDashboardPage() {
   const [blockReason, setBlockReason] = useState('');
   const [selectedBuyerToBlock, setSelectedBuyerToBlock] = useState(null);
   const [blockDurationDays, setBlockDurationDays] = useState(5); // Default to 5 days
+
+  // Block request states (from sellers)
+  const [blockRequests, setBlockRequests] = useState([]);
+  const [selectedBlockRequest, setSelectedBlockRequest] = useState(null);
+  const [showBlockRequestModal, setShowBlockRequestModal] = useState(false);
+  const [blockRequestResponse, setBlockRequestResponse] = useState('');
+  const [processingBlockRequest, setProcessingBlockRequest] = useState(false);
 
   useEffect(() => {
     // Show activity tracking system info
@@ -704,6 +732,167 @@ function AdminDashboardPage() {
     } catch (error) {
       console.error('Error cleaning up expired blocks:', error);
     }
+  };
+
+  // Block request handling functions
+  const handleBlockRequestAction = async (approve = true) => {
+    if (!selectedBlockRequest) return;
+    
+    setProcessingBlockRequest(true);
+    
+    try {
+      const status = approve ? 'approved' : 'rejected';
+      const finalDuration = approve ? blockDurationDays : '0';
+      
+      // Update block request status
+      await updateDoc(doc(db, 'block_requests', selectedBlockRequest.id), {
+        status: status,
+        adminId: auth.currentUser?.uid,
+        adminName: auth.currentUser?.displayName || auth.currentUser?.email,
+        adminResponse: blockRequestResponse.trim(),
+        processedAt: serverTimestamp(),
+        finalDuration: finalDuration
+      });
+
+      if (approve) {
+        // Use the requested duration from the seller's request
+        const requestedDurationDays = selectedBlockRequest.requestedDuration || selectedBlockRequest.duration || '7';
+        
+        // Create the actual block using existing block structure
+        const blockData = {
+          buyerId: selectedBlockRequest.targetUserId,
+          buyerName: selectedBlockRequest.targetUserName,
+          buyerEmail: selectedBlockRequest.targetUserEmail,
+          sellerId: selectedBlockRequest.requesterId,
+          sellerName: selectedBlockRequest.requesterName,
+          storeName: selectedBlockRequest.requesterName + "'s Store",
+          reason: selectedBlockRequest.reason,
+          adminReason: blockRequestResponse.trim(),
+          blockedAt: serverTimestamp(),
+          blockedUntil: requestedDurationDays === 'permanent' ? 
+            'permanent' : 
+            new Date(Date.now() + parseInt(requestedDurationDays) * 24 * 60 * 60 * 1000).toISOString(),
+          isActive: true,
+          blockType: 'admin_approved_seller_request',
+          originalRequestId: selectedBlockRequest.id,
+          conversationId: selectedBlockRequest.conversationId
+        };
+
+        await addDoc(collection(db, 'blocked_users'), blockData);
+
+        // Get user's IP address and block it from the store and seller
+        try {
+          const userIP = await getUserIPAddress();
+          if (userIP) {
+            // Block IP from the specific store
+            const storeIPBlockData = {
+              ipAddress: userIP,
+              blockedAt: serverTimestamp(),
+              blockedUntil: requestedDurationDays === 'permanent' ? 
+                'permanent' : 
+                new Date(Date.now() + parseInt(requestedDurationDays) * 24 * 60 * 60 * 1000).toISOString(),
+              reason: `Admin-approved IP block: ${selectedBlockRequest.reason}`,
+              adminId: auth.currentUser?.uid,
+              adminName: auth.currentUser?.displayName || auth.currentUser?.email,
+              buyerId: selectedBlockRequest.targetUserId,
+              buyerName: selectedBlockRequest.targetUserName,
+              buyerEmail: selectedBlockRequest.targetUserEmail,
+              sellerId: selectedBlockRequest.requesterId,
+              sellerName: selectedBlockRequest.requesterName,
+              storeId: selectedBlockRequest.storeId || null,
+              storeName: selectedBlockRequest.storeName || (selectedBlockRequest.requesterName + "'s Store"),
+              isActive: true,
+              blockType: 'admin_approved_ip_block',
+              originalRequestId: selectedBlockRequest.id
+            };
+
+            // Add to store-specific IP blocks collection
+            await addDoc(collection(db, `stores/${selectedBlockRequest.storeId || selectedBlockRequest.requesterId}/blocked_ips`), storeIPBlockData);
+            
+            // Also add to global seller IP blocks (prevents access to any store owned by this seller)
+            await addDoc(collection(db, `users/${selectedBlockRequest.requesterId}/blocked_ips`), storeIPBlockData);
+            
+            console.log(`✅ IP ${userIP} blocked from store and seller for ${requestedDurationDays} days`);
+          } else {
+            console.warn('⚠️ Could not retrieve user IP address for blocking');
+          }
+        } catch (ipError) {
+          console.error('❌ Error blocking IP address:', ipError);
+          // Don't fail the entire block process if IP blocking fails
+        }
+
+        // Send notification message to both parties using existing pattern
+        const abuseMessage = `⚠️ ADMIN ACTION: This buyer has been temporarily blocked from communicating with ${selectedBlockRequest.requesterName} for ${requestedDurationDays} days due to: ${selectedBlockRequest.reason}\n\nAdmin Response: ${blockRequestResponse || 'No additional comments.'}\n\nThis action was taken to protect our sellers from inappropriate behavior. Your IP address has also been blocked from accessing this store.`;
+        
+        await addDoc(collection(db, 'messages'), {
+          conversationId: selectedBlockRequest.conversationId,
+          senderId: 'admin',
+          senderName: 'Admin',
+          senderEmail: 'admin@lokal.com',
+          receiverId: selectedBlockRequest.targetUserId,
+          receiverName: selectedBlockRequest.targetUserName,
+          receiverEmail: selectedBlockRequest.targetUserEmail,
+          message: abuseMessage,
+          timestamp: serverTimestamp(),
+          isRead: false,
+          messageType: 'admin_block_notification'
+        });
+
+        // Notify seller
+        const sellerNotification = `🛡️ ADMIN ACTION: We have approved your request to block "${selectedBlockRequest.targetUserName}" for ${requestedDurationDays} days due to: ${selectedBlockRequest.reason}\n\nAdmin Response: ${blockRequestResponse || 'No additional comments.'}\n\nThe buyer is now blocked from messaging you and their IP address has been blocked from accessing your store.`;
+        
+        const adminConversationId = `admin_${selectedBlockRequest.requesterId}`;
+        await addDoc(collection(db, 'messages'), {
+          conversationId: adminConversationId,
+          senderId: 'admin',
+          senderName: 'Admin',
+          senderEmail: 'admin@lokal.com',
+          receiverId: selectedBlockRequest.requesterId,
+          receiverName: selectedBlockRequest.requesterName,
+          message: sellerNotification,
+          timestamp: serverTimestamp(),
+          isRead: false,
+          messageType: 'admin_response'
+        });
+      } else {
+        // Send rejection message to seller
+        const rejectionMessage = `❌ BLOCK REQUEST REJECTED\n\nYour request to block ${selectedBlockRequest.targetUserName} has been rejected.\n\nAdmin Response: ${blockRequestResponse || 'Request did not meet our blocking criteria.'}\n\nIf you continue to experience issues, please provide more detailed evidence.`;
+        
+        const adminConversationId = `admin_${selectedBlockRequest.requesterId}`;
+        await addDoc(collection(db, 'messages'), {
+          conversationId: adminConversationId,
+          senderId: 'admin',
+          senderName: 'Admin',
+          senderEmail: 'admin@lokal.com',
+          receiverId: selectedBlockRequest.requesterId,
+          receiverName: selectedBlockRequest.requesterName,
+          message: rejectionMessage,
+          timestamp: serverTimestamp(),
+          isRead: false,
+          messageType: 'admin_response'
+        });
+      }
+
+      // Reset modal state
+      setSelectedBlockRequest(null);
+      setShowBlockRequestModal(false);
+      setBlockRequestResponse('');
+      setBlockDurationDays(5);
+      
+      alert(`✅ Block request ${approve ? 'approved' : 'rejected'} successfully!`);
+      
+    } catch (error) {
+      console.error('Error processing block request:', error);
+      alert('Failed to process block request. Please try again.');
+    } finally {
+      setProcessingBlockRequest(false);
+    }
+  };
+
+  const openBlockRequestModal = (request, action) => {
+    setSelectedBlockRequest(request);
+    setShowBlockRequestModal(true);
+    setBlockRequestResponse('');
   };
 
   // Load live stores function - pull from same source as ExplorePage
@@ -1260,6 +1449,29 @@ function AdminDashboardPage() {
     return unsubscribe;
   };
 
+  // Load block requests function
+  const loadBlockRequests = () => {
+    console.log('Loading block requests from sellers...');
+    
+    const blockRequestsQuery = query(
+      collection(db, 'block_requests'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(blockRequestsQuery, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log('Block requests loaded:', requests.length);
+      setBlockRequests(requests);
+    }, (error) => {
+      console.error('Error loading block requests:', error);
+    });
+
+    return unsubscribe;
+  };
+
   // Load data when tab changes
   useEffect(() => {
     console.log('Admin Dashboard useEffect - activeTab:', activeTab);
@@ -1277,6 +1489,10 @@ function AdminDashboardPage() {
       case 'conversations':
         console.log('Loading seller-buyer conversations because tab is conversations');
         unsubscribe = loadSellerBuyerConversations();
+        break;
+      case 'block-requests':
+        console.log('Loading block requests because tab is block-requests');
+        unsubscribe = loadBlockRequests();
         break;
       default:
         break;
@@ -1506,6 +1722,21 @@ function AdminDashboardPage() {
             }}
           >
             🗨️ Seller-Buyer Chats ({sellerBuyerConversations.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('block-requests')}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '1rem 0',
+              fontSize: '1rem',
+              fontWeight: activeTab === 'block-requests' ? '700' : '400',
+              color: activeTab === 'block-requests' ? '#007B7F' : '#6B7280',
+              borderBottom: activeTab === 'block-requests' ? '2px solid #007B7F' : 'none',
+              cursor: 'pointer'
+            }}
+          >
+            🚫 Block Requests ({blockRequests.length})
           </button>
         </div>
       </div>
@@ -2499,6 +2730,213 @@ function AdminDashboardPage() {
             )}
           </div>
         </div>
+      ) : activeTab === 'block-requests' ? (
+        /* Block Requests Tab Content */
+        <div style={{ padding: '2rem' }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid #E5E7EB',
+              backgroundColor: '#F9FAFB'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#1F2937' }}>
+                  🚫 Block Requests
+                </h2>
+                <div style={{
+                  backgroundColor: '#DC2626',
+                  color: 'white',
+                  padding: '0.25rem 0.75rem',
+                  borderRadius: '12px',
+                  fontSize: '0.875rem',
+                  fontWeight: '600'
+                }}>
+                  {blockRequests.length} pending
+                </div>
+              </div>
+              <p style={{ margin: '0.5rem 0 0 0', color: '#6B7280', fontSize: '0.875rem' }}>
+                Review seller requests to block buyers from their stores
+              </p>
+            </div>
+
+            {blockRequests.length === 0 ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: '#6B7280' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1F2937', marginBottom: '0.5rem' }}>
+                  No Pending Requests
+                </h3>
+                <p>All block requests have been processed.</p>
+              </div>
+            ) : (
+              <div style={{ padding: '1rem' }}>
+                {blockRequests.map((request) => (
+                  <div key={request.id} style={{
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    marginBottom: '1rem',
+                    backgroundColor: '#fff',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    {/* Request Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span style={{ fontSize: '1.25rem', marginRight: '0.5rem' }}>🛍️</span>
+                          <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#1F2937', margin: 0 }}>
+                            {request.sellerName}
+                          </h3>
+                        </div>
+                        <p style={{ color: '#6B7280', fontSize: '0.875rem', margin: '0 0 0.5rem 0' }}>
+                          Store: {request.storeName}
+                        </p>
+                      </div>
+                      <div style={{
+                        backgroundColor: '#FEF3C7',
+                        color: '#D97706',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600'
+                      }}>
+                        PENDING
+                      </div>
+                    </div>
+
+                    {/* Target User Info */}
+                    <div style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '1rem', marginRight: '0.5rem' }}>👤</span>
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#DC2626', margin: 0 }}>
+                          TARGET USER
+                        </h4>
+                      </div>
+                      <p style={{ color: '#1F2937', fontSize: '0.9rem', margin: '0 0 0.25rem 0', fontWeight: '600' }}>
+                        {request.buyerName}
+                      </p>
+                      <p style={{ color: '#6B7280', fontSize: '0.75rem', margin: 0 }}>
+                        📧 {request.buyerEmail}
+                      </p>
+                    </div>
+
+                    {/* Request Details */}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            📅 Requested Duration
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#374151' }}>
+                            {request.duration}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            ⏰ Submitted
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#374151' }}>
+                            {new Date(request.createdAt.toDate()).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Reason */}
+                      <div style={{ marginBottom: '1rem' }}>
+                        <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                          📝 Reason
+                        </div>
+                        <div style={{
+                          backgroundColor: '#F9FAFB',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: '6px',
+                          padding: '0.75rem',
+                          fontSize: '0.875rem',
+                          color: '#374151'
+                        }}>
+                          {request.reason}
+                        </div>
+                      </div>
+
+                      {/* Additional Details */}
+                      {request.details && (
+                        <div style={{ marginBottom: '1rem' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                            📋 Additional Details
+                          </div>
+                          <div style={{
+                            backgroundColor: '#F9FAFB',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '6px',
+                            padding: '0.75rem',
+                            fontSize: '0.875rem',
+                            color: '#374151'
+                          }}>
+                            {request.details}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => openBlockRequestModal(request, 'reject')}
+                        disabled={processingBlockRequest}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#6B7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
+                          cursor: processingBlockRequest ? 'not-allowed' : 'pointer',
+                          opacity: processingBlockRequest ? 0.6 : 1,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => !processingBlockRequest && (e.target.style.backgroundColor = '#4B5563')}
+                        onMouseLeave={(e) => !processingBlockRequest && (e.target.style.backgroundColor = '#6B7280')}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => openBlockRequestModal(request, 'approve')}
+                        disabled={processingBlockRequest}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#DC2626',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
+                          cursor: processingBlockRequest ? 'not-allowed' : 'pointer',
+                          opacity: processingBlockRequest ? 0.6 : 1,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => !processingBlockRequest && (e.target.style.backgroundColor = '#B91C1C')}
+                        onMouseLeave={(e) => !processingBlockRequest && (e.target.style.backgroundColor = '#DC2626')}
+                      >
+                        Approve Block
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {/* Admin Messaging Modal */}
@@ -3279,6 +3717,255 @@ function AdminDashboardPage() {
                 }}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Block Request Review Modal */}
+      {showBlockRequestModal && selectedBlockRequest && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            maxWidth: '600px',
+            width: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid #E5E7EB'
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: '1.25rem',
+                fontWeight: 'bold',
+                color: '#1F2937'
+              }}>
+                🚫 Review Block Request
+              </h3>
+              <button
+                onClick={() => {
+                  setShowBlockRequestModal(false);
+                  setSelectedBlockRequest(null);
+                  setBlockRequestResponse('');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#6B7280'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Request Details */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                {/* Seller Info */}
+                <div style={{
+                  backgroundColor: '#F0F9FF',
+                  border: '1px solid #E0F2FE',
+                  borderRadius: '8px',
+                  padding: '1rem'
+                }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#0369A1', margin: '0 0 0.5rem 0' }}>
+                    🛍️ REQUESTING SELLER
+                  </h4>
+                  <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontWeight: '600', color: '#1F2937' }}>
+                    {selectedBlockRequest.sellerName}
+                  </p>
+                  <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6B7280' }}>
+                    📧 {selectedBlockRequest.sellerEmail}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#6B7280' }}>
+                    🏪 {selectedBlockRequest.storeName}
+                  </p>
+                </div>
+
+                {/* Target User Info */}
+                <div style={{
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '8px',
+                  padding: '1rem'
+                }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#DC2626', margin: '0 0 0.5rem 0' }}>
+                    👤 TARGET USER
+                  </h4>
+                  <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontWeight: '600', color: '#1F2937' }}>
+                    {selectedBlockRequest.buyerName}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#6B7280' }}>
+                    📧 {selectedBlockRequest.buyerEmail}
+                  </p>
+                </div>
+              </div>
+
+              {/* Request Info */}
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                      📅 Requested Duration
+                    </div>
+                    <div style={{ fontWeight: '600', color: '#374151', fontSize: '0.9rem' }}>
+                      {selectedBlockRequest.duration}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                      ⏰ Submitted
+                    </div>
+                    <div style={{ fontWeight: '600', color: '#374151', fontSize: '0.9rem' }}>
+                      {new Date(selectedBlockRequest.createdAt.toDate()).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reason */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                    📝 Reason for Block Request
+                  </div>
+                  <div style={{
+                    backgroundColor: '#F9FAFB',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                    padding: '1rem',
+                    fontSize: '0.875rem',
+                    color: '#374151'
+                  }}>
+                    {selectedBlockRequest.reason}
+                  </div>
+                </div>
+
+                {/* Additional Details */}
+                {selectedBlockRequest.details && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>
+                      📋 Additional Details
+                    </div>
+                    <div style={{
+                      backgroundColor: '#F9FAFB',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '6px',
+                      padding: '1rem',
+                      fontSize: '0.875rem',
+                      color: '#374151'
+                    }}>
+                      {selectedBlockRequest.details}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Admin Response */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '0.5rem'
+              }}>
+                Admin Response (optional):
+              </label>
+              <textarea
+                value={blockRequestResponse}
+                onChange={(e) => setBlockRequestResponse(e.target.value)}
+                placeholder="Enter any additional notes or explanation for your decision..."
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: '0.75rem',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowBlockRequestModal(false);
+                  setSelectedBlockRequest(null);
+                  setBlockRequestResponse('');
+                }}
+                disabled={processingBlockRequest}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  cursor: processingBlockRequest ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  opacity: processingBlockRequest ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleBlockRequestAction('reject')}
+                disabled={processingBlockRequest}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  borderRadius: '6px',
+                  backgroundColor: processingBlockRequest ? '#9CA3AF' : '#6B7280',
+                  color: 'white',
+                  cursor: processingBlockRequest ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  opacity: processingBlockRequest ? 0.6 : 1
+                }}
+              >
+                {processingBlockRequest ? 'Processing...' : 'Reject Request'}
+              </button>
+              <button
+                onClick={() => handleBlockRequestAction('approve')}
+                disabled={processingBlockRequest}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  borderRadius: '6px',
+                  backgroundColor: processingBlockRequest ? '#9CA3AF' : '#DC2626',
+                  color: 'white',
+                  cursor: processingBlockRequest ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  opacity: processingBlockRequest ? 0.6 : 1
+                }}
+              >
+                {processingBlockRequest ? 'Processing...' : 'Approve & Block User'}
               </button>
             </div>
           </div>

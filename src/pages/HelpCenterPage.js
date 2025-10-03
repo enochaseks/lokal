@@ -2751,6 +2751,1036 @@ function HelpCenterPage() {
               </div>
             </div>
           )}
+
+          {/* Block Requests Help Topic */}
+          {helpTopic === 'block-requests' && (
+            <div>
+              <h1 style={topicStyles.h1}>How to Request Buyer Blocks</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Seller Safety First:</strong> Our block request system allows sellers to request that problematic buyers be blocked from their stores. This helps maintain a safe and professional environment for all sellers on the platform.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>What Are Block Requests?</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: 0 }}><strong>Block requests</strong> are formal requests that sellers can submit to ask platform administrators to block specific buyers from their stores. This system provides an additional layer of protection for sellers who experience issues with particular customers.</p>
+                
+                <div style={{ marginTop: '15px' }}>
+                  <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#007B7F' }}>Key Features of Block Requests:</h4>
+                  <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                    <li><strong>Administrative Review:</strong> All block requests are reviewed by platform administrators before approval</li>
+                    <li><strong>IP Address Blocking:</strong> When approved, the system blocks both the user account and their IP address</li>
+                    <li><strong>Comprehensive Protection:</strong> Blocked users cannot access your store, message you, or make purchases</li>
+                    <li><strong>Permanent Effect:</strong> Once approved, blocks remain in effect indefinitely</li>
+                    <li><strong>Documentation:</strong> All requests are logged for platform safety monitoring</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>How to Submit a Block Request</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Access Your Store Dashboard</h3>
+                  <p>Navigate to your store management dashboard where you can access seller tools and safety features.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Find the Block Request Feature</h3>
+                  <p>Look for the "Request Block" or "Block User" option in your seller dashboard or customer management section.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Provide User Information</h3>
+                  <p>Enter the buyer's username, email, or other identifying information to specify who you want blocked.</p>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+                    <p><strong>Tip:</strong> The more accurate information you provide, the easier it will be for administrators to process your request quickly.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Explain the Reason</h3>
+                  <p>Provide a clear explanation of why you're requesting the block. Include details about:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Inappropriate behavior or communication</li>
+                    <li>Fraudulent purchase attempts</li>
+                    <li>Harassment or threats</li>
+                    <li>Violation of store policies</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>5</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Submit and Wait for Review</h3>
+                  <p>Submit your request and wait for administrator review. You'll receive a notification once your request has been processed.</p>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>What Happens After Approval</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>When Your Block Request is Approved:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>User Account Block:</strong> The buyer's account is blocked from accessing your store</li>
+                  <li><strong>IP Address Block:</strong> Their IP address is also blocked, preventing access through new accounts</li>
+                  <li><strong>Store-Level Protection:</strong> The block applies specifically to your store</li>
+                  <li><strong>Messaging Prevention:</strong> They cannot send you messages through the platform</li>
+                  <li><strong>Purchase Prevention:</strong> They cannot make purchases from your store</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Important Guidelines</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>Best Practices for Block Requests:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Be Specific:</strong> Provide clear, factual reasons for the block request</li>
+                  <li><strong>Include Evidence:</strong> If possible, reference specific incidents or messages</li>
+                  <li><strong>Stay Professional:</strong> Keep your explanation professional and focused on facts</li>
+                  <li><strong>Use Sparingly:</strong> Block requests should be reserved for genuine safety concerns</li>
+                  <li><strong>Be Patient:</strong> Allow administrators time to review your request thoroughly</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Need help with other safety features?</p>
+                <button 
+                  onClick={() => setHelpTopic('blocking-system')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Understanding Our Blocking System
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('seller-safety')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Seller Safety Guidelines
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Blocking System Help Topic */}
+          {helpTopic === 'blocking-system' && (
+            <div>
+              <h1 style={topicStyles.h1}>Understanding Our Blocking System</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Advanced Protection:</strong> Our blocking system uses multiple layers of protection to ensure that blocked users cannot circumvent restrictions. Learn how our comprehensive blocking technology keeps sellers safe.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>How Our Blocking System Works</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: 0 }}><strong>Multi-layered blocking</strong> ensures that when a user is blocked, they cannot easily create new accounts to continue problematic behavior. Our system combines user account blocking with IP address blocking for maximum effectiveness.</p>
+              </div>
+
+              <h2 style={topicStyles.h2}>Types of Blocking</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>User Account Blocking</h3>
+                  <p>The primary form of blocking that prevents a specific user account from:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Accessing your store pages</li>
+                    <li>Viewing your products</li>
+                    <li>Sending you messages</li>
+                    <li>Making purchases from your store</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>IP Address Blocking</h3>
+                  <p>An additional layer of protection that blocks the user's internet connection from accessing your store. This prevents them from:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Creating new accounts to bypass the user block</li>
+                    <li>Accessing your store without logging in</li>
+                    <li>Using different devices on the same network</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+                    <p><strong>Technical Note:</strong> Our system automatically detects the user's IP address when processing block requests, ensuring comprehensive protection.</p>
+                  </div>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Where Blocks Are Applied</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>Store-Level Blocking:</h4>
+                <p style={{ marginBottom: '10px' }}>Blocks are applied at the individual store level, meaning:</p>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Your Store Protection:</strong> Blocked users cannot access your specific store</li>
+                  <li><strong>Other Stores Unaffected:</strong> The user can still access other sellers' stores</li>
+                  <li><strong>Seller-Specific Blocking:</strong> Each seller manages their own blocked users list</li>
+                  <li><strong>Individual Control:</strong> You have full control over who is blocked from your store</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Technical Implementation</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Database Storage</h3>
+                  <p>Blocked users and IP addresses are stored in secure database collections:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Global Blocked IPs:</strong> Platform-wide IP blocking database</li>
+                    <li><strong>Store-Specific Blocks:</strong> Individual store blocking collections</li>
+                    <li><strong>User-Level Blocks:</strong> Seller-specific blocked user lists</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Real-Time Checking</h3>
+                  <p>Our system performs real-time checks whenever a user tries to:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Access a store page</li>
+                    <li>Send a message to a seller</li>
+                    <li>Make a purchase</li>
+                    <li>View store products</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff3e0', borderRadius: '6px' }}>
+                    <p><strong>Performance Note:</strong> All blocking checks are optimized for speed to ensure your store loads quickly for legitimate customers.</p>
+                  </div>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>What Blocked Users Experience</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#ffebee', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#c62828' }}>When a User is Blocked:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Store Access Denied:</strong> They cannot view your store page or products</li>
+                  <li><strong>Messaging Blocked:</strong> They cannot send you messages through the platform</li>
+                  <li><strong>Purchase Prevention:</strong> They cannot add your products to cart or checkout</li>
+                  <li><strong>Search Exclusion:</strong> Your store may not appear in their search results</li>
+                  <li><strong>No Notification:</strong> Blocked users are not explicitly told they've been blocked</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>System Reliability</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Our Blocking System Features:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Redundant Protection:</strong> Multiple blocking methods ensure comprehensive coverage</li>
+                  <li><strong>Automatic IP Detection:</strong> System automatically identifies and blocks IP addresses</li>
+                  <li><strong>Cross-Platform Blocking:</strong> Works across all platform features (Explore, Messages, etc.)</li>
+                  <li><strong>Persistent Storage:</strong> Blocks remain in effect permanently until manually removed</li>
+                  <li><strong>Admin Oversight:</strong> All blocks are subject to administrator review and approval</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Learn more about seller safety:</p>
+                <button 
+                  onClick={() => setHelpTopic('block-requests')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  How to Request Blocks
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('seller-safety')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Seller Safety Guidelines
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Seller Safety Help Topic */}
+          {helpTopic === 'seller-safety' && (
+            <div>
+              <h1 style={topicStyles.h1}>Seller Safety Guidelines</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Your Safety Matters:</strong> As a seller on our platform, your safety and security are our top priorities. Learn about the tools and best practices available to help you maintain a safe selling environment.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Platform Safety Features</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Block Request System</h3>
+                  <p>Request that problematic buyers be blocked from your store:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Submit requests through your seller dashboard</li>
+                    <li>Provide reasons for block requests</li>
+                    <li>Administrators review all requests</li>
+                    <li>Approved blocks include IP address blocking</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Administrative Support</h3>
+                  <p>Platform administrators are available to help with safety concerns:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Review and process block requests</li>
+                    <li>Investigate reported incidents</li>
+                    <li>Provide guidance on safety best practices</li>
+                    <li>Take action against violating users</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Multi-Layer Blocking</h3>
+                  <p>Our comprehensive blocking system provides maximum protection:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>User account blocking</li>
+                    <li>IP address blocking</li>
+                    <li>Cross-platform enforcement</li>
+                    <li>Prevents circumvention through new accounts</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Best Practices for Safe Selling</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>Communication Safety:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Keep Conversations Professional:</strong> Maintain professional communication at all times</li>
+                  <li><strong>Use Platform Messaging:</strong> Keep all buyer communication within the platform</li>
+                  <li><strong>Document Issues:</strong> Save screenshots of problematic communications</li>
+                  <li><strong>Set Clear Boundaries:</strong> Establish clear store policies and communicate them to buyers</li>
+                  <li><strong>Report Violations:</strong> Report any inappropriate behavior immediately</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Transaction Safety:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Use Platform Payment Systems:</strong> Always use the platform's secure payment processing</li>
+                  <li><strong>Verify Orders:</strong> Confirm order details before processing</li>
+                  <li><strong>Monitor for Fraud:</strong> Watch for suspicious purchase patterns</li>
+                  <li><strong>Keep Records:</strong> Maintain detailed records of all transactions</li>
+                  <li><strong>Follow Refund Policies:</strong> Adhere to platform refund and return policies</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>When to Request a Block</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>Consider Block Requests For:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Harassment:</strong> Repeated unwanted contact or threatening messages</li>
+                  <li><strong>Fraudulent Activity:</strong> Attempts to defraud or scam your business</li>
+                  <li><strong>Abusive Behavior:</strong> Inappropriate language, threats, or personal attacks</li>
+                  <li><strong>Policy Violations:</strong> Repeated violations of your store policies</li>
+                  <li><strong>Chargebacks:</strong> Excessive or fraudulent chargeback attempts</li>
+                  <li><strong>Disruption:</strong> Behavior that disrupts your business operations</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Emergency Situations</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#ffebee', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#c62828' }}>If You Feel Unsafe:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Contact Administrators Immediately:</strong> Use the emergency contact system</li>
+                  <li><strong>Document Everything:</strong> Save all communications and evidence</li>
+                  <li><strong>Do Not Engage:</strong> Avoid responding to threatening or abusive messages</li>
+                  <li><strong>Report to Authorities:</strong> Contact local authorities if threatened offline</li>
+                  <li><strong>Use Block Requests:</strong> Submit immediate block requests for threatening users</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Preventive Measures</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Set Clear Store Policies</h3>
+                  <p>Establish and communicate clear policies about:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Acceptable communication standards</li>
+                    <li>Return and refund procedures</li>
+                    <li>Order processing times</li>
+                    <li>Customer service expectations</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Monitor Your Store Activity</h3>
+                  <p>Regularly review your store's activity to identify potential issues:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Check messages for inappropriate content</li>
+                    <li>Monitor order patterns for suspicious activity</li>
+                    <li>Review customer feedback and complaints</li>
+                    <li>Track repeat problem customers</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Need help with blocking features?</p>
+                <button 
+                  onClick={() => setHelpTopic('block-requests')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Request a Block
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('blocking-system')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Learn About Our Blocking System
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* About Admins Help Topic */}
+          {helpTopic === 'about-admins' && (
+            <div>
+              <h1 style={topicStyles.h1}>Who are Lokal Admins?</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Platform Guardians:</strong> Lokal admins are dedicated team members who ensure the platform runs smoothly, safely, and fairly for all users. They are your go-to support team for resolving issues and maintaining platform standards.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>What Are Admins?</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: 0 }}><strong>Platform administrators</strong> are specially trained team members with elevated permissions to manage platform operations, resolve disputes, and ensure user safety. They work behind the scenes to maintain the quality and security of the Lokal marketplace.</p>
+                
+                <div style={{ marginTop: '15px' }}>
+                  <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#007B7F' }}>Key Characteristics of Lokal Admins:</h4>
+                  <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                    <li><strong>Verified Staff:</strong> All admins are verified Lokal team members</li>
+                    <li><strong>Special Permissions:</strong> Have access to platform management tools</li>
+                    <li><strong>Training:</strong> Extensively trained in platform policies and procedures</li>
+                    <li><strong>Accountability:</strong> Held to high standards of professionalism and fairness</li>
+                    <li><strong>Availability:</strong> Available during business hours to assist users</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Admin Roles and Responsibilities</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Platform Safety Management</h3>
+                  <p>Admins are responsible for maintaining a safe environment for all users:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Processing block requests from sellers</li>
+                    <li>Investigating reported incidents</li>
+                    <li>Taking action against policy violations</li>
+                    <li>Monitoring platform activity for suspicious behavior</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>User Support</h3>
+                  <p>Providing assistance and resolving user issues:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Responding to support tickets and inquiries</li>
+                    <li>Helping users navigate platform features</li>
+                    <li>Resolving technical issues</li>
+                    <li>Providing guidance on best practices</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Dispute Resolution</h3>
+                  <p>Acting as neutral mediators in user conflicts:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Mediating buyer-seller disputes</li>
+                    <li>Reviewing transaction issues</li>
+                    <li>Making fair decisions based on evidence</li>
+                    <li>Enforcing platform policies consistently</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Platform Development</h3>
+                  <p>Contributing to platform improvement and growth:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Collecting user feedback</li>
+                    <li>Identifying areas for improvement</li>
+                    <li>Testing new features</li>
+                    <li>Communicating user needs to development team</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>How Admins Help You</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>For Sellers:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Block Request Processing:</strong> Review and approve requests to block problematic buyers</li>
+                  <li><strong>Store Support:</strong> Help with store setup, product listings, and payment issues</li>
+                  <li><strong>Policy Guidance:</strong> Provide clarity on selling policies and best practices</li>
+                  <li><strong>Technical Assistance:</strong> Resolve technical issues affecting your store</li>
+                  <li><strong>Safety Measures:</strong> Implement additional security measures when needed</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>For Buyers:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Purchase Protection:</strong> Help resolve issues with orders and payments</li>
+                  <li><strong>Dispute Resolution:</strong> Mediate conflicts with sellers fairly</li>
+                  <li><strong>Account Support:</strong> Assist with account issues and security concerns</li>
+                  <li><strong>Platform Navigation:</strong> Guide you through using platform features</li>
+                  <li><strong>Policy Enforcement:</strong> Ensure sellers follow platform policies</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Admin Authority and Limitations</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>What Admins Can Do:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Account Management:</strong> Suspend, restrict, or ban violating accounts</li>
+                  <li><strong>Content Moderation:</strong> Remove inappropriate content or listings</li>
+                  <li><strong>Transaction Intervention:</strong> Reverse transactions in cases of fraud</li>
+                  <li><strong>Policy Enforcement:</strong> Take action against policy violations</li>
+                  <li><strong>Data Access:</strong> View account information necessary for support</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#ffebee', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#c62828' }}>What Admins Cannot Do:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Bypass Policies:</strong> Cannot make exceptions to established platform rules</li>
+                  <li><strong>Personal Information:</strong> Cannot share your personal data with third parties</li>
+                  <li><strong>Favoritism:</strong> Must treat all users fairly and equally</li>
+                  <li><strong>Outside Platform:</strong> Cannot intervene in off-platform disputes</li>
+                  <li><strong>Legal Advice:</strong> Cannot provide legal counsel or advice</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Learn more about working with admins:</p>
+                <button 
+                  onClick={() => setHelpTopic('admin-responsibilities')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  What Admins Do
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('contacting-admins')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  How to Contact Admins
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Responsibilities Help Topic */}
+          {helpTopic === 'admin-responsibilities' && (
+            <div>
+              <h1 style={topicStyles.h1}>What Admins Do</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Platform Management:</strong> Lokal admins have comprehensive responsibilities that keep the platform running smoothly, safely, and fairly for all users. Learn about their day-to-day activities and how they support the community.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Daily Administrative Tasks</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Block Request Review</h3>
+                  <p>Processing seller safety requests with careful evaluation:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Review block requests submitted by sellers</li>
+                    <li>Evaluate evidence and reasoning provided</li>
+                    <li>Investigate user behavior patterns</li>
+                    <li>Approve or deny requests based on platform policies</li>
+                    <li>Implement IP address blocking when approved</li>
+                    <li>Notify sellers of decision outcomes</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e8f5e8', borderRadius: '6px' }}>
+                    <p><strong>Review Process:</strong> Each block request receives individual attention to ensure fair and appropriate action based on the specific circumstances.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>User Support Management</h3>
+                  <p>Providing comprehensive assistance to platform users:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Respond to support tickets and inquiries</li>
+                    <li>Troubleshoot technical issues</li>
+                    <li>Guide users through platform features</li>
+                    <li>Resolve account-related problems</li>
+                    <li>Provide policy clarifications</li>
+                    <li>Escalate complex issues when necessary</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Platform Monitoring</h3>
+                  <p>Continuous oversight of platform activity and health:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Monitor user activity for suspicious behavior</li>
+                    <li>Track platform performance metrics</li>
+                    <li>Identify potential security threats</li>
+                    <li>Review reported content and users</li>
+                    <li>Ensure compliance with platform policies</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Specialized Administrative Functions</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Safety and Security Management:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Fraud Prevention:</strong> Identify and prevent fraudulent activities</li>
+                  <li><strong>Account Security:</strong> Secure compromised accounts and reset credentials</li>
+                  <li><strong>Content Moderation:</strong> Remove inappropriate or violating content</li>
+                  <li><strong>Dispute Investigation:</strong> Thoroughly investigate reported incidents</li>
+                  <li><strong>Policy Enforcement:</strong> Take appropriate action against policy violations</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>Transaction and Payment Support:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Payment Issues:</strong> Resolve failed transactions and payment problems</li>
+                  <li><strong>Refund Processing:</strong> Handle refund requests and disputes</li>
+                  <li><strong>Chargeback Management:</strong> Investigate and respond to payment disputes</li>
+                  <li><strong>Financial Reconciliation:</strong> Ensure accurate financial records</li>
+                  <li><strong>Vendor Relations:</strong> Coordinate with payment processors</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Administrative Decision Making</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Evidence-Based Decisions</h3>
+                  <p>All administrative decisions are based on thorough review:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Gather all relevant information</li>
+                    <li>Review platform logs and user history</li>
+                    <li>Consider multiple perspectives</li>
+                    <li>Apply policies consistently and fairly</li>
+                    <li>Document decisions for future reference</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Appeal Process</h3>
+                  <p>Providing fair opportunities for users to contest decisions:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Review appeals with fresh perspective</li>
+                    <li>Consider new evidence or information</li>
+                    <li>Consult with senior administrators when needed</li>
+                    <li>Provide clear explanations for final decisions</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Community Management</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>Building a Positive Community:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>User Education:</strong> Help users understand platform features and policies</li>
+                  <li><strong>Best Practice Promotion:</strong> Share tips for successful buying and selling</li>
+                  <li><strong>Community Standards:</strong> Maintain professional and respectful environment</li>
+                  <li><strong>Feedback Collection:</strong> Gather user suggestions for improvements</li>
+                  <li><strong>Platform Communication:</strong> Keep users informed of updates and changes</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Administrative Accountability</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#ffebee', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#c62828' }}>Standards and Oversight:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Performance Reviews:</strong> Regular evaluation of administrative performance</li>
+                  <li><strong>Decision Audits:</strong> Review of administrative decisions for consistency</li>
+                  <li><strong>Training Updates:</strong> Continuous education on policies and procedures</li>
+                  <li><strong>User Feedback:</strong> Consideration of user experiences with admin support</li>
+                  <li><strong>Transparency:</strong> Clear communication about decisions and processes</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Need admin assistance?</p>
+                <button 
+                  onClick={() => setHelpTopic('contacting-admins')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  How to Contact Admins
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('about-admins')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Who Are Admins?
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contacting Admins Help Topic */}
+          {helpTopic === 'contacting-admins' && (
+            <div>
+              <h1 style={topicStyles.h1}>How to Contact Admins</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Get Help When You Need It:</strong> Lokal admins are available to assist you with platform issues, safety concerns, and support requests. Learn the best ways to reach them and what information to provide for quick resolution.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>When to Contact Admins</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>Contact Admins For:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Safety Issues:</strong> Harassment, threats, or inappropriate behavior</li>
+                  <li><strong>Block Requests:</strong> Need to block problematic users from your store</li>
+                  <li><strong>Technical Problems:</strong> Platform bugs or functionality issues</li>
+                  <li><strong>Account Issues:</strong> Login problems, security concerns, or account restrictions</li>
+                  <li><strong>Payment Problems:</strong> Transaction failures, refund issues, or billing disputes</li>
+                  <li><strong>Policy Questions:</strong> Clarification on platform rules and guidelines</li>
+                  <li><strong>Dispute Resolution:</strong> Conflicts with other users that need mediation</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>How to Contact Admins</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Through the Help Center</h3>
+                  <p>The primary way to reach admin support:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Use the "Contact Support" button in the help center</li>
+                    <li>Fill out the support request form with details</li>
+                    <li>Include relevant information and evidence</li>
+                    <li>Submit your request for admin review</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+                    <p><strong>Tip:</strong> Logged-in users get priority support and faster response times.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>For Block Requests</h3>
+                  <p>Special process for seller safety requests:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Access block request feature in your seller dashboard</li>
+                    <li>Provide user information to be blocked</li>
+                    <li>Explain the reason for the block request</li>
+                    <li>Include evidence of problematic behavior</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Emergency Situations</h3>
+                  <p>For urgent safety concerns requiring immediate attention:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Use the emergency contact option if available</li>
+                    <li>Mark your support request as "urgent"</li>
+                    <li>Clearly state the nature of the emergency</li>
+                    <li>Provide immediate safety concerns in your message</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#ffebee', borderRadius: '6px' }}>
+                    <p><strong>Important:</strong> For immediate physical safety concerns, contact local authorities first, then notify platform admins.</p>
+                  </div>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Information to Include</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>For Faster Resolution, Include:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Your Account Information:</strong> Username, email, and store name (if applicable)</li>
+                  <li><strong>Detailed Description:</strong> Clear explanation of the issue or concern</li>
+                  <li><strong>Relevant Dates/Times:</strong> When the issue occurred or began</li>
+                  <li><strong>User Information:</strong> Details about other users involved</li>
+                  <li><strong>Evidence:</strong> Screenshots, messages, or other supporting materials</li>
+                  <li><strong>Previous Actions:</strong> Steps you've already taken to resolve the issue</li>
+                  <li><strong>Preferred Outcome:</strong> What you'd like to see happen</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Response Times and Expectations</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Standard Support Requests</h3>
+                  <p>Typical response timeframes for different types of requests:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>General Inquiries:</strong> 24-48 hours</li>
+                    <li><strong>Technical Issues:</strong> 1-3 business days</li>
+                    <li><strong>Account Problems:</strong> 2-4 business days</li>
+                    <li><strong>Policy Questions:</strong> 1-2 business days</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Priority Requests</h3>
+                  <p>Faster response for urgent matters:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Safety Concerns:</strong> Same day response</li>
+                    <li><strong>Block Requests:</strong> 24-48 hours</li>
+                    <li><strong>Payment Issues:</strong> 1-2 business days</li>
+                    <li><strong>Emergency Situations:</strong> Immediate to 4 hours</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>What to Expect</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Admin Response Process:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Acknowledgment:</strong> Confirmation that your request was received</li>
+                  <li><strong>Investigation:</strong> Thorough review of your issue and any evidence</li>
+                  <li><strong>Action:</strong> Implementation of appropriate solutions or measures</li>
+                  <li><strong>Follow-up:</strong> Notification of actions taken and resolution status</li>
+                  <li><strong>Feedback:</strong> Opportunity to provide feedback on the resolution</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Tips for Effective Communication</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#666' }}>Best Practices:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Be Specific:</strong> Provide clear, detailed descriptions of issues</li>
+                  <li><strong>Stay Professional:</strong> Maintain respectful and professional tone</li>
+                  <li><strong>Include Evidence:</strong> Attach relevant screenshots or documentation</li>
+                  <li><strong>Be Patient:</strong> Allow time for thorough investigation and response</li>
+                  <li><strong>Follow Up:</strong> Respond promptly if admins request additional information</li>
+                  <li><strong>One Issue Per Request:</strong> Submit separate requests for different issues</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Ready to contact admin support?</p>
+                <button 
+                  onClick={() => setHelpTopic('contact-support')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Contact Support Now
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('admin-responsibilities')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  What Admins Do
+                </button>
+              </div>
+            </div>
+          )}
           
           {/* Other help topics will be added here */}
         </div>
@@ -2996,6 +4026,91 @@ function HelpCenterPage() {
                   style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
                 >
                   Using the Receipts page
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Block Requests & Safety */}
+          <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <div style={{ backgroundColor: '#DC2626', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                  <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Block Requests & Safety</h3>
+            </div>
+            <p style={{ margin: '0 0 15px 0', color: '#555' }}>Learn about our blocking system, how to request blocks, and safety features for sellers.</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('block-requests'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  How to request buyer blocks
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('blocking-system'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Understanding our blocking system
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('seller-safety'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Seller safety guidelines
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Admin & Platform Management */}
+          <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <div style={{ backgroundColor: '#7C3AED', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                  <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C9.516 12.68 8.289 12 6 12c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/>
+                  <path fillRule="evenodd" d="M11.5 1a.5.5 0 0 1 .5.5v1h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h1v-1a.5.5 0 0 1 .5-.5h1z"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>About Admins</h3>
+            </div>
+            <p style={{ margin: '0 0 15px 0', color: '#555' }}>Learn about Lokal admins, their role in maintaining platform safety, and how they help resolve issues.</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('about-admins'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Who are Lokal admins?
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('admin-responsibilities'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  What admins do
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('contacting-admins'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  How to contact admins
                 </a>
               </li>
               <li style={{ marginBottom: '8px' }}>

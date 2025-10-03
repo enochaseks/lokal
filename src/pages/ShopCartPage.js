@@ -247,6 +247,12 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
 
   const sendOrderToStore = async (group) => {
     try {
+      // Check if store is still live before sending order
+      const storeDoc = await getDoc(doc(db, 'stores', group.storeId));
+      if (!storeDoc.exists() || !storeDoc.data().live) {
+        throw new Error(`Store "${group.storeName}" is currently offline and cannot accept orders.`);
+      }
+      
       const timestamp = Date.now();
       const conversationId = `order_${timestamp}_${currentUser.uid}_${group.storeId}`;
       const orderMessageData = await createOrderMessage(group);
@@ -303,6 +309,47 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
   const handlePayNow = async () => {
     if (!currentUser) {
       alert('Please log in to place an order.');
+      return;
+    }
+
+    // Check if current user is blocked by any stores in cart
+    const storeGroups = Object.values(grouped);
+    const blockedStores = [];
+    
+    for (const group of storeGroups) {
+      try {
+        const blockedRef = doc(db, 'stores', group.storeId, 'blocked', currentUser.uid);
+        const blockedDoc = await getDoc(blockedRef);
+        if (blockedDoc.exists()) {
+          blockedStores.push(group.storeName);
+        }
+      } catch (error) {
+        console.error('Error checking if user is blocked:', error);
+      }
+    }
+    
+    if (blockedStores.length > 0) {
+      alert(`You have been blocked by the following store${blockedStores.length > 1 ? 's' : ''}: ${blockedStores.join(', ')}. Please remove these items from your cart.`);
+      return;
+    }
+
+    // Check if all stores in cart are still live
+    const offlineStores = [];
+    
+    for (const group of storeGroups) {
+      try {
+        const storeDoc = await getDoc(doc(db, 'stores', group.storeId));
+        if (!storeDoc.exists() || !storeDoc.data().live) {
+          offlineStores.push(group.storeName);
+        }
+      } catch (error) {
+        console.error('Error checking store status:', error);
+        offlineStores.push(group.storeName);
+      }
+    }
+    
+    if (offlineStores.length > 0) {
+      alert(`The following store${offlineStores.length > 1 ? 's are' : ' is'} currently offline and cannot accept orders: ${offlineStores.join(', ')}. Please remove these items from your cart and try again.`);
       return;
     }
 

@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import QRCodeModal from '../components/QRCodeModal';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, storage } from '../firebase';
-import { doc, getDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Country and origin arrays
@@ -67,6 +67,9 @@ function StoreProfilePage() {
   const [showThumbnailChangeDialog, setShowThumbnailChangeDialog] = useState(false);
   // New state for the specific "first change" warning
   const [showFirstThumbnailWarning, setShowFirstThumbnailWarning] = useState(false);
+  
+  // Add current user state for UI access
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Add missing state for edit fields and showEditProfile
   const [editName, setEditName] = useState('');
@@ -105,6 +108,11 @@ function StoreProfilePage() {
   const [openingTimes, setOpeningTimes] = useState(profile?.openingTimes || {});
   const [closingTimes, setClosingTimes] = useState(profile?.closingTimes || {});
 
+  // Blocked users management states
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -113,15 +121,17 @@ function StoreProfilePage() {
       if (!user) {
         setError('Not logged in');
         setLoading(false);
+        setCurrentUser(null);
         return;
       }
+      setCurrentUser(user);
       setLoading(true);
       try {
         const docRef = doc(db, 'stores', user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setProfile(data);
+          setProfile({ ...data, uid: user.uid });
           setEditName(data.storeName || '');
           setEditLocation(data.storeLocation || data.storeAddress || '');
           setEditOrigin(data.origin || '');
@@ -178,6 +188,8 @@ function StoreProfilePage() {
         // Fetch followers
         const followersCol = collection(db, 'stores', user.uid, 'followers');
         onSnapshot(followersCol, async (snapshot) => {
+          console.log('Followers snapshot received, processing...', snapshot.docs.length, 'documents');
+          
           // Get both document IDs and data for each follower
           const followersArr = snapshot.docs.map(doc => ({
             docId: doc.id, // Store document ID for deletion if needed
@@ -186,49 +198,135 @@ function StoreProfilePage() {
           
           setFollowers(followersArr);
           
-          // Fetch user details for each follower
-          const details = [];
-          
-          for (const f of followersArr) {
+          // Create a map to track UIDs and their documents to identify duplicates
+          const uidMap = new Map();
+          followersArr.forEach(f => {
             if (f.uid) {
-              const userDoc = await getDoc(doc(db, 'users', f.uid));
-              if (userDoc.exists()) {
-                // Check if account is deleted
-                const userData = userDoc.data();
-                if (!userData.deleted && userData.accountStatus !== 'deleted') {
-                  // Valid user, add to followers details
-                  details.push({ uid: f.uid, ...userData });
-                } else {
-                  // User is deleted, remove from followers collection
-                  console.log(`User ${f.uid} has been deleted, removing from followers`);
-                  try {
-                    // Use the stored document ID for precise deletion
-                    const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
-                    await deleteDoc(followerDocRef);
-                  } catch (err) {
-                    console.error('Error removing deleted follower:', err);
-                  }
-                }
-              } else {
-                // User document doesn't exist, remove from followers
-                console.log(`User document for ${f.uid} not found, removing from followers`);
-                try {
-                  // Use the stored document ID for precise deletion
-                  const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
-                  await deleteDoc(followerDocRef);
-                } catch (err) {
-                  console.error('Error removing non-existent follower:', err);
-                }
+              if (!uidMap.has(f.uid)) {
+                uidMap.set(f.uid, []);
+              }
+              uidMap.get(f.uid).push(f);
+            }
+          });
+          
+          // Process duplicates first - remove extra documents for each UID
+          const duplicateRemovalPromises = [];
+          for (const [uid, documents] of uidMap) {
+            if (documents.length > 1) {
+              console.log(`Found ${documents.length} documents for UID ${uid}, removing ${documents.length - 1} duplicates`);
+              // Keep the first document, remove the rest
+              for (let i = 1; i < documents.length; i++) {
+                const duplicateDoc = documents[i];
+                duplicateRemovalPromises.push(
+                  deleteDoc(doc(db, 'stores', user.uid, 'followers', duplicateDoc.docId))
+                    .catch(err => console.error('Error removing duplicate follower:', err))
+                );
               }
             }
           }
           
+          // Wait for all duplicate removals to complete
+          if (duplicateRemovalPromises.length > 0) {
+            await Promise.all(duplicateRemovalPromises);
+            console.log('Duplicate removal completed');
+          }
+          
+          // Now fetch user details for unique followers only
+          const details = [];
+          const uniqueFollowers = Array.from(uidMap.entries()).map(([uid, documents]) => documents[0]);
+          
+          for (const f of uniqueFollowers) {
+            if (f.uid) {
+              try {
+                const userDoc = await getDoc(doc(db, 'users', f.uid));
+                if (userDoc.exists()) {
+                  // Check if account is deleted
+                  const userData = userDoc.data();
+                  if (!userData.deleted && userData.accountStatus !== 'deleted') {
+                    // Valid user, add to followers details
+                    details.push({ uid: f.uid, ...userData });
+                  } else {
+                    // User is deleted, remove from followers collection
+                    console.log(`User ${f.uid} has been deleted, removing from followers`);
+                    try {
+                      const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                      await deleteDoc(followerDocRef);
+                    } catch (err) {
+                      console.error('Error removing deleted follower:', err);
+                    }
+                  }
+                } else {
+                  // User document doesn't exist - could be deleted account
+                  console.log(`User document for ${f.uid} not found`);
+                  
+                  // Check if there's a new account with the same email
+                  if (f.email) {
+                    try {
+                      // Query for users with the same email but different UID
+                      const usersQuery = query(
+                        collection(db, 'users'), 
+                        where('email', '==', f.email)
+                      );
+                      const emailQuerySnapshot = await getDocs(usersQuery);
+                      
+                      let foundNewAccount = false;
+                      // Process email query results
+                      for (const userDoc of emailQuerySnapshot.docs) {
+                        const newUserData = userDoc.data();
+                        // Check if this is a different UID (new account) with same email
+                        if (userDoc.id !== f.uid && !newUserData.deleted && newUserData.accountStatus !== 'deleted') {
+                          console.log(`Found new account for email ${f.email}: old UID ${f.uid} -> new UID ${userDoc.id}`);
+                          foundNewAccount = true;
+                          
+                          // Remove old follower document
+                          const oldFollowerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                          await deleteDoc(oldFollowerDocRef);
+                          
+                          // Create new follower document with new UID
+                          const newFollowerDocRef = doc(db, 'stores', user.uid, 'followers', userDoc.id);
+                          await setDoc(newFollowerDocRef, {
+                            uid: userDoc.id,
+                            email: f.email,
+                            followedAt: f.followedAt || new Date().toISOString()
+                          });
+                          
+                          // Add to details with new user data
+                          details.push({ uid: userDoc.id, ...newUserData });
+                          break; // Only update to the first valid new account found
+                        }
+                      }
+                      
+                      // If no new account found, remove the old follower document
+                      if (!foundNewAccount) {
+                        const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                        await deleteDoc(followerDocRef);
+                        console.log(`No new account found for ${f.email}, removed old follower document`);
+                      }
+                    } catch (emailQueryError) {
+                      console.error('Error checking for new account with same email:', emailQueryError);
+                      // If email query fails, just remove the old document
+                      const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                      await deleteDoc(followerDocRef);
+                    }
+                  } else {
+                    // No email to check, just remove the follower document
+                    const followerDocRef = doc(db, 'stores', user.uid, 'followers', f.docId);
+                    await deleteDoc(followerDocRef);
+                  }
+                }
+              } catch (err) {
+                console.error('Error processing follower:', err);
+              }
+            }
+          }
+          
+          console.log('Setting followers details:', details.length, 'unique followers');
           setFollowersDetails(details);
           
           // Check if current user is following (only from valid followers)
-          const currentUserIsFollowing = followersArr.some(f => 
-            f.uid === user.uid && 
-            details.some(d => d.uid === user.uid)
+          const currentUserIsFollowing = uniqueFollowers.some(f => 
+            f.uid === currentUser?.uid && 
+            details.some(d => d.uid === currentUser?.uid)
           );
           setIsFollowing(currentUserIsFollowing);
         });
@@ -871,23 +969,22 @@ function StoreProfilePage() {
     if (!user || !profile) return;
     
     try {
-      // Check if already following to prevent duplicates
-      const followersCol = collection(db, 'stores', user.uid, 'followers');
-      const q = query(followersCol, where('uid', '==', user.uid));
-      const querySnapshot = await getDocs(q);
+      // Use setDoc with user UID as document ID to prevent duplicates
+      const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
+      const followerDoc = await getDoc(followerRef);
       
-      if (querySnapshot.empty) {
+      if (!followerDoc.exists()) {
         // Not following yet, add as follower
-        await addDoc(collection(db, 'stores', user.uid, 'followers'), { 
+        await setDoc(followerRef, { 
           uid: user.uid, 
           email: user.email,
-          timestamp: new Date()
+          followedAt: new Date().toISOString()
         });
-        setIsFollowing(true);
+        console.log('Successfully followed store');
       } else {
         console.log('Already following this store');
-        setIsFollowing(true);
       }
+      setIsFollowing(true);
     } catch (error) {
       console.error('Error following store:', error);
     }
@@ -899,25 +996,142 @@ function StoreProfilePage() {
     if (!user || !profile) return;
     
     try {
-      // Find the follower document with the current user's UID
-      const followersCol = collection(db, 'stores', user.uid, 'followers');
-      const q = query(followersCol, where('uid', '==', user.uid));
-      const querySnapshot = await getDocs(q);
+      // Use direct document reference with user UID
+      const followerRef = doc(db, 'stores', user.uid, 'followers', user.uid);
+      const followerDoc = await getDoc(followerRef);
       
-      // Delete all matching documents (should only be one)
-      let deleted = false;
-      querySnapshot.forEach(async (docSnapshot) => {
-        await deleteDoc(docSnapshot.ref);
-        deleted = true;
-      });
-      
-      if (deleted) {
+      if (followerDoc.exists()) {
+        await deleteDoc(followerRef);
+        console.log('Successfully unfollowed store');
         setIsFollowing(false);
       } else {
         console.log('No follower document found to unfollow');
+        setIsFollowing(false);
       }
     } catch (error) {
       console.error('Error unfollowing store:', error);
+    }
+  };
+
+  const handleRemoveFollower = async (followerUID) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user || !profile || user.uid !== profile.uid) return; // Only store owner can remove followers
+    
+    try {
+      // Remove the follower document
+      const followerRef = doc(db, 'stores', user.uid, 'followers', followerUID);
+      const followerDoc = await getDoc(followerRef);
+      
+      if (followerDoc.exists()) {
+        await deleteDoc(followerRef);
+        console.log(`Successfully removed follower ${followerUID}`);
+        
+        // Update local state by removing the follower from followersDetails
+        setFollowersDetails(prev => prev.filter(f => f.uid !== followerUID));
+        
+        // Also update the followers array
+        setFollowers(prev => prev.filter(f => f.uid !== followerUID));
+      } else {
+        console.log('Follower document not found');
+      }
+    } catch (error) {
+      console.error('Error removing follower:', error);
+      alert('Failed to remove follower. Please try again.');
+    }
+  };
+
+  const handleBlockUser = async (userUID, userName) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user || !profile || user.uid !== profile.uid) return; // Only store owner can block users
+    
+    try {
+      // Add user to blocked list
+      const blockedRef = doc(db, 'stores', user.uid, 'blocked', userUID);
+      await setDoc(blockedRef, {
+        uid: userUID,
+        name: userName,
+        blockedAt: new Date().toISOString(),
+        blockedBy: user.uid
+      });
+      
+      // Remove from followers if they are following
+      const followerRef = doc(db, 'stores', user.uid, 'followers', userUID);
+      const followerDoc = await getDoc(followerRef);
+      if (followerDoc.exists()) {
+        await deleteDoc(followerRef);
+        // Update local followers state
+        setFollowersDetails(prev => prev.filter(f => f.uid !== userUID));
+        setFollowers(prev => prev.filter(f => f.uid !== userUID));
+      }
+      
+      console.log(`Successfully blocked user ${userUID}`);
+      alert(`${userName || 'User'} has been blocked from your store.`);
+      
+    } catch (error) {
+      console.error('Error blocking user:', error);
+      alert('Failed to block user. Please try again.');
+    }
+  };
+
+  const fetchBlockedUsers = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    setLoadingBlockedUsers(true);
+    try {
+      const blockedRef = collection(db, 'stores', user.uid, 'blocked');
+      const snapshot = await getDocs(blockedRef);
+      const blocked = [];
+      
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        // Try to get updated user info
+        try {
+          const userRef = doc(db, 'users', data.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            blocked.push({
+              ...data,
+              name: userData.name || data.name,
+              email: userData.email,
+              photoURL: userData.photoURL
+            });
+          } else {
+            blocked.push(data);
+          }
+        } catch (error) {
+          blocked.push(data);
+        }
+      }
+      
+      setBlockedUsers(blocked);
+    } catch (error) {
+      console.error('Error fetching blocked users:', error);
+    } finally {
+      setLoadingBlockedUsers(false);
+    }
+  };
+
+  const handleUnblockUser = async (userUID, userName) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    try {
+      const blockedRef = doc(db, 'stores', user.uid, 'blocked', userUID);
+      await deleteDoc(blockedRef);
+      
+      // Update local state
+      setBlockedUsers(prev => prev.filter(u => u.uid !== userUID));
+      
+      alert(`${userName || 'User'} has been unblocked.`);
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      alert('Failed to unblock user. Please try again.');
     }
   };
 
@@ -1498,6 +1712,42 @@ function StoreProfilePage() {
               Followers ({followers.length})
             </button>
           </div>
+          
+          {/* Account Management Section */}
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: '8px 0' }}>
+            <button
+              onClick={() => {
+                setShowBlockedUsers(true);
+                fetchBlockedUsers();
+              }}
+              style={{ 
+                background: '#fff5f5', 
+                border: '1px solid #fed7d7', 
+                borderRadius: 8, 
+                padding: '0.5rem 1rem', 
+                fontWeight: 500, 
+                fontSize: '0.9rem', 
+                color: '#c53030', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#fed7d7';
+                e.currentTarget.style.borderColor = '#feb2b2';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#fff5f5';
+                e.currentTarget.style.borderColor = '#fed7d7';
+              }}
+            >
+              <span role="img" aria-label="blocked">🚫</span> 
+              Manage Blocked Users
+            </button>
+          </div>
+          
           {/* Store item tab/button - modernized */}
           <div style={{ 
             width: '100%', 
@@ -2866,7 +3116,7 @@ function StoreProfilePage() {
                             border: '2px solid #f0f0f0'
                           }} 
                         />
-                        <div style={{ textAlign: 'left' }}>
+                        <div style={{ textAlign: 'left', flex: 1 }}>
                           <div style={{ 
                             fontWeight: 600, 
                             fontSize: '1rem' 
@@ -2882,6 +3132,73 @@ function StoreProfilePage() {
                             </div>
                           )}
                         </div>
+                        
+                        {/* Remove button - only shown to store owner */}
+                        {profile && currentUser && (currentUser.uid === profile.uid) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Remove ${f.name || f.email || 'this user'} from followers?`)) {
+                                handleRemoveFollower(f.uid);
+                              }
+                            }}
+                            style={{
+                              background: '#fee2e2',
+                              border: '1px solid #fecaca',
+                              borderRadius: '8px',
+                              color: '#dc2626',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              fontWeight: '500'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.background = '#fecaca';
+                              e.currentTarget.style.borderColor = '#f87171';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.background = '#fee2e2';
+                              e.currentTarget.style.borderColor = '#fecaca';
+                            }}
+                            title={`Remove ${f.name || f.email || 'user'} from followers`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                        
+                        {/* Block button - only shown to store owner */}
+                        {profile && currentUser && (currentUser.uid === profile.uid) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Block ${f.name || f.email || 'this user'}? They will no longer be able to see or interact with your store.`)) {
+                                handleBlockUser(f.uid, f.name || f.email);
+                              }
+                            }}
+                            style={{
+                              background: '#fef3c7',
+                              border: '1px solid #fde047',
+                              borderRadius: '8px',
+                              color: '#d97706',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              fontWeight: '500',
+                              marginLeft: '8px'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.background = '#fde047';
+                              e.currentTarget.style.borderColor = '#facc15';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.background = '#fef3c7';
+                              e.currentTarget.style.borderColor = '#fde047';
+                            }}
+                            title={`Block ${f.name || f.email || 'user'} from your store`}
+                          >
+                            Block
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -2918,6 +3235,215 @@ function StoreProfilePage() {
             </div>
           </div>
         )}
+
+        {/* Blocked Users Modal */}
+        {showBlockedUsers && (
+          <div style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            width: '100vw', 
+            height: '100vh', 
+            background: 'rgba(0,0,0,0.4)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 1000 
+          }}>
+            <div style={{ 
+              background: '#fff', 
+              borderRadius: 16, 
+              boxShadow: '0 8px 32px rgba(0,0,0,0.1)', 
+              padding: '24px', 
+              minWidth: '400px',
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                marginBottom: '20px',
+                paddingBottom: '15px',
+                borderBottom: '2px solid #f0f0f0'
+              }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  color: '#c53030', 
+                  fontWeight: 700, 
+                  fontSize: '1.3rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span role="img" aria-label="blocked">🚫</span>
+                  Blocked Users
+                </h3>
+                <button
+                  onClick={() => setShowBlockedUsers(false)}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    fontSize: '1.5rem', 
+                    cursor: 'pointer', 
+                    color: '#999',
+                    padding: '4px'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Content */}
+              <div style={{ 
+                flex: 1, 
+                overflowY: 'auto',
+                maxHeight: '400px'
+              }}>
+                {loadingBlockedUsers ? (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '40px 0',
+                    color: '#666' 
+                  }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>⏳</div>
+                    Loading blocked users...
+                  </div>
+                ) : blockedUsers.length === 0 ? (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '40px 20px',
+                    color: '#888' 
+                  }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '15px' }}>😌</div>
+                    <p style={{ margin: 0, fontSize: '1.1rem', marginBottom: '8px' }}>No blocked users</p>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#aaa' }}>Users you block will appear here</p>
+                  </div>
+                ) : (
+                  <ul style={{ 
+                    listStyle: 'none', 
+                    padding: 0, 
+                    margin: 0
+                  }}>
+                    {blockedUsers.map(user => (
+                      <li key={user.uid} style={{ 
+                        marginBottom: '16px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '14px',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid #fed7d7',
+                        background: '#fff5f5'
+                      }}>
+                        <img 
+                          src={user.photoURL || 'https://via.placeholder.com/40'} 
+                          alt={user.name || 'User'} 
+                          style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover',
+                            border: '2px solid #fed7d7'
+                          }} 
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontWeight: 600, 
+                            fontSize: '0.95rem', 
+                            color: '#333',
+                            marginBottom: '2px'
+                          }}>
+                            {user.name || 'Unknown User'}
+                          </div>
+                          {user.email && (
+                            <div style={{ 
+                              color: '#777', 
+                              fontSize: '0.85rem',
+                              marginBottom: '4px'
+                            }}>
+                              {user.email}
+                            </div>
+                          )}
+                          <div style={{ 
+                            color: '#999', 
+                            fontSize: '0.8rem'
+                          }}>
+                            Blocked on {new Date(user.blockedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        
+                        {/* Unblock button */}
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Unblock ${user.name || user.email || 'this user'}? They will be able to see and interact with your store again.`)) {
+                              handleUnblockUser(user.uid, user.name || user.email);
+                            }
+                          }}
+                          style={{
+                            background: '#d1fae5',
+                            border: '1px solid #6ee7b7',
+                            borderRadius: '8px',
+                            color: '#065f46',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            fontWeight: '500'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.background = '#6ee7b7';
+                            e.currentTarget.style.borderColor = '#34d399';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.background = '#d1fae5';
+                            e.currentTarget.style.borderColor = '#6ee7b7';
+                          }}
+                          title={`Unblock ${user.name || user.email || 'user'}`}
+                        >
+                          Unblock
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              
+              {/* Footer */}
+              <div style={{
+                marginTop: '20px',
+                paddingTop: '15px',
+                borderTop: '1px solid #f0f0f0',
+                display: 'flex',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={() => setShowBlockedUsers(false)}
+                  style={{
+                    background: '#c53030',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    fontSize: '0.9rem',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9b2c2c'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#c53030'}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Name Change Confirmation Dialog */}
         {showNameChangeDialog && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
