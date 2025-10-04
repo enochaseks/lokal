@@ -3782,7 +3782,706 @@ function HelpCenterPage() {
             </div>
           )}
           
-          {/* Other help topics will be added here */}
+          {/* New User Sign-up Guide Content */}
+          {helpTopic === 'new-user-signup' && (
+            <div>
+              <h1 style={topicStyles.h1}>New User Sign-up Guide</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Welcome to Lokal!</strong> This comprehensive guide will walk you through creating your account, verifying your email, and getting started on our platform.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>How to Sign Up for Lokal</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Access the Sign-up Page</h3>
+                  <p>Start by navigating to the Lokal sign-up page:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Visit the Lokal website</li>
+                    <li>Click on "Sign Up" or "Create Account" button</li>
+                    <li>You'll be taken to the registration form</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Fill Out Your Information</h3>
+                  <p>Complete the registration form with accurate information:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Full Name:</strong> Enter your first and last name</li>
+                    <li><strong>Email Address:</strong> Use a valid email you have access to</li>
+                    <li><strong>Password:</strong> Choose a strong password (8+ characters, mix of letters, numbers, symbols)</li>
+                    <li><strong>Confirm Password:</strong> Re-enter your password to confirm</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+                    <p><strong>Important:</strong> Use an email address you regularly check, as you'll need to verify it to complete your account setup.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Choose Your Account Purpose</h3>
+                  <p>Select why you're joining Lokal:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>"I want to buy":</strong> For customers looking to shop from local stores</li>
+                    <li><strong>"I want to sell":</strong> For business owners wanting to create a store</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>4</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Complete Registration</h3>
+                  <p>Finish creating your account:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Review the Terms of Service and Privacy Policy</li>
+                    <li>Check the boxes to agree to our terms</li>
+                    <li>Click "Create Account" or "Sign Up" to submit</li>
+                    <li>You'll see a confirmation message that your account has been created</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>What Happens Next</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#2e7d32' }}>After Successful Registration:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Onboarding Process:</strong> You'll be directed to onboarding before your account is created</li>
+                  <li><strong>Email Verification:</strong> You'll receive a verification email within a few minutes</li>
+                  <li><strong>Account Access:</strong> You can log in immediately, but some features require email verification</li>
+                  <li><strong>Profile Setup:</strong> You'll be guided through setting up your profile</li>
+                  <li><strong>Welcome Tour:</strong> New users get a tour of key platform features</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Troubleshooting Common Sign-up Issues</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Email Already Exists</h3>
+                  <p>If you see "Email already registered":</p>
+                  <ul style={topicStyles.ul}>
+                    <li>You may already have an account - try logging in instead</li>
+                    <li>Use the "Forgot Password" option if you can't remember your password</li>
+                    <li>Check if you signed up with a different email address</li>
+                    <li>Contact support if you believe this is an error</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Password Requirements</h3>
+                  <p>If your password is rejected:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Ensure it's at least 8 characters long</li>
+                    <li>Include a mix of uppercase and lowercase letters</li>
+                    <li>Add at least one number</li>
+                    <li>Consider including special characters (!@#$%^&*)</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Form Not Submitting</h3>
+                  <p>If the registration form won't submit:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Check that all required fields are filled</li>
+                    <li>Ensure passwords match exactly</li>
+                    <li>Verify you've accepted the terms and conditions</li>
+                    <li>Try refreshing the page and filling the form again</li>
+                    <li>Disable browser extensions that might interfere</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Frequently Asked Questions</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1.1rem', marginBottom: '10px', color: '#333' }}>Q: Can I both buy and sell on the same account?</h4>
+                <p style={{ margin: 0, lineHeight: '1.6' }}><strong>A:</strong> Absolutely! You can switch between buyer and seller modes easily. However, if you want to create a separate business account, you'll need to create another account and go through onboarding.</p>
+              </div>
+
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Next steps after sign-up:</p>
+                <button 
+                  onClick={() => setHelpTopic('email-verification')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Email Verification Guide
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('first-time-user')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  First Time User Guide
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Need Help?
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Email Verification Guide Content */}
+          {helpTopic === 'email-verification' && (
+            <div>
+              <h1 style={topicStyles.h1}>Email Verification & Troubleshooting</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Verify Your Email:</strong> Email verification is required to access all Lokal features. Learn how to find and confirm your verification email, including troubleshooting common issues.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Why Email Verification is Important</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <p style={{ margin: 0 }}>Email verification helps us:</p>
+                <ul style={{ paddingLeft: '20px', marginTop: '10px', marginBottom: 0 }}>
+                  <li><strong>Secure Your Account:</strong> Ensures only you can access your account</li>
+                  <li><strong>Send Important Notifications:</strong> Order updates, security alerts, and account information</li>
+                  <li><strong>Enable Password Recovery:</strong> Allows you to reset your password if forgotten</li>
+                  <li><strong>Prevent Spam:</strong> Helps us maintain a quality user base</li>
+                  <li><strong>Unlock Full Features:</strong> Some features require a verified email address</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>How to Verify Your Email</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Check Your Email Inbox</h3>
+                  <p>After signing up, look for the verification email:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Check the email address you used to register</li>
+                    <li>Look for an email from "Lokal" or "noreply@lokal.com"</li>
+                    <li>Subject line will be something like "Verify Your Lokal Account"</li>
+                    <li>The email should arrive within 5-10 minutes</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Click the Verification Link</h3>
+                  <p>Complete the verification process:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Open the verification email</li>
+                    <li>Click the "Verify Email" or "Confirm Account" button</li>
+                    <li>You'll be redirected to Lokal's website</li>
+                    <li>You should see a success message confirming verification</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e8f5e8', borderRadius: '6px' }}>
+                    <p><strong>Success!</strong> Once verified, you'll have full access to all Lokal features.</p>
+                  </div>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Email Not Received? Check These Places</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Check Your Spam/Junk Folder</h3>
+                  <p>Verification emails often end up in spam folders:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Gmail:</strong> Check the "Spam" folder in the left sidebar</li>
+                    <li><strong>Outlook/Hotmail:</strong> Look in the "Junk Email" folder</li>
+                    <li><strong>Yahoo:</strong> Check the "Spam" folder</li>
+                    <li><strong>Apple Mail:</strong> Look in the "Junk" folder</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff3e0', borderRadius: '6px' }}>
+                    <p><strong>Found it in spam?</strong> Mark it as "Not Spam" and add Lokal to your contacts to prevent future emails from going to spam.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Check Promotions/Social Tabs (Gmail)</h3>
+                  <p>Gmail users should also check these tabs:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Promotions Tab:</strong> Automated emails sometimes go here</li>
+                    <li><strong>Updates Tab:</strong> Account-related emails may appear here</li>
+                    <li><strong>Social Tab:</strong> Less common, but worth checking</li>
+                  </ul>
+                  <p>These tabs are located at the top of your Gmail inbox.</p>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Search Your Email</h3>
+                  <p>Use your email's search function:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Search for "Lokal" in your email</li>
+                    <li>Search for "verify" or "verification"</li>
+                    <li>Search for "noreply@lokal.com"</li>
+                    <li>Look for emails from the last 24 hours</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Still Can't Find the Email?</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Request Another Verification Email</h3>
+                  <p>If you can't find the original email:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Log into your Lokal account</li>
+                    <li>Look for a "Resend Verification Email" button</li>
+                    <li>Click it to send a new verification email</li>
+                    <li>Check all the folders mentioned above again</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Check Your Email Address</h3>
+                  <p>Verify you used the correct email address:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Log into your account and check your profile</li>
+                    <li>Make sure the email address is spelled correctly</li>
+                    <li>Check for typos (common mistakes: gmail.co instead of gmail.com)</li>
+                    <li>If incorrect, update your email address in settings</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Wait and Try Again</h3>
+                  <p>Sometimes there are delays:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Email servers can be slow during peak times</li>
+                    <li>Wait up to 30 minutes before requesting another email</li>
+                    <li>Try requesting verification during off-peak hours</li>
+                    <li>Make sure your email inbox isn't full</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Email Provider-Specific Tips</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Gmail Users:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li>Check all tabs: Primary, Social, Promotions, Updates</li>
+                  <li>Search for "from:noreply@lokal.com" in the search bar</li>
+                  <li>Check if Gmail's filters are hiding the email</li>
+                  <li>Add lokal.com to your contacts</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>Outlook/Hotmail Users:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li>Check both Junk Email and Deleted Items</li>
+                  <li>Add lokal.com to your Safe Senders list</li>
+                  <li>Check your email rules aren't filtering Lokal emails</li>
+                  <li>Try using the Outlook web app if using the desktop client</li>
+                </ul>
+              </div>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f3e5f5', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#8e24aa' }}>Yahoo Mail Users:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li>Check the Spam folder thoroughly</li>
+                  <li>Add lokal.com to your contacts</li>
+                  <li>Check if Yahoo's filters are too aggressive</li>
+                  <li>Try accessing Yahoo Mail through a web browser</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>What to Do If Verification Link Doesn't Work</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Link Expired or Invalid</h3>
+                  <p>If clicking the link shows an error:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Verification links expire after 24-48 hours</li>
+                    <li>Request a new verification email</li>
+                    <li>Make sure you're clicking the link, not just copying text</li>
+                    <li>Try opening the link in a different browser</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Browser Issues</h3>
+                  <p>If the verification page won't load:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Disable browser extensions temporarily</li>
+                    <li>Try an incognito/private browsing window</li>
+                    <li>Try a different browser (Chrome, Firefox, Safari, Edge)</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Still having trouble with email verification?</p>
+                <button 
+                  onClick={() => setHelpTopic('new-user-signup')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Back to Sign-up Guide
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('first-time-user')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  First Time User Guide
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* First Time User Guide Content */}
+          {helpTopic === 'first-time-user' && (
+            <div>
+              <h1 style={topicStyles.h1}>First Time Using Lokal</h1>
+              
+              <div style={topicStyles.infoBox}>
+                <p><strong>Welcome to Your Local Marketplace!</strong> Now that your account is set up, discover how to make the most of Lokal - whether you're here to shop from local businesses or start selling your own products.</p>
+              </div>
+              
+              <h2 style={topicStyles.h2}>Getting Started as a Buyer</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Complete Your Profile</h3>
+                  <p>Set up your buyer profile for the best experience:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Add a profile picture to build trust with sellers</li>
+                    <li>Fill in your basic information (name, location)</li>
+                    <li>Set your preferred categories and interests</li>
+                    <li>Enable location services to find nearby stores</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Explore Local Stores</h3>
+                  <p>Discover what's available in your area:</p>
+                  <ul style={topicStyles.ul}>
+                    <li><strong>Explore Page:</strong> Browse stores by location and category</li>
+                    <li><strong>Search Function:</strong> Look for specific products or store names</li>
+                    <li><strong>Categories:</strong> Filter by business type (food, retail, services, etc.)</li>
+                    <li><strong>Distance Filter:</strong> Adjust how far you're willing to travel</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+                    <p><strong>Tip:</strong> Use the 📍 pin icon to refresh your location and see the most accurate nearby stores.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Make Your First Purchase</h3>
+                  <p>Ready to buy from a local business:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Browse a store's products and add items to your cart</li>
+                    <li>Choose delivery or pickup options</li>
+                    <li>Enter your payment information securely</li>
+                    <li>Complete your order and track its progress</li>
+                    <li>Leave a review to help other buyers</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Getting Started as a Seller</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Create Your Store</h3>
+                  <p>Set up your business presence on Lokal:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Choose a memorable store name</li>
+                    <li>Add your business description and story</li>
+                    <li>Upload high-quality store photos</li>
+                    <li>Set your business hours and location</li>
+                    <li>Choose your business categories</li>
+                  </ul>
+                  <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e8f5e8', borderRadius: '6px' }}>
+                    <p><strong>Pro Tip:</strong> A complete, professional store profile attracts more customers and builds trust.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Add Your Products</h3>
+                  <p>Start building your product catalog:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Upload clear, attractive product photos</li>
+                    <li>Write detailed product descriptions</li>
+                    <li>Set competitive but profitable prices</li>
+                    <li>Organize products into categories</li>
+                    <li>Set inventory quantities and availability</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>3</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Set Up Payment Processing</h3>
+                  <p>Enable secure payments for your business:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Connect your bank account through Stripe Connect</li>
+                    <li>Set up your payment preferences</li>
+                    <li>Choose your payout schedule</li>
+                    <li>Configure payment methods you accept</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Essential Platform Features</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#333' }}>Key Features to Explore:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Messages:</strong> Communicate directly with buyers/sellers</li>
+                  <li><strong>Receipts:</strong> Track all your purchase and sales history</li>
+                  <li><strong>Orders:</strong> Manage your current and past orders efficiently</li>
+                  <li><strong>Reports:</strong> Generate sales and performance reports</li>
+                  <li><strong>Analytics:</strong> Gain insights into your sales trends and customer behavior</li>
+                  <li><strong>Notifications:</strong> Stay informed about important updates and events</li>
+                  <li><strong>Feed:</strong> Stay updated with local business news and promotions</li>
+                  <li><strong>Profile:</strong> Manage your account settings and preferences</li>
+                  <li><strong>Help Center:</strong> Find answers to common questions (you're here now!)</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Location Settings & Privacy</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Enable Location Services</h3>
+                  <p>Get the most accurate local results:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Allow location access when prompted</li>
+                    <li>Use the 📍 pin icon to refresh your location</li>
+                    <li>Manually enter your location if automatic detection fails</li>
+                    <li>Adjust your search radius based on how far you're willing to travel</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Privacy Settings</h3>
+                  <p>Control your privacy on the platform:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Choose what information is visible to others</li>
+                    <li>Set communication preferences</li>
+                    <li>Control notification settings</li>
+                    <li>Manage your data sharing preferences</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Safety and Security Tips</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#fff3e0', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#f57c00' }}>Stay Safe on Lokal:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Verify Sellers:</strong> Check store reviews and ratings before purchasing</li>
+                  <li><strong>Secure Payments:</strong> Always use the platform's payment system</li>
+                  <li><strong>Meet Safely:</strong> For pickups, choose public locations during daylight</li>
+                  <li><strong>Report Issues:</strong> Use our reporting system for any concerning behavior</li>
+                  <li><strong>Protect Personal Info:</strong> Don't share sensitive information outside the platform</li>
+                </ul>
+              </div>
+
+              <h2 style={topicStyles.h2}>Getting Help When You Need It</h2>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>1</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Help Center Resources</h3>
+                  <p>Find answers to common questions:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Browse help topics by category</li>
+                    <li>Use the search function to find specific information</li>
+                    <li>Check troubleshooting guides for technical issues</li>
+                    <li>Review policies and guidelines</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div style={topicStyles.steps.container}>
+                <div style={topicStyles.steps.counter}>2</div>
+                <div style={topicStyles.steps.content}>
+                  <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Contact Support</h3>
+                  <p>When you need personalized help:</p>
+                  <ul style={topicStyles.ul}>
+                    <li>Use the "Contact Support" button in the help center</li>
+                    <li>Provide detailed information about your issue</li>
+                    <li>Include screenshots if helpful</li>
+                    <li>Our team will respond as quickly as possible</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 style={topicStyles.h2}>Common First-Time Questions</h2>
+              
+              <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '8px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', marginBottom: '8px', color: '#1976d2' }}>Frequently Asked Questions:</h4>
+                <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
+                  <li><strong>Q: Is it free to use Lokal?</strong><br/>A: Yes, creating an account and browsing is completely free. Sellers pay small fees only when they make sales.</li>
+                  <li><strong>Q: How do I know if a seller is trustworthy?</strong><br/>A: Check their reviews, ratings, and how long they've been on the platform.</li>
+                  <li><strong>Q: Can I both buy and sell on the same account?</strong><br/>A: Absolutely! You can switch between buyer and seller modes easily.</li>
+                  <li><strong>Q: What if I have a problem with an order?</strong><br/>A: Contact the seller first, then reach out to our support team if needed.</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ marginBottom: '10px', fontWeight: 500 }}>Ready to explore more?</p>
+                <button 
+                  onClick={() => setHelpTopic('explore-page-guide')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Learn About the Explore Page
+                </button>
+                <button 
+                  onClick={() => setHelpTopic('store-creation')}
+                  style={{ 
+                    backgroundColor: '#007B7F',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    marginRight: '10px'
+                  }}
+                >
+                  Create Your Store
+                </button>
+                <button 
+                  onClick={() => isLoggedIn ? setHelpTopic('contact-support') : handleUnauthenticatedSupport()}
+                  style={{ 
+                    backgroundColor: '#DC2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 15px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem'
+                  }}
+                >
+                  Need Help?
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Other existing help topics continue here */}
+          {/* Store Creation Content */}
         </div>
       </div>
     );
@@ -3801,6 +4500,49 @@ function HelpCenterPage() {
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px', marginBottom: '30px' }}>
           
+          {/* Getting Started - New Users */}
+          <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <div style={{ backgroundColor: '#10B981', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '15px' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 16 16">
+                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                  <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Getting Started</h3>
+            </div>
+            <p style={{ margin: '0 0 15px 0', color: '#555' }}>New to Lokal? Learn how to sign up, verify your account, and start using the platform.</p>
+            <ul style={{ paddingLeft: '20px', marginBottom: '0' }}>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('new-user-signup'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Sign up guide & account creation
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('email-verification'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  Email verification & troubleshooting
+                </a>
+              </li>
+              <li style={{ marginBottom: '8px' }}>
+                <a 
+                  href="#" 
+                  onClick={(e) => { e.preventDefault(); setHelpTopic('first-time-user'); }} 
+                  style={{ color: '#007B7F', textDecoration: 'none', fontWeight: 500 }}
+                >
+                  First time using Lokal
+                </a>
+              </li>
+            </ul>
+          </div>
+
           {/* For Store Owners */}
           <div style={{ padding: '20px', border: '1px solid #e0e0e0', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
