@@ -2568,17 +2568,21 @@ function MessagesPage() {
       let paymentIntentId = `default_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Initialize with default value
       let useConnectPayment = false;
 
-      // ALL sellers must have Stripe Connect account - no virtual wallet
+      // Get seller info for potential Stripe Connect account
       const sellerDoc = await getDoc(doc(db, 'users', sellerId));
       const sellerData = sellerDoc.data();
       const sellerStripeAccountId = sellerData?.stripeConnectAccountId;
 
-      if (!sellerStripeAccountId) {
+      // Only require Stripe Connect for card and Google Pay payments
+      if ((selectedPaymentMethod === 'card' || selectedPaymentMethod === 'google_pay') && !sellerStripeAccountId) {
         throw new Error('This seller has not set up their payment account yet. Please ask them to complete their Stripe Connect setup to receive payments.');
       }
 
-      console.log('🔗 Using seller Connect account:', sellerStripeAccountId);
-      useConnectPayment = true;
+      // Set up Connect payment for card and Google Pay methods
+      if (sellerStripeAccountId && (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'google_pay')) {
+        console.log('🔗 Using seller Connect account:', sellerStripeAccountId);
+        useConnectPayment = true;
+      }
 
       if (selectedPaymentMethod === 'card' && stripePaymentData) {
         // ALL payments go through Stripe Connect - no fallback

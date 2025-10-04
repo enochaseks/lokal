@@ -11,13 +11,8 @@ export const detectUserCountry = async () => {
       try {
         console.log('🗺️ Trying Google Maps geolocation...');
         
-        // Add timeout to geolocation
-        const positionPromise = getCurrentPosition();
-        const geoTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Geolocation timeout')), 2000)
-        );
-        
-        const position = await Promise.race([positionPromise, geoTimeoutPromise]);
+        // Use geolocation with reasonable timeout
+        const position = await getCurrentPosition();
         const geocoder = new window.google.maps.Geocoder();
         
         const geocodeResult = await new Promise((resolve, reject) => {
@@ -60,13 +55,8 @@ export const detectUserCountry = async () => {
       try {
         console.log('📍 Trying browser geolocation...');
         
-        // Add timeout to geolocation
-        const positionPromise = getCurrentPosition();
-        const geoTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Browser geolocation timeout')), 2000)
-        );
-        
-        const position = await Promise.race([positionPromise, geoTimeoutPromise]);
+        // Use browser geolocation with reasonable timeout
+        const position = await getCurrentPosition();
         
         // Add timeout to geocoding API
         const geocodePromise = fetch(
@@ -241,9 +231,9 @@ const getCurrentPosition = () => {
       resolve,
       reject,
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
+        enableHighAccuracy: false, // Use false for faster response
+        timeout: 15000, // 15 seconds - more reasonable timeout
+        maximumAge: 300000 // 5 minutes cache
       }
     );
   });
