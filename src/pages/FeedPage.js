@@ -51,6 +51,19 @@ function FeedPage() {
   const [shareItemText, setShareItemText] = useState('');
   const [shareItemLoading, setShareItemLoading] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
+  
+  // Responsive state for mobile detection
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  // Handle window resize for responsive design
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const auth = getAuth();
@@ -919,12 +932,12 @@ ${item.description || 'Available now at our store!'}
               paddingTop: '16px',
               borderTop: '1px solid #E4E6EA'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px', flex: 1 }}>
                 <label style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: '8px',
-                  padding: '8px 12px',
+                  gap: isMobile ? '0' : '8px',
+                  padding: isMobile ? '8px' : '8px 12px',
                   border: '1px solid #E4E6EA',
                   borderRadius: '8px',
                   cursor: 'pointer',
@@ -944,7 +957,7 @@ ${item.description || 'Available now at our store!'}
                 }}
                 >
                   <span style={{ fontSize: '16px' }}>📷</span>
-                  Add Media
+                  {!isMobile && 'Add Media'}
                   <input 
                     type="file" 
                     accept="image/*,video/*" 
@@ -960,8 +973,8 @@ ${item.description || 'Available now at our store!'}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 12px',
+                    gap: isMobile ? '0' : '8px',
+                    padding: isMobile ? '8px' : '8px 12px',
                     border: '1px solid #E4E6EA',
                     borderRadius: '8px',
                     background: '#F8F9FA',
@@ -982,7 +995,7 @@ ${item.description || 'Available now at our store!'}
                   title="Share an item from your store"
                 >
                   <span style={{ fontSize: '16px' }}>🛍️</span>
-                  Share Item
+                  {!isMobile && 'Share Item'}
                 </button>
 
                 <button
@@ -991,8 +1004,8 @@ ${item.description || 'Available now at our store!'}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 12px',
+                    gap: isMobile ? '0' : '8px',
+                    padding: isMobile ? '8px' : '8px 12px',
                     border: isCampaign ? '1px solid #FFD700' : '1px solid #E4E6EA',
                     borderRadius: '8px',
                     background: isCampaign ? '#FFF8DC' : '#F8F9FA',
@@ -1005,7 +1018,7 @@ ${item.description || 'Available now at our store!'}
                   title={isCampaign ? 'Remove Campaign Tag' : 'Mark as Campaign'}
                 >
                   <span style={{ fontSize: '16px' }}>📢</span>
-                  {isCampaign ? 'Campaign' : 'Campaign'}
+                  {!isMobile && 'Campaign'}
                 </button>
               </div>
               
