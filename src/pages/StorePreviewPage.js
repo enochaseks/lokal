@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, collection, onSnapshot, getDoc, setDoc, deleteDoc, addDoc, serverTimestamp, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -108,6 +109,12 @@ function StorePreviewPage() {
   const [boostDuration, setBoostDuration] = useState(7); // Default 7 days
   const [boostProcessing, setBoostProcessing] = useState(false);
   const [boostError, setBoostError] = useState('');
+  
+  // Alcohol ID verification states
+  const [showIdVerificationModal, setShowIdVerificationModal] = useState(false);
+  const [pendingAlcoholItem, setPendingAlcoholItem] = useState(null);
+  const [idImage, setIdImage] = useState(null);
+  const [idUploading, setIdUploading] = useState(false);
   const [boostSuccess, setBoostSuccess] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [stripeClientSecret, setStripeClientSecret] = useState('');
@@ -730,6 +737,14 @@ function StorePreviewPage() {
       return;
     }
     
+    // Check if item is alcohol and requires ID verification
+    if (item.isAlcohol === 'yes') {
+      setPendingAlcoholItem(item);
+      setShowIdVerificationModal(true);
+      return;
+    }
+    
+    // Add non-alcohol item directly to cart
     addToCart({
       storeId: id,
       storeName: store.storeName,
@@ -744,6 +759,91 @@ function StorePreviewPage() {
     setShowAdded(true);
     setTimeout(() => setShowAdded(false), 1500);
   }
+
+  // ID verification handlers
+  const handleIdVerification = async () => {
+    if (!idImage || !pendingAlcoholItem) {
+      alert('Please upload your ID first');
+      return;
+    }
+
+    setIdUploading(true);
+    try {
+      const storage = getStorage();
+      const idRef = ref(storage, `alcoholPurchaseIds/${authUser.uid}/${Date.now()}-${idImage.name}`);
+      
+      // Upload ID image to Firebase Storage
+      await uploadBytes(idRef, idImage);
+      const idUrl = await getDownloadURL(idRef);
+      
+      // Save ID verification record to Firestore
+      await addDoc(collection(db, 'alcoholIdVerifications'), {
+        buyerId: authUser.uid,
+        storeId: id,
+        itemId: pendingAlcoholItem.id,
+        itemName: pendingAlcoholItem.name,
+        idImageUrl: idUrl,
+        timestamp: serverTimestamp(),
+        verified: false, // Admin will verify later
+        storeName: store.storeName
+      });
+      
+      // Add item to cart after ID is uploaded
+      addToCart({
+        storeId: id,
+        storeName: store.storeName,
+        itemId: pendingAlcoholItem.id,
+        itemName: pendingAlcoholItem.name,
+        price: parseFloat(pendingAlcoholItem.price),
+        currency: pendingAlcoholItem.currency,
+        quantity: 1,
+        image: pendingAlcoholItem.image,
+        deliveryType: store.deliveryType,
+        requiresIdVerification: true // Flag for alcohol items
+      });
+      
+      // Close modal and show success
+      setShowIdVerificationModal(false);
+      setPendingAlcoholItem(null);
+      setIdImage(null);
+      setShowAdded(true);
+      setTimeout(() => setShowAdded(false), 1500);
+      
+      alert('ID uploaded successfully! Your alcohol purchase has been added to cart. ID verification may be required before checkout.');
+      
+    } catch (error) {
+      console.error('Error uploading ID:', error);
+      alert('Error uploading ID. Please try again.');
+    } finally {
+      setIdUploading(false);
+    }
+  };
+
+  const handleIdImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type (images only)
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size must be less than 5MB');
+        return;
+      }
+      
+      setIdImage(file);
+    }
+  };
+
+  const closeIdVerificationModal = () => {
+    setShowIdVerificationModal(false);
+    setPendingAlcoholItem(null);
+    setIdImage(null);
+    setIdUploading(false);
+  };
 
   // Update the existing useEffect for auth to properly handle viewed stores
   useEffect(() => {
@@ -1668,6 +1768,32 @@ function StorePreviewPage() {
               </div>
             </div>
             
+            {/* Perishable Food Verification Banner */}
+            {store.sellsPerishableFood === 'yes' && (store.foodHygieneProof || store.foodHygiene) && (
+              <div className="perishable-food-banner">
+                <div className="verification-badge">
+                  <span className="verification-icon">🏅</span>
+                  <div className="verification-text">
+                    <div className="verification-title">Verified Fresh Food Seller</div>
+                    <div className="verification-subtitle">Certified to sell perishable food items safely</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Alcohol License Verification Banner */}
+            {store.sellsAlcohol === 'yes' && store.alcoholLicense && (
+              <div className="alcohol-license-banner">
+                <div className="verification-badge">
+                  <span className="verification-icon">🍷</span>
+                  <div className="verification-text">
+                    <div className="verification-title">Licensed Alcohol Seller</div>
+                    <div className="verification-subtitle">Authorized to sell alcoholic beverages</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="store-details">
               <div className="detail-item origin">
                 <span className="detail-label">Origin:</span> 
@@ -1848,6 +1974,57 @@ function StorePreviewPage() {
               .review-count {
                 margin-left: 4px;
                 font-weight: normal;
+              }
+              
+              .perishable-food-banner {
+                margin-top: 12px;
+                padding: 0;
+              }
+
+              .alcohol-license-banner {
+                margin-top: 12px;
+                padding: 0;
+              }
+              
+              .verification-badge {
+                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+                border-radius: 12px;
+                padding: 10px 14px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                box-shadow: 0 3px 12px rgba(16, 185, 129, 0.2);
+                border: 2px solid #34D399;
+              }
+
+              .alcohol-license-banner .verification-badge {
+                background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+                box-shadow: 0 3px 12px rgba(139, 92, 246, 0.2);
+                border: 2px solid #A78BFA;
+              }
+              
+              .verification-icon {
+                font-size: 1.5rem;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+              }
+              
+              .verification-text {
+                flex: 1;
+              }
+              
+              .verification-title {
+                color: white;
+                font-weight: 700;
+                font-size: 0.95rem;
+                margin: 0;
+                line-height: 1.2;
+              }
+              
+              .verification-subtitle {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 0.8rem;
+                margin: 2px 0 0 0;
+                line-height: 1.2;
               }
               
               .store-details {
@@ -2089,6 +2266,23 @@ function StorePreviewPage() {
                 
                 .social-icons-wrapper {
                   gap: 5px;
+                }
+                
+                .verification-badge {
+                  padding: 8px 12px;
+                  gap: 8px;
+                }
+                
+                .verification-icon {
+                  font-size: 1.3rem;
+                }
+                
+                .verification-title {
+                  font-size: 0.9rem;
+                }
+                
+                .verification-subtitle {
+                  font-size: 0.75rem;
                 }
               }
               }
@@ -2654,6 +2848,28 @@ function StorePreviewPage() {
                     position: 'relative'
                   }}
                 >
+                  {/* Alcohol indicator overlay */}
+                  {item.isAlcohol === 'yes' && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold',
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      zIndex: 1,
+                      textTransform: 'uppercase',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}>
+                      🍷 ALCOHOL
+                    </div>
+                  )}
+
                   {/* Stock status overlay */}
                   {item.stock && item.stock !== 'in-stock' && (
                     <div style={{
@@ -2706,6 +2922,21 @@ function StorePreviewPage() {
                       <span className="product-quality">Quality: {item.quality}</span> 
                       <span className="product-divider">|</span>
                       <span className="product-quantity">Qty: {item.quantity}</span>
+                      {/* Alcohol indicator in meta */}
+                      {item.isAlcohol === 'yes' && (
+                        <>
+                          <span className="product-divider">|</span>
+                          <span 
+                            style={{
+                              color: '#8B5CF6',
+                              fontWeight: 'bold',
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            🍷 Alcohol
+                          </span>
+                        </>
+                      )}
                       {/* Stock status in meta */}
                       {item.stock && item.stock !== 'in-stock' && (
                         <>
@@ -3743,6 +3974,186 @@ function StorePreviewPage() {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ID Verification Modal for Alcohol Purchases */}
+      {showIdVerificationModal && pendingAlcoholItem && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: '90%',
+            maxWidth: 500,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#8B5CF6' }}>
+                <span style={{ marginRight: 8 }}>🆔</span>
+                ID Verification Required
+              </h2>
+              <button 
+                onClick={closeIdVerificationModal}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                }}
+                disabled={idUploading}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{
+              background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+              color: 'white',
+              padding: 16,
+              borderRadius: 8,
+              marginBottom: 20,
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '2rem', marginBottom: 8 }}>🍷</div>
+              <h3 style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Alcohol Purchase</h3>
+              <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.9 }}>
+                You're purchasing: <strong>{pendingAlcoholItem.name}</strong>
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ marginBottom: 16, fontSize: '1rem', lineHeight: 1.5 }}>
+                🔒 <strong>Age verification required:</strong> To purchase alcohol products, 
+                please upload a clear photo of your government-issued ID (driver's license, 
+                passport, or national ID card).
+              </p>
+              
+              <div style={{
+                background: '#FEF9C3',
+                border: '1px solid #FDE047',
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 16
+              }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#92400E' }}>
+                  ⚠️ <strong>Important:</strong> Your ID will be reviewed for age verification only. 
+                  We protect your privacy and comply with data protection regulations.
+                </p>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ 
+                  display: 'block', 
+                  fontWeight: 600, 
+                  marginBottom: 8,
+                  color: '#374151'
+                }}>
+                  Upload ID Document *
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleIdImageChange}
+                  disabled={idUploading}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px dashed #8B5CF6',
+                    borderRadius: 8,
+                    background: '#F9FAFB',
+                    cursor: idUploading ? 'not-allowed' : 'pointer'
+                  }}
+                />
+                {idImage && (
+                  <p style={{ 
+                    margin: '8px 0 0 0', 
+                    fontSize: '0.9rem', 
+                    color: '#16A34A',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    ✅ {idImage.name} selected
+                  </p>
+                )}
+              </div>
+
+              <div style={{ 
+                fontSize: '0.8rem', 
+                color: '#6B7280', 
+                marginBottom: 20,
+                padding: 12,
+                background: '#F3F4F6',
+                borderRadius: 6
+              }}>
+                <p style={{ margin: '0 0 8px 0' }}>
+                  <strong>Accepted formats:</strong> JPG, PNG, WEBP (max 5MB)
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Requirements:</strong> Clear, legible photo showing full document
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={closeIdVerificationModal}
+                disabled={idUploading}
+                style={{
+                  background: '#F3F4F6',
+                  color: '#374151',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: 8,
+                  padding: '12px 24px',
+                  cursor: idUploading ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleIdVerification}
+                disabled={idUploading || !idImage}
+                style={{
+                  background: idUploading || !idImage ? '#9CA3AF' : 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '12px 24px',
+                  cursor: (idUploading || !idImage) ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                {idUploading ? (
+                  <>⏳ Uploading...</>
+                ) : (
+                  <>
+                    <span>🆔</span>
+                    Verify & Add to Cart
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,8 +1,9 @@
-import logo from './logo.svg';
+
 import './App.css';
 import ExplorePage from './pages/ExplorePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import EmailVerificationPage from './pages/EmailVerificationPage';
 import HelpCenterPage from './pages/HelpCenterPage';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import OnboardingPage from './pages/OnboardingPage';
@@ -37,19 +38,16 @@ import LoadingSplashManager from './components/LoadingSplashManager';
 import SimpleLoadingSpinner from './components/SimpleLoadingSpinner';
 
 function DeletedAccountGuard({ children }) {
-  const navigate = useNavigate();
-  
   useEffect(() => {
     const auth = getAuth();
-    let unsubscribe = null;
     
-    const checkAccountStatus = () => {
+    const checkAccountStatus = async () => {
       const user = auth.currentUser;
       if (!user) return;
       
       // Monitor user document for deletion
       const userDocRef = doc(db, 'users', user.uid);
-      unsubscribe = onSnapshot(userDocRef, async (userDoc) => {
+      const userUnsubscribe = onSnapshot(userDocRef, async (userDoc) => {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           
@@ -57,45 +55,45 @@ function DeletedAccountGuard({ children }) {
             console.log('Account was deleted by admin, logging out...');
             await signOut(auth);
             alert('Your account has been deleted by an administrator. You have been logged out.');
-            navigate('/login', { replace: true });
+            window.location.href = '/login';
             return;
           }
-        } else {
-          // Also check stores collection for sellers
-          const storeDocRef = doc(db, 'stores', user.uid);
-          const storeUnsubscribe = onSnapshot(storeDocRef, async (storeDoc) => {
-            if (storeDoc.exists()) {
-              const storeData = storeDoc.data();
-              
-              if (storeData.deleted || storeData.accountStatus === 'deleted') {
-                console.log('Seller account was deleted by admin, logging out...');
-                await signOut(auth);
-                alert('Your seller account has been deleted by an administrator. You have been logged out.');
-                navigate('/login', { replace: true });
-                return;
-              }
-            }
-          });
-          
-          return () => storeUnsubscribe && storeUnsubscribe();
         }
       });
+      
+      // Also check stores collection for sellers
+      const storeDocRef = doc(db, 'stores', user.uid);
+      const storeUnsubscribe = onSnapshot(storeDocRef, async (storeDoc) => {
+        if (storeDoc.exists()) {
+          const storeData = storeDoc.data();
+          
+          if (storeData.deleted || storeData.accountStatus === 'deleted') {
+            console.log('Seller account was deleted by admin, logging out...');
+            await signOut(auth);
+            alert('Your seller account has been deleted by an administrator. You have been logged out.');
+            window.location.href = '/login';
+            return;
+          }
+        }
+      });
+      
+      return () => {
+        if (userUnsubscribe) userUnsubscribe();
+        if (storeUnsubscribe) storeUnsubscribe();
+      };
     };
     
     // Check immediately and on auth state change
     const authUnsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
         checkAccountStatus();
-      } else if (unsubscribe) {
-        unsubscribe();
       }
     });
     
     return () => {
-      if (unsubscribe) unsubscribe();
       if (authUnsubscribe) authUnsubscribe();
     };
-  }, [navigate]);
+  }, []);
   
   return children;
 }
@@ -108,11 +106,29 @@ function OnboardingGuard({ children }) {
       const auth = getAuth();
       const user = auth.currentUser;
       if (!user) return;
+      
+      // CRITICAL: Don't redirect if user is on email verification page
+      // They need to verify their email before proceeding to onboarding
+      if (location.pathname === '/verify-email') {
+        console.log('OnboardingGuard: User on email verification page, skipping redirect');
+        return;
+      }
+      
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
-        const onboardingStep = userDoc.data().onboardingStep;
+        const userData = userDoc.data();
+        const onboardingStep = userData.onboardingStep;
+        const emailVerified = userData.emailVerified;
+        
+        // Only redirect to onboarding if email is verified
         if (onboardingStep && onboardingStep !== 'complete' && !location.pathname.includes(onboardingStep)) {
-          navigate('/' + onboardingStep, { replace: true });
+          if (emailVerified) {
+            console.log('OnboardingGuard: Email verified, redirecting to onboarding step:', onboardingStep);
+            navigate('/' + onboardingStep, { replace: true });
+          } else {
+            console.log('OnboardingGuard: Email not verified, redirecting to verification page');
+            navigate('/verify-email', { replace: true });
+          }
         }
       }
     };
@@ -217,6 +233,7 @@ function App() {
                 <Route path="/explore" element={<ExplorePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/verify-email" element={<EmailVerificationPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/onboarding-sell-category" element={<OnboardingSellCategoryPage />} />
                 <Route path="/onboarding-sell-location" element={<OnboardingSellLocationPage />} />

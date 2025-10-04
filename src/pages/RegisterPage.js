@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { getDocs, collection, query, where, setDoc, doc } from 'firebase/firestore';
+import { setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { addOrUpdateContact } from '../utils/hubspotClient';
 // Removed debug imports
@@ -113,10 +113,18 @@ function RegisterPage() {
       await setDoc(doc(db, 'users', user.uid), userDoc);
       
       // Send email verification
-      await sendEmailVerification(user, {
-        url: `${window.location.origin}/login`,
-        handleCodeInApp: false
-      });
+      console.log('Registration: Sending verification email to:', user.email);
+      try {
+        await sendEmailVerification(user, {
+          url: `${window.location.origin}/verify-email`,
+          handleCodeInApp: false
+        });
+        console.log('Registration: Verification email sent successfully');
+      } catch (emailError) {
+        console.warn('Registration: Custom email settings failed, trying default:', emailError);
+        await sendEmailVerification(user);
+        console.log('Registration: Verification email sent with default settings');
+      }
       
       // Add to HubSpot in background (non-blocking)
       if (marketingConsent) {
@@ -129,7 +137,12 @@ function RegisterPage() {
       }
       
       setVerificationSent(true);
-      setSuccess('Account created successfully! Please check your email and click the verification link to complete your registration.');
+      setSuccess('Account created successfully! Please check your email (including spam folder) and click the verification link to complete your registration.');
+      
+      // Redirect to verification page after a short delay
+      setTimeout(() => {
+        navigate('/verify-email');
+      }, 1500);
       
     } catch (err) {
       console.error('Registration error:', err);
@@ -522,9 +535,23 @@ function RegisterPage() {
             textAlign: 'center' 
           }}>
             <h4 style={{ color: '#007B7F', margin: '0 0 10px 0' }}>✉️ Verification Email Sent!</h4>
-            <p style={{ margin: '0 0 15px 0', color: '#333' }}>
+            <p style={{ margin: '0 0 10px 0', color: '#333' }}>
               Please check your email and click the verification link to complete your registration.
             </p>
+            <div style={{ 
+              backgroundColor: '#FFF7E6', 
+              border: '1px solid #FFD700', 
+              borderRadius: '4px', 
+              padding: '10px', 
+              marginBottom: '15px' 
+            }}>
+              <p style={{ margin: 0, color: '#E65100', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                ⚠️ Important: Check your spam/junk folder!
+              </p>
+              <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '0.8rem' }}>
+                Verification emails sometimes end up in spam folders.
+              </p>
+            </div>
             <button
               onClick={async () => {
                 const auth = getAuth(app);

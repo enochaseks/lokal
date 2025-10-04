@@ -29,6 +29,7 @@ function StoreProfilePage() {
   const [itemCurrency, setItemCurrency] = useState('GBP');
   const [itemQuality, setItemQuality] = useState('');
   const [itemQuantity, setItemQuantity] = useState('');
+  const [itemIsAlcohol, setItemIsAlcohol] = useState('no');
   const [followers, setFollowers] = useState([]);
   const [followersDetails, setFollowersDetails] = useState([]);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
@@ -83,6 +84,8 @@ function StoreProfilePage() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editSellsAlcohol, setEditSellsAlcohol] = useState('');
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
+  const [editSellsPerishableFood, setEditSellsPerishableFood] = useState('');
+  const [editFoodHygieneProof, setEditFoodHygieneProof] = useState(null);
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
   const [editPhoneType, setEditPhoneType] = useState('work');
   
@@ -144,6 +147,8 @@ function StoreProfilePage() {
           setClosingTimes(data.closingTimes || {});
           setEditSellsAlcohol(data.sellsAlcohol || '');
           setEditAlcoholLicense(data.alcoholLicense || null);
+          setEditSellsPerishableFood(data.sellsPerishableFood || '');
+          setEditFoodHygieneProof(data.foodHygieneProof || data.foodHygiene || null);
           setEditPhoneNumber(data.phoneNumber || '');
           setEditPhoneType(data.phoneType || 'work');
           
@@ -593,6 +598,7 @@ function StoreProfilePage() {
         quantity: itemQuantity,
         stock: 'in-stock', // Default to in-stock for new items
         image: imageUrl,
+        isAlcohol: itemIsAlcohol,
         createdAt: new Date().toISOString(),
       };
       await addDoc(collection(db, 'stores', user.uid, 'items'), itemData);
@@ -603,6 +609,7 @@ function StoreProfilePage() {
       setItemCurrency('GBP');
       setItemQuality('');
       setItemQuantity('');
+      setItemIsAlcohol('no');
       // Re-fetch items
       const itemsCol = collection(db, 'stores', user.uid, 'items');
       const itemsSnap = await getDocs(itemsCol);
@@ -641,8 +648,13 @@ function StoreProfilePage() {
       return;
     }
     
-    if (editSellsAlcohol === 'yes' && !editAlcoholLicense) {
+    if (editSellsAlcohol === 'yes' && editAlcoholLicense === null && !profile.alcoholLicense) {
       alert('You must upload proof of license to sell alcohol.');
+      return;
+    }
+    
+    if (editSellsPerishableFood === 'yes' && editFoodHygieneProof === null && !profile.foodHygieneProof && !profile.foodHygiene) {
+      alert('You must upload food hygiene certificate/proof to sell perishable food items.');
       return;
     }
     
@@ -661,6 +673,34 @@ function StoreProfilePage() {
         const imgRef = ref(storage, `storeBanners/${user.uid}_${editThumbnail.name}`);
         await uploadBytes(imgRef, editThumbnail);
         thumbnailUrl = await getDownloadURL(imgRef);
+      }
+
+      // Upload food hygiene proof if it's a new file
+      let foodHygieneProofUrl = profile.foodHygieneProof || profile.foodHygiene || '';
+      if (editFoodHygieneProof === null) {
+        // User explicitly removed the file
+        foodHygieneProofUrl = '';
+      } else if (editFoodHygieneProof && typeof editFoodHygieneProof !== 'string') {
+        const foodHygieneRef = ref(storage, `foodHygieneProofs/${user.uid}_${editFoodHygieneProof.name}`);
+        await uploadBytes(foodHygieneRef, editFoodHygieneProof);
+        foodHygieneProofUrl = await getDownloadURL(foodHygieneRef);
+      } else if (typeof editFoodHygieneProof === 'string') {
+        // Keep existing URL if it's already a string
+        foodHygieneProofUrl = editFoodHygieneProof;
+      }
+
+      // Upload alcohol license if it's a new file
+      let alcoholLicenseUrl = profile.alcoholLicense || '';
+      if (editAlcoholLicense === null) {
+        // User explicitly removed the file
+        alcoholLicenseUrl = '';
+      } else if (editAlcoholLicense && typeof editAlcoholLicense !== 'string') {
+        const alcoholLicenseRef = ref(storage, `alcoholLicenses/${user.uid}_${editAlcoholLicense.name}`);
+        await uploadBytes(alcoholLicenseRef, editAlcoholLicense);
+        alcoholLicenseUrl = await getDownloadURL(alcoholLicenseRef);
+      } else if (typeof editAlcoholLicense === 'string') {
+        // Keep existing URL if it's already a string
+        alcoholLicenseUrl = editAlcoholLicense;
       }
 
       // Clear opening/closing times for closed days
@@ -715,7 +755,11 @@ function StoreProfilePage() {
         openingTimes: cleanedOpeningTimes,
         closingTimes: cleanedClosingTimes,
         sellsAlcohol: editSellsAlcohol,
-        alcoholLicense: editAlcoholLicense,
+        alcoholLicense: alcoholLicenseUrl,
+        sellsPerishableFood: editSellsPerishableFood,
+        foodHygieneProof: foodHygieneProofUrl,
+        // Also store as foodHygiene for backward compatibility with hasLicenses check
+        foodHygiene: foodHygieneProofUrl,
         phoneNumber: editPhoneNumber,
         phoneType: editPhoneType,
         // Social media and website arrays
@@ -2250,6 +2294,13 @@ function StoreProfilePage() {
                     ))}
                   </select>
                 </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Is this an alcoholic product?</label>
+                  <select value={itemIsAlcohol} onChange={e => setItemIsAlcohol(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
+                    <option value="no">No, this is not alcohol</option>
+                    <option value="yes">Yes, this is an alcoholic product</option>
+                  </select>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
                   <button type="button" onClick={() => setShowAddModal(false)} style={{ background: '#eee', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#444', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
                   <button type="submit" style={{ background: '#007B7F', border: 'none', borderRadius: 6, padding: '0.5rem 1.2rem', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Add</button>
@@ -2470,8 +2521,83 @@ function StoreProfilePage() {
                 </div>
                 {editSellsAlcohol === 'yes' && (
                   <div style={{ marginBottom: 14 }}>
-                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Upload proof of license/permission to sell alcohol (required)</label>
-                    <input type="file" accept="image/*,application/pdf" onChange={e => setEditAlcoholLicense(e.target.files[0])} style={{ width: '100%' }} required />
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>
+                      Upload proof of license/permission to sell alcohol {profile.alcoholLicense ? '(optional - already uploaded)' : '(required)'}
+                    </label>
+                    {profile.alcoholLicense && editAlcoholLicense !== null && (
+                      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f0f9f0', borderRadius: 4, border: '1px solid #d4edda' }}>
+                        <span style={{ color: '#155724', fontSize: '0.9rem' }}>✓ License already uploaded</span>
+                        <a href={profile.alcoholLicense} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#007B7F' }}>View current file</a>
+                        <button 
+                          type="button" 
+                          onClick={() => setEditAlcoholLicense(null)} 
+                          style={{ 
+                            marginLeft: 8, 
+                            color: '#dc3545', 
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            fontSize: '0.85rem',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          Remove file
+                        </button>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*,application/pdf" onChange={e => setEditAlcoholLicense(e.target.files[0])} style={{ width: '100%' }} {...(!profile.alcoholLicense && { required: true })} />
+                    {profile.alcoholLicense && (
+                      <p style={{ color: '#666', fontSize: '0.85rem', marginTop: 4, marginBottom: 0 }}>
+                        Leave empty to keep current file, or select a new file to replace it
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Meat/Chicken/Perishable Food Section */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Do you sell meat, chicken, fish, or other food items that could easily spoil at your store?</label>
+                  <select value={editSellsPerishableFood} onChange={e => setEditSellsPerishableFood(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
+                    <option value="">Select</option>
+                    <option value="yes">Yes, I sell perishable food items</option>
+                    <option value="no">No, I only sell non-perishable food items</option>
+                  </select>
+                </div>
+                {editSellsPerishableFood === 'yes' && (
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>
+                      Food Hygiene Certificate/Proof {(profile.foodHygieneProof || profile.foodHygiene) ? '(optional - already uploaded)' : '(Required)'}
+                    </label>
+                    <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                      Please upload your food hygiene certificate or any relevant document showing you can safely sell perishable food items and your products are fresh.
+                    </p>
+                    {(profile.foodHygieneProof || profile.foodHygiene) && editFoodHygieneProof !== null && (
+                      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f0f9f0', borderRadius: 4, border: '1px solid #d4edda' }}>
+                        <span style={{ color: '#155724', fontSize: '0.9rem' }}>✓ Certificate already uploaded</span>
+                        <a href={profile.foodHygieneProof || profile.foodHygiene} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#007B7F' }}>View current file</a>
+                        <button 
+                          type="button" 
+                          onClick={() => setEditFoodHygieneProof(null)} 
+                          style={{ 
+                            marginLeft: 8, 
+                            color: '#dc3545', 
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            fontSize: '0.85rem',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          Remove file
+                        </button>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*,application/pdf" onChange={e => setEditFoodHygieneProof(e.target.files[0])} style={{ width: '100%' }} {...(!(profile.foodHygieneProof || profile.foodHygiene) && { required: true })} />
+                    {(profile.foodHygieneProof || profile.foodHygiene) && (
+                      <p style={{ color: '#666', fontSize: '0.85rem', marginTop: 4, marginBottom: 0 }}>
+                        Leave empty to keep current file, or select a new file to replace it
+                      </p>
+                    )}
                   </div>
                 )}
                 

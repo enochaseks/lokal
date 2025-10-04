@@ -3,7 +3,7 @@ import { useCart } from '../CartContext';
 import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const currencySymbols = {
@@ -260,6 +260,54 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
       // Create unique order ID with milliseconds and random component
       const orderId = `order_${timestamp}_${Math.random().toString(36).substr(2, 5)}_${currentUser.uid.slice(-4)}`;
       
+      // Check for alcohol items and fetch ID verification data
+      const itemsWithAlcoholCheck = await Promise.all(
+        group.items.map(async (item) => {
+          const baseItem = {
+            itemId: item.itemId,
+            itemName: item.itemName,
+            name: item.itemName,
+            price: item.price,
+            currency: item.currency,
+            quantity: item.quantity,
+            subtotal: item.price * item.quantity
+          };
+
+          // Check if this item requires alcohol verification
+          if (item.requiresIdVerification) {
+            try {
+              // Fetch ID verification record for this item
+              const idVerificationQuery = query(
+                collection(db, 'alcoholIdVerifications'),
+                where('buyerId', '==', currentUser.uid),
+                where('storeId', '==', group.storeId),
+                where('itemId', '==', item.itemId)
+              );
+              
+              const idVerificationSnapshot = await getDocs(idVerificationQuery);
+              
+              if (!idVerificationSnapshot.empty) {
+                const idVerification = idVerificationSnapshot.docs[0].data();
+                baseItem.alcoholVerification = {
+                  idImageUrl: idVerification.idImageUrl,
+                  timestamp: idVerification.timestamp,
+                  verified: idVerification.verified || false,
+                  requiresIdCheck: true
+                };
+              }
+            } catch (error) {
+              console.error('Error fetching ID verification:', error);
+              // Continue without ID verification data if there's an error
+            }
+          }
+
+          return baseItem;
+        })
+      );
+      
+      // Check if order contains any alcohol items
+      const hasAlcoholItems = itemsWithAlcoholCheck.some(item => item.alcoholVerification);
+      
       // Create message document
       const messageDoc = await addDoc(collection(db, 'messages'), {
         conversationId: conversationId,
@@ -274,15 +322,7 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
         messageType: 'order_request',
         orderData: {
           orderId: orderId,
-          items: group.items.map(item => ({
-            itemId: item.itemId,
-            itemName: item.itemName,
-            name: item.itemName,
-            price: item.price,
-            currency: item.currency,
-            quantity: item.quantity,
-            subtotal: item.price * item.quantity
-          })),
+          items: itemsWithAlcoholCheck,
           subtotal: orderMessageData.fees.subtotal,
           deliveryFee: orderMessageData.fees.deliveryFee,
           serviceFee: orderMessageData.fees.serviceFee,
@@ -290,7 +330,9 @@ Please respond to confirm this order and provide payment/pickup instructions.`,
           totalItems: group.items.reduce((sum, item) => sum + item.quantity, 0),
           currency: group.currency,
           deliveryType: group.deliveryType,
-          customerLocation: buyerProfile?.location || null
+          customerLocation: buyerProfile?.location || null,
+          hasAlcoholItems: hasAlcoholItems,
+          requiresAgeVerification: hasAlcoholItems
         }
       });
 

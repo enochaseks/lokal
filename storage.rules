@@ -32,6 +32,18 @@ service firebase.storage {
     match /complaint-screenshots/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
+    // Allow authenticated users to upload food hygiene proofs
+    match /foodHygieneProofs/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    // Allow authenticated users to upload alcohol licenses
+    match /alcoholLicenses/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    // Allow authenticated users to upload alcohol purchase ID verifications
+    match /alcoholPurchaseIds/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
     // Deny all other access
     match /{allPaths=**} {
       allow read, write: if false;

@@ -8003,9 +8003,551 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                               }}
                             >
                               <div className="message-content">
-                                <div className="message-text">
+                                <div className="message-text" style={
+                                  message.messageType === 'id_verification_rejected' ? {
+                                    backgroundColor: '#FFEBEE',
+                                    border: '2px solid #F44336',
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    color: '#D32F2F',
+                                    fontWeight: '600'
+                                  } : {}
+                                }>
                                   {message.message}
                                 </div>
+
+                                {/* Display alcohol ID verification for sellers when processing alcohol orders */}
+                                {message.messageType === 'order_request' && message.receiverId === currentUser.uid && isSeller && 
+                                 message.orderData?.hasAlcoholItems && message.orderData?.items && 
+                                 message.orderData.items.some(item => item.alcoholVerification && !item.alcoholVerification.verified && !item.alcoholVerification.rejected) && (
+                                  <div className="alcohol-verification-section" style={{
+                                    marginTop: '15px',
+                                    padding: '15px',
+                                    backgroundColor: '#FFF3E0',
+                                    border: '2px solid #FF9800',
+                                    borderRadius: '8px'
+                                  }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      marginBottom: '12px',
+                                      color: '#E65100',
+                                      fontWeight: 'bold',
+                                      fontSize: '16px'
+                                    }}>
+                                      🍺 ALCOHOL VERIFICATION REQUIRED
+                                    </div>
+                                    <div style={{
+                                      backgroundColor: 'white',
+                                      padding: '12px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #FFB74D',
+                                      marginBottom: '10px'
+                                    }}>
+                                      <div style={{ color: '#BF360C', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                                        ⚠️ This order contains alcohol items. Please verify customer age before proceeding.
+                                      </div>
+                                      {message.orderData.items
+                                        .filter(item => item.alcoholVerification && !item.alcoholVerification.verified && !item.alcoholVerification.rejected)
+                                        .map((item, index) => (
+                                          <div key={index} style={{
+                                            marginBottom: '15px',
+                                            padding: '12px',
+                                            backgroundColor: '#FFF8E1',
+                                            border: '1px solid #FFC107',
+                                            borderRadius: '6px'
+                                          }}>
+                                            <div style={{
+                                              fontWeight: 'bold',
+                                              color: '#F57C00',
+                                              marginBottom: '8px',
+                                              fontSize: '14px'
+                                            }}>
+                                              🍺 {item.itemName} (x{item.quantity})
+                                            </div>
+                                            <div style={{
+                                              display: 'flex',
+                                              flexDirection: 'column',
+                                              gap: '10px'
+                                            }}>
+                                              <div style={{
+                                                padding: '8px',
+                                                backgroundColor: 'white',
+                                                borderRadius: '4px',
+                                                border: '1px solid #FFCC02'
+                                              }}>
+                                                <div style={{ 
+                                                  fontSize: '13px', 
+                                                  color: '#E65100', 
+                                                  fontWeight: '600',
+                                                  marginBottom: '6px',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'space-between'
+                                                }}>
+                                                  📋 Customer ID Verification:
+                                                  {item.alcoholVerification?.verified ? (
+                                                    <span style={{
+                                                      backgroundColor: '#4CAF50',
+                                                      color: 'white',
+                                                      padding: '2px 6px',
+                                                      borderRadius: '4px',
+                                                      fontSize: '11px',
+                                                      fontWeight: 'bold'
+                                                    }}>
+                                                      ✅ VERIFIED
+                                                    </span>
+                                                  ) : item.alcoholVerification?.rejected ? (
+                                                    <span style={{
+                                                      backgroundColor: '#F44336',
+                                                      color: 'white',
+                                                      padding: '2px 6px',
+                                                      borderRadius: '4px',
+                                                      fontSize: '11px',
+                                                      fontWeight: 'bold'
+                                                    }}>
+                                                      ❌ REJECTED
+                                                    </span>
+                                                  ) : (
+                                                    <span style={{
+                                                      backgroundColor: '#FF9800',
+                                                      color: 'white',
+                                                      padding: '2px 6px',
+                                                      borderRadius: '4px',
+                                                      fontSize: '11px',
+                                                      fontWeight: 'bold'
+                                                    }}>
+                                                      ⏳ PENDING
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {item.alcoholVerification.idImageUrl ? (
+                                                  <div>
+                                                    <img 
+                                                      src={item.alcoholVerification.idImageUrl}
+                                                      alt="Customer ID"
+                                                      style={{
+                                                        maxWidth: '200px',
+                                                        maxHeight: '150px',
+                                                        width: 'auto',
+                                                        height: 'auto',
+                                                        borderRadius: '4px',
+                                                        border: '2px solid #FF9800',
+                                                        cursor: 'pointer',
+                                                        objectFit: 'contain'
+                                                      }}
+                                                      onClick={() => window.open(item.alcoholVerification.idImageUrl, '_blank')}
+                                                    />
+                                                    <div style={{
+                                                      fontSize: '12px',
+                                                      color: '#666',
+                                                      marginTop: '4px'
+                                                    }}>
+                                                      Uploaded: {item.alcoholVerification.timestamp ? 
+                                                        new Date(item.alcoholVerification.timestamp.toDate()).toLocaleString() : 
+                                                        'Recently'}
+                                                    </div>
+                                                    <div style={{
+                                                      fontSize: '12px',
+                                                      color: '#E65100',
+                                                      fontWeight: '600',
+                                                      marginTop: '6px'
+                                                    }}>
+                                                      👆 Click image to view full size
+                                                    </div>
+                                                  </div>
+                                                ) : (
+                                                  <div style={{
+                                                    color: '#D32F2F',
+                                                    fontSize: '13px',
+                                                    fontWeight: '600'
+                                                  }}>
+                                                    ❌ No ID verification found
+                                                  </div>
+                                                )}
+                                              </div>
+                                              
+                                              {/* Age Verification Buttons - only show if not yet verified or rejected */}
+                                              {!item.alcoholVerification?.verified && !item.alcoholVerification?.rejected && (
+                                                <div style={{
+                                                  display: 'flex',
+                                                  gap: '8px',
+                                                  marginTop: '10px'
+                                                }}>
+                                                <button
+                                                  onClick={async () => {
+                                                    // Handle ID verification approval
+                                                    const confirmation = window.confirm(
+                                                      `Are you sure the customer is 18+ years old based on their ID?\n\nThis confirms age verification for: ${item.itemName}`
+                                                    );
+                                                    if (confirmation) {
+                                                      try {
+                                                        // Find and update the ID verification record in Firestore
+                                                        const idVerificationQuery = query(
+                                                          collection(db, 'alcoholIdVerifications'),
+                                                          where('buyerId', '==', message.senderId),
+                                                          where('storeId', '==', currentUser.uid),
+                                                          where('itemId', '==', item.itemId)
+                                                        );
+                                                        
+                                                        const querySnapshot = await getDocs(idVerificationQuery);
+                                                        
+                                                        if (!querySnapshot.empty) {
+                                                          const verificationDoc = querySnapshot.docs[0];
+                                                          await updateDoc(verificationDoc.ref, {
+                                                            verified: true,
+                                                            verifiedAt: serverTimestamp(),
+                                                            verifiedBy: currentUser.uid
+                                                          });
+                                                          
+                                                          // Update the Firebase message document to reflect verification
+                                                          const messageRef = doc(db, 'messages', message.id);
+                                                          const now = new Date();
+                                                          const updatedOrderData = {
+                                                            ...message.orderData,
+                                                            items: message.orderData.items.map(msgItem => 
+                                                              msgItem.itemId === item.itemId ? {
+                                                                ...msgItem,
+                                                                alcoholVerification: {
+                                                                  ...msgItem.alcoholVerification,
+                                                                  verified: true,
+                                                                  verifiedAt: now,
+                                                                  verifiedBy: currentUser.uid
+                                                                }
+                                                              } : msgItem
+                                                            )
+                                                          };
+                                                          
+                                                          await updateDoc(messageRef, {
+                                                            orderData: updatedOrderData
+                                                          });
+                                                          
+                                                          // Update the local message state to reflect verification
+                                                          item.alcoholVerification.verified = true;
+                                                          
+                                                          // Force component re-render by updating messages state
+                                                          setMessages(prevMessages => 
+                                                            prevMessages.map(msg => 
+                                                              msg.id === message.id ? {
+                                                                ...msg,
+                                                                orderData: {
+                                                                  ...msg.orderData,
+                                                                  items: msg.orderData.items.map(msgItem => 
+                                                                    msgItem.itemId === item.itemId ? {
+                                                                      ...msgItem,
+                                                                      alcoholVerification: {
+                                                                        ...msgItem.alcoholVerification,
+                                                                        verified: true,
+                                                                        verifiedAt: new Date(),
+                                                                        verifiedBy: currentUser.uid
+                                                                      }
+                                                                    } : msgItem
+                                                                  )
+                                                                }
+                                                              } : msg
+                                                            )
+                                                          );
+                                                          
+                                                          // Show seller confirmation modal
+                                                          const reminderModal = document.createElement('div');
+                                                          reminderModal.style.cssText = `
+                                                            position: fixed;
+                                                            top: 0;
+                                                            left: 0;
+                                                            right: 0;
+                                                            bottom: 0;
+                                                            background-color: rgba(0, 0, 0, 0.5);
+                                                            display: flex;
+                                                            justify-content: center;
+                                                            align-items: center;
+                                                            z-index: 10000;
+                                                          `;
+                                                          
+                                                          const closeModal = () => {
+                                                            document.body.removeChild(reminderModal);
+                                                            // Force a re-render to update button states
+                                                            setMessages(prevMessages => [...prevMessages]);
+                                                          };
+                                                          
+                                                          reminderModal.innerHTML = `
+                                                            <div style="
+                                                              background-color: white;
+                                                              border-radius: 12px;
+                                                              padding: 24px;
+                                                              max-width: 400px;
+                                                              width: 90%;
+                                                              box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                                                              text-align: center;
+                                                            ">
+                                                              <div style="
+                                                                font-size: 48px;
+                                                                margin-bottom: 16px;
+                                                              ">✅</div>
+                                                              <h2 style="
+                                                                color: #4CAF50;
+                                                                font-size: 20px;
+                                                                font-weight: bold;
+                                                                margin: 0 0 16px 0;
+                                                              ">ID Verification Approved!</h2>
+                                                              <div style="
+                                                                background-color: #FFF3E0;
+                                                                border: 2px solid #FF9800;
+                                                                border-radius: 8px;
+                                                                padding: 16px;
+                                                                margin-bottom: 20px;
+                                                              ">
+                                                                <div style="
+                                                                  color: #E65100;
+                                                                  font-weight: bold;
+                                                                  font-size: 16px;
+                                                                  margin-bottom: 8px;
+                                                                ">🆔 IMPORTANT REMINDER</div>
+                                                                <div style="
+                                                                  color: #BF360C;
+                                                                  font-size: 14px;
+                                                                  line-height: 1.5;
+                                                                ">
+                                                                  <strong>Make sure to ask for ID when meeting this buyer!</strong>
+                                                                  <br><br>
+                                                                  Even though you've verified their uploaded ID, you must still check their physical ID in person to ensure it matches and confirm they are 18+ years old.
+                                                                </div>
+                                                              </div>
+                                                              <button id="modalCloseBtn" style="
+                                                                background-color: #4CAF50;
+                                                                color: white;
+                                                                border: none;
+                                                                padding: 12px 24px;
+                                                                border-radius: 6px;
+                                                                font-size: 14px;
+                                                                font-weight: bold;
+                                                                cursor: pointer;
+                                                              ">✅ I Understand</button>
+                                                            </div>
+                                                          `;
+                                                          
+                                                          document.body.appendChild(reminderModal);
+                                                          
+                                                          // Add event listener to close button
+                                                          reminderModal.querySelector('#modalCloseBtn').addEventListener('click', closeModal);
+                                                        } else {
+                                                          alert('❌ Error: ID verification record not found.');
+                                                        }
+                                                      } catch (error) {
+                                                        console.error('Error updating verification:', error);
+                                                        alert('❌ Error updating verification. Please try again.');
+                                                      }
+                                                    }
+                                                  }}
+                                                  style={{
+                                                    backgroundColor: '#4CAF50',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '8px 12px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer',
+                                                    flex: '1',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '4px'
+                                                  }}
+                                                >
+                                                  ✅ Verify 18+
+                                                </button>
+                                                <button
+                                                  onClick={async () => {
+                                                    // Handle ID verification rejection
+                                                    const reason = window.prompt(
+                                                      "Please provide a reason for rejecting this ID verification:"
+                                                    );
+                                                    if (reason && reason.trim()) {
+                                                      try {
+                                                        // Find and update the ID verification record in Firestore
+                                                        const idVerificationQuery = query(
+                                                          collection(db, 'alcoholIdVerifications'),
+                                                          where('buyerId', '==', message.senderId),
+                                                          where('storeId', '==', currentUser.uid),
+                                                          where('itemId', '==', item.itemId)
+                                                        );
+                                                        
+                                                        const querySnapshot = await getDocs(idVerificationQuery);
+                                                        
+                                                        if (!querySnapshot.empty) {
+                                                          const verificationDoc = querySnapshot.docs[0];
+                                                          await updateDoc(verificationDoc.ref, {
+                                                            verified: false,
+                                                            rejected: true,
+                                                            rejectionReason: reason,
+                                                            rejectedAt: serverTimestamp(),
+                                                            rejectedBy: currentUser.uid
+                                                          });
+                                                          
+                                                          // Calculate new order total without alcohol items
+                                                          const nonAlcoholItems = message.orderData.items.filter(orderItem => 
+                                                            orderItem.itemId !== item.itemId
+                                                          );
+                                                          
+                                                          const newSubtotal = nonAlcoholItems.reduce((sum, orderItem) => 
+                                                            sum + (orderItem.price * orderItem.quantity), 0
+                                                          );
+                                                          const newTotalAmount = newSubtotal + (message.orderData.deliveryFee || 0) + (message.orderData.serviceFee || 0);
+                                                          
+                                                          // Prepare notification message
+                                                          const hasOtherItems = nonAlcoholItems.length > 0;
+                                                          let notificationMessage = `🚫 ALCOHOL ID VERIFICATION REJECTED\n\nItem Removed: ${item.itemName}\nReason: ${reason}\n\n`;
+                                                          
+                                                          if (hasOtherItems) {
+                                                            const remainingItemsList = nonAlcoholItems.map(orderItem => 
+                                                              `• ${orderItem.itemName} x${orderItem.quantity} - ${message.orderData.currency || '£'}${(orderItem.price * orderItem.quantity).toFixed(2)}`
+                                                            ).join('\n');
+                                                            
+                                                            notificationMessage += `✅ GOOD NEWS: Your other items can still be ordered!\n\n📦 REMAINING ITEMS:\n${remainingItemsList}\n\n💰 UPDATED TOTAL: ${message.orderData.currency || '£'}${newTotalAmount.toFixed(2)}\n\nYou can proceed with the remaining items in your order. The alcohol item has been removed due to ID verification issues.`;
+                                                          } else {
+                                                            notificationMessage += `❌ Unfortunately, this was the only item in your order, so the entire order has been cancelled.\n\nPlease provide valid ID verification if you wish to purchase alcohol items, or browse our other non-alcohol products.`;
+                                                          }
+                                                          
+                                                          // Send notification message to buyer about rejection
+                                                          const conversationId = [currentUser.uid, message.senderId].sort().join('_');
+                                                          await addDoc(collection(db, 'messages'), {
+                                                            conversationId: conversationId,
+                                                            senderId: currentUser.uid,
+                                                            senderName: 'Store',
+                                                            receiverId: message.senderId,
+                                                            receiverName: message.senderName,
+                                                            message: notificationMessage,
+                                                            timestamp: serverTimestamp(),
+                                                            isRead: false,
+                                                            messageType: 'id_verification_rejected',
+                                                            orderData: hasOtherItems ? {
+                                                              ...message.orderData,
+                                                              items: nonAlcoholItems,
+                                                              subtotal: newSubtotal,
+                                                              totalAmount: newTotalAmount,
+                                                              alcoholItemRemoved: true,
+                                                              removedItem: item.itemName
+                                                            } : null
+                                                          });
+                                                          
+                                                          // Update the Firebase message document to reflect rejection
+                                                          const messageRef = doc(db, 'messages', message.id);
+                                                          const now = new Date();
+                                                          const updatedOrderData = {
+                                                            ...message.orderData,
+                                                            items: message.orderData.items.map(msgItem => 
+                                                              msgItem.itemId === item.itemId ? {
+                                                                ...msgItem,
+                                                                alcoholVerification: {
+                                                                  ...msgItem.alcoholVerification,
+                                                                  rejected: true,
+                                                                  rejectionReason: reason,
+                                                                  rejectedAt: now,
+                                                                  rejectedBy: currentUser.uid
+                                                                }
+                                                              } : msgItem
+                                                            )
+                                                          };
+                                                          
+                                                          await updateDoc(messageRef, {
+                                                            orderData: updatedOrderData
+                                                          });
+                                                          
+                                                          // Update the local message state to reflect rejection
+                                                          item.alcoholVerification.rejected = true;
+                                                          item.alcoholVerification.rejectionReason = reason;
+                                                          
+                                                          // Force component re-render by updating messages state
+                                                          setMessages(prevMessages => 
+                                                            prevMessages.map(msg => 
+                                                              msg.id === message.id ? {
+                                                                ...msg,
+                                                                orderData: {
+                                                                  ...msg.orderData,
+                                                                  items: msg.orderData.items.map(msgItem => 
+                                                                    msgItem.itemId === item.itemId ? {
+                                                                      ...msgItem,
+                                                                      alcoholVerification: {
+                                                                        ...msgItem.alcoholVerification,
+                                                                        rejected: true,
+                                                                        rejectionReason: reason,
+                                                                        rejectedAt: new Date(),
+                                                                        rejectedBy: currentUser.uid
+                                                                      }
+                                                                    } : msgItem
+                                                                  )
+                                                                }
+                                                              } : msg
+                                                            )
+                                                          );
+                                                          
+                                                          alert(`❌ ID verification rejected. Reason: ${reason}\n\nThe customer has been notified. ${hasOtherItems ? 'They can still proceed with their other items.' : 'The order has been cancelled as it only contained the rejected alcohol item.'}`);
+                                                        } else {
+                                                          alert('❌ Error: ID verification record not found.');
+                                                        }
+                                                      } catch (error) {
+                                                        console.error('Error rejecting verification:', error);
+                                                        alert('❌ Error processing rejection. Please try again.');
+                                                      }
+                                                    }
+                                                  }}
+                                                  style={{
+                                                    backgroundColor: '#F44336',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '8px 12px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer',
+                                                    flex: '1',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '4px'
+                                                  }}
+                                                >
+                                                  ❌ Reject ID
+                                                </button>
+                                                </div>
+                                              )}
+                                              
+                                              {/* Show rejection reason if ID was rejected */}
+                                              {item.alcoholVerification?.rejected && (
+                                                <div style={{
+                                                  backgroundColor: '#FFEBEE',
+                                                  border: '1px solid #F44336',
+                                                  padding: '8px',
+                                                  borderRadius: '4px',
+                                                  fontSize: '12px',
+                                                  color: '#D32F2F',
+                                                  fontWeight: '600',
+                                                  marginTop: '8px'
+                                                }}>
+                                                  ❌ Rejection Reason: {item.alcoholVerification.rejectionReason}
+                                                </div>
+                                              )}
+                                              
+                                              <div style={{
+                                                backgroundColor: '#FFE0B2',
+                                                padding: '8px',
+                                                borderRadius: '4px',
+                                                fontSize: '12px',
+                                                color: '#BF360C',
+                                                fontWeight: '600',
+                                                textAlign: 'center',
+                                                marginTop: '8px'
+                                              }}>
+                                                🔍 Please verify the customer is 18+ before confirming this order
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))
+                                      }
+                                    </div>
+                                  </div>
+                                )}
                                 
                                 {/* Don't render image attachments here - they'll be shown after the buttons */}
                                 {message.attachments && message.attachments.length > 0 && (
@@ -8050,11 +8592,315 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                                 )}
                               </div>
                               
+                              {/* Show order completion section when all alcohol items are verified - positioned after the message */}
+                              {message.messageType === 'order_request' && message.receiverId === currentUser.uid && isSeller && 
+                               message.orderData?.hasAlcoholItems && message.orderData?.items && 
+                               message.orderData.items.filter(item => item.alcoholVerification).every(item => item.alcoholVerification.verified || item.alcoholVerification.rejected) &&
+                               message.orderData.items.some(item => item.alcoholVerification && item.alcoholVerification.verified) && (
+                                <div className="alcohol-completion-section" style={{
+                                  marginTop: '15px',
+                                  marginBottom: '10px',
+                                  padding: '20px',
+                                  backgroundColor: '#E8F5E8',
+                                  border: '2px solid #4CAF50',
+                                  borderRadius: '12px',
+                                  boxShadow: '0 2px 8px rgba(76, 175, 80, 0.1)'
+                                }}>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    marginBottom: '15px',
+                                    color: '#2E7D32',
+                                    fontWeight: 'bold',
+                                    fontSize: '18px'
+                                  }}>
+                                    ✅ ALCOHOL VERIFICATION COMPLETE
+                                  </div>
+                                  <div style={{
+                                    backgroundColor: 'white',
+                                    padding: '16px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #81C784',
+                                    marginBottom: '15px',
+                                    textAlign: 'center'
+                                  }}>
+                                    <div style={{ color: '#2E7D32', fontWeight: '600', fontSize: '16px', marginBottom: '10px' }}>
+                                      🎉 Age verification completed! You can now proceed with this order.
+                                    </div>
+                                    <div style={{ color: '#388E3C', fontSize: '14px', marginBottom: '15px' }}>
+                                      Remember to check the customer's physical ID when they arrive for pickup/delivery.
+                                    </div>
+                                    
+                                    {/* Show verified items */}
+                                    {message.orderData.items.filter(item => item.alcoholVerification && item.alcoholVerification.verified).length > 0 && (
+                                      <div style={{
+                                        backgroundColor: '#F1F8E9',
+                                        padding: '12px',
+                                        borderRadius: '8px',
+                                        marginBottom: '12px'
+                                      }}>
+                                        <div style={{ color: '#2E7D32', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                                          ✅ Verified Alcohol Items:
+                                        </div>
+                                        {message.orderData.items
+                                          .filter(item => item.alcoholVerification && item.alcoholVerification.verified)
+                                          .map((item, index) => (
+                                            <div key={index} style={{
+                                              color: '#388E3C',
+                                              fontSize: '13px',
+                                              marginBottom: '4px',
+                                              fontWeight: '500'
+                                            }}>
+                                              🍺 {item.itemName} x{item.quantity}
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+                                    )}
+                                    
+                                    {/* Show rejected items if any */}
+                                    {message.orderData.items.filter(item => item.alcoholVerification && item.alcoholVerification.rejected).length > 0 && (
+                                      <div style={{
+                                        backgroundColor: '#FFEBEE',
+                                        padding: '12px',
+                                        borderRadius: '8px',
+                                        marginBottom: '12px'
+                                      }}>
+                                        <div style={{ color: '#D32F2F', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+                                          ❌ Rejected Items (removed from order):
+                                        </div>
+                                        {message.orderData.items
+                                          .filter(item => item.alcoholVerification && item.alcoholVerification.rejected)
+                                          .map((item, index) => (
+                                            <div key={index} style={{
+                                              color: '#F44336',
+                                              fontSize: '13px',
+                                              marginBottom: '4px',
+                                              fontWeight: '500'
+                                            }}>
+                                              🚫 {item.itemName} x{item.quantity}
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Special handling for ID verification rejection messages */}
+                              {message.messageType === 'id_verification_rejected' && message.receiverId === currentUser.uid && !isSeller && (
+                                <div className="message-actions">
+                                  <div style={{
+                                    backgroundColor: '#FFEBEE',
+                                    border: '1px solid #F44336',
+                                    borderRadius: '6px',
+                                    padding: '12px',
+                                    marginBottom: '10px',
+                                    textAlign: 'center'
+                                  }}>
+                                    <div style={{
+                                      color: '#D32F2F',
+                                      fontWeight: 'bold',
+                                      fontSize: '14px',
+                                      marginBottom: '8px'
+                                    }}>
+                                      🚫 Alcohol ID Verification Failed
+                                    </div>
+                                    {message.orderData ? (
+                                      <div style={{
+                                        color: '#4CAF50',
+                                        fontSize: '13px',
+                                        fontWeight: '600'
+                                      }}>
+                                        ✅ You can still proceed with your other items!
+                                      </div>
+                                    ) : (
+                                      <div style={{
+                                        color: '#F44336',
+                                        fontSize: '13px',
+                                        fontWeight: '600'
+                                      }}>
+                                        ❌ This order has been cancelled
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => {
+                                        alert('Thank you for acknowledging. You can continue browsing or contact the store if you have questions about the ID verification process.');
+                                      }}
+                                      style={{
+                                        backgroundColor: '#2196F3',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '8px 16px',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        flex: '1'
+                                      }}
+                                    >
+                                      👍 I Understand
+                                    </button>
+                                    
+                                    {message.orderData && (
+                                      <button
+                                        onClick={() => {
+                                          // Here we could implement order continuation logic
+                                          alert('Great! You can continue with your remaining items. The order total has been updated to remove the alcohol item.');
+                                        }}
+                                        style={{
+                                          backgroundColor: '#4CAF50',
+                                          color: 'white',
+                                          border: 'none',
+                                          padding: '8px 16px',
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                          fontWeight: '600',
+                                          cursor: 'pointer',
+                                          flex: '1'
+                                        }}
+                                      >
+                                        ✅ Continue with Other Items
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Special handling for order workflow messages */}
                               {message.messageType === 'order_request' && message.senderId === currentUser.uid && !isSeller && !isOrderLockedForever && (
                                 <div className="message-actions">
+                                  {/* Show alcohol verification status for customer */}
+                                  {message.orderData?.hasAlcoholItems && message.orderData?.items && (
+                                    <div style={{
+                                      backgroundColor: (() => {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const allVerified = alcoholItems.every(item => item.alcoholVerification?.verified);
+                                        const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                        
+                                        if (hasRejected) return '#FFEBEE';
+                                        if (allVerified) return '#E8F5E8';
+                                        if (hasPending) return '#FFF3E0';
+                                        return '#FFF3E0';
+                                      })(),
+                                      border: (() => {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const allVerified = alcoholItems.every(item => item.alcoholVerification?.verified);
+                                        
+                                        if (hasRejected) return '2px solid #F44336';
+                                        if (allVerified) return '2px solid #4CAF50';
+                                        return '2px solid #FF9800';
+                                      })(),
+                                      borderRadius: '8px',
+                                      padding: '12px',
+                                      marginBottom: '12px',
+                                      fontSize: '13px',
+                                      fontWeight: '600',
+                                      textAlign: 'center'
+                                    }}>
+                                      {(() => {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const allVerified = alcoholItems.every(item => item.alcoholVerification?.verified);
+                                        const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                        
+                                        if (hasRejected) {
+                                          return (
+                                            <div style={{ color: '#D32F2F' }}>
+                                              ❌ <strong>Order cancelled due to rejected ID verification</strong>
+                                              <br/>
+                                              <span style={{ fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                                                Some alcohol items were rejected. Please provide valid ID or remove alcohol items from your order.
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+                                        if (allVerified) {
+                                          return (
+                                            <div style={{ color: '#2E7D32' }}>
+                                              ✅ <strong>All alcohol IDs verified!</strong>
+                                              <br/>
+                                              <span style={{ fontSize: '12px', marginTop: '4px', display: 'block', lineHeight: '1.4' }}>
+                                                You can now finalize your order. <strong>📋 Important:</strong> The seller will check your physical ID when you arrive, so please remember to bring it with you for verification.
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+                                        if (hasPending) {
+                                          return (
+                                            <div style={{ color: '#E65100' }}>
+                                              ⏳ <strong>Waiting for seller to verify your alcohol ID</strong>
+                                              <br/>
+                                              <span style={{ fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                                                Please wait while the seller reviews your ID verification. You cannot finalize your order until verification is complete.
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+                                        return '';
+                                      })()}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Additional reminder for verified alcohol orders */}
+                                  {message.orderData?.hasAlcoholItems && message.orderData?.items && 
+                                   message.orderData.items.filter(item => item.alcoholVerification).every(item => item.alcoholVerification?.verified) && (
+                                    <div style={{
+                                      backgroundColor: '#E3F2FD',
+                                      border: '2px solid #2196F3',
+                                      borderRadius: '8px',
+                                      padding: '12px',
+                                      marginBottom: '12px',
+                                      fontSize: '13px',
+                                      textAlign: 'center'
+                                    }}>
+                                      <div style={{ 
+                                        color: '#1976D2', 
+                                        fontWeight: 'bold', 
+                                        marginBottom: '6px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px'
+                                      }}>
+                                        🆔 BRING YOUR PHYSICAL ID
+                                      </div>
+                                      <div style={{ 
+                                        color: '#1565C0', 
+                                        fontSize: '12px', 
+                                        lineHeight: '1.4' 
+                                      }}>
+                                        The seller will verify your physical ID matches the uploaded image when you collect your order. This is required by law for alcohol purchases.
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   <button
                                     onClick={(event) => {
+                                      // Check alcohol verification status before proceeding
+                                      if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                        
+                                        if (hasRejected) {
+                                          alert('❌ Cannot finalize order!\n\nSome alcohol items have been rejected due to ID verification issues. Your order has been cancelled for these items.\n\nPlease provide valid ID verification or remove alcohol items to proceed.');
+                                          return;
+                                        }
+                                        
+                                        if (hasPending) {
+                                          alert('⏳ Cannot finalize order yet!\n\nPlease wait for the seller to verify your alcohol ID before finalizing your order.\n\nThis ensures compliance with age verification requirements.');
+                                          return;
+                                        }
+                                      }
+                                      
                                       // Add temporary visual feedback by fading the button
                                       const btn = event.currentTarget;
                                       btn.style.opacity = '0.5';
@@ -8067,16 +8913,91 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                                       signalDoneAddingFromMessage(message.orderData);
                                     }}
                                     className={`action-btn done-message-btn ${isOrderLockedForever ? 'disabled' : ''}`}
-                                    disabled={isOrderLockedForever}
+                                    disabled={(() => {
+                                      if (isOrderLockedForever) return true;
+                                      
+                                      // Disable if there are alcohol items that need verification
+                                      if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                        
+                                        return hasRejected || hasPending;
+                                      }
+                                      
+                                      return false;
+                                    })()}
                                     style={{
-                                      backgroundColor: isOrderLockedForever ? '#d1d5db' : '#10B981',
-                                      color: isOrderLockedForever ? '#6B7280' : 'white',
-                                      cursor: isOrderLockedForever ? 'not-allowed' : 'pointer',
-                                      opacity: isOrderLockedForever ? 0.7 : 1,
+                                      backgroundColor: (() => {
+                                        if (isOrderLockedForever) return '#d1d5db';
+                                        
+                                        if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                          const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                          const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                          const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                          
+                                          if (hasRejected) return '#F44336';
+                                          if (hasPending) return '#FF9800';
+                                        }
+                                        
+                                        return '#10B981';
+                                      })(),
+                                      color: (() => {
+                                        if (isOrderLockedForever) return '#6B7280';
+                                        
+                                        if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                          const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                          const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                          const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                          
+                                          if (hasRejected || hasPending) return 'white';
+                                        }
+                                        
+                                        return 'white';
+                                      })(),
+                                      cursor: (() => {
+                                        if (isOrderLockedForever) return 'not-allowed';
+                                        
+                                        if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                          const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                          const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                          const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                          
+                                          if (hasRejected || hasPending) return 'not-allowed';
+                                        }
+                                        
+                                        return 'pointer';
+                                      })(),
+                                      opacity: (() => {
+                                        if (isOrderLockedForever) return 0.7;
+                                        
+                                        if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                          const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                          const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                          const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                          
+                                          if (hasRejected || hasPending) return 0.8;
+                                        }
+                                        
+                                        return 1;
+                                      })(),
                                       transition: 'all 0.2s ease'
                                     }}
                                   >
-                                    {isOrderLockedForever ? '✅ Order Finalized' : '✅ Done Adding Items'}
+                                    {(() => {
+                                      if (isOrderLockedForever) return '✅ Order Finalized';
+                                      
+                                      if (message.orderData?.hasAlcoholItems && message.orderData?.items) {
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const hasRejected = alcoholItems.some(item => item.alcoholVerification?.rejected);
+                                        const hasPending = alcoholItems.some(item => !item.alcoholVerification?.verified && !item.alcoholVerification?.rejected);
+                                        
+                                        if (hasRejected) return '❌ Order Cancelled';
+                                        if (hasPending) return '⏳ Awaiting ID Verification';
+                                      }
+                                      
+                                      return '✅ Done Adding Items';
+                                    })()}
                                   </button>
                                 </div>
                               )}
@@ -8084,8 +9005,45 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
                               {/* Seller handles order requests for Collection */}
                               {message.messageType === 'order_request' && message.receiverId === currentUser.uid && isSeller && message.orderData?.deliveryType === 'Collection' && (
                                 <div className="message-actions">
+                                  {message.orderData?.hasAlcoholItems && (
+                                    <div style={{
+                                      backgroundColor: message.orderData.items
+                                        .filter(item => item.alcoholVerification)
+                                        .every(item => item.alcoholVerification?.verified) ? '#E8F5E8' : '#FFF3E0',
+                                      border: `1px solid ${message.orderData.items
+                                        .filter(item => item.alcoholVerification)
+                                        .every(item => item.alcoholVerification?.verified) ? '#4CAF50' : '#FF9800'}`,
+                                      borderRadius: '4px',
+                                      padding: '8px',
+                                      marginBottom: '10px',
+                                      fontSize: '12px',
+                                      color: message.orderData.items
+                                        .filter(item => item.alcoholVerification)
+                                        .every(item => item.alcoholVerification?.verified) ? '#2E7D32' : '#E65100',
+                                      fontWeight: '600',
+                                      textAlign: 'center'
+                                    }}>
+                                      {message.orderData.items
+                                        .filter(item => item.alcoholVerification)
+                                        .every(item => item.alcoholVerification?.verified) 
+                                        ? '✅ All alcohol IDs verified! You can now confirm this order.' 
+                                        : '⚠️ Please verify all alcohol IDs above before confirming this order'}
+                                    </div>
+                                  )}
                                   <button
                                     onClick={(event) => {
+                                      // Check if order contains alcohol and if verification is needed
+                                      if (message.orderData?.hasAlcoholItems) {
+                                        // Check if all alcohol items have been verified
+                                        const alcoholItems = message.orderData.items.filter(item => item.alcoholVerification);
+                                        const unverifiedItems = alcoholItems.filter(item => !item.alcoholVerification?.verified);
+                                        
+                                        if (unverifiedItems.length > 0) {
+                                          alert(`⚠️ Cannot confirm order!\n\nPlease verify the customer's age for all alcohol items first. You must click "✅ Verify 18+" for each alcohol item before confirming the order.\n\nUnverified items: ${unverifiedItems.map(item => item.itemName).join(', ')}`);
+                                          return;
+                                        }
+                                      }
+                                      
                                       // Apply permanent fade-out effect
                                       const btn = event.currentTarget;
                                       btn.style.opacity = '0.3';

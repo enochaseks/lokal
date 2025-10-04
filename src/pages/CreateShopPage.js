@@ -7,6 +7,7 @@ import { getAuth } from 'firebase/auth';
 import { db, storage } from '../firebase';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { checkAndSyncEmailVerification } from '../utils/emailVerification';
 
 function maskValue(value) {
   if (!value) return '';
@@ -131,6 +132,22 @@ function CreateShopPage() {
       const user = auth.currentUser;
       if (!user) throw new Error('Not logged in');
       
+      // Check and sync email verification
+      try {
+        const isVerified = await checkAndSyncEmailVerification(user);
+        if (!isVerified) {
+          setLoading(false);
+          alert('Please verify your email before creating a shop. Check your inbox and spam folder for the verification email.');
+          navigate('/verify-email', { replace: true });
+          return;
+        }
+      } catch (verificationError) {
+        console.error('Error checking email verification in CreateShop:', verificationError);
+        setLoading(false);
+        alert('Error verifying email status. Please refresh and try again.');
+        return;
+      }
+      
       // DEBUG: Print sellerData to see what is passed from onboarding
       console.log('sellerData passed to CreateShopPage:', sellerData);
       let backgroundUrl = '';
@@ -152,6 +169,12 @@ function CreateShopPage() {
         await uploadBytes(foodRef, sellerData.foodHygiene);
         foodHygieneUrl = await getDownloadURL(foodRef);
       }
+      let foodHygieneProofUrl = '';
+      if (sellerData.foodHygieneProof) {
+        const foodProofRef = ref(storage, `foodHygieneProofs/${user.uid}_${sellerData.foodHygieneProof.name}`);
+        await uploadBytes(foodProofRef, sellerData.foodHygieneProof);
+        foodHygieneProofUrl = await getDownloadURL(foodProofRef);
+      }
       let marketStallLicenceUrl = '';
       if (sellerData.marketStallLicence) {
         const marketRef = ref(storage, `storeMarketStallLicence/${user.uid}/${sellerData.marketStallLicence.name}`);
@@ -166,7 +189,7 @@ function CreateShopPage() {
       }
       let alcoholLicenseUrl = '';
       if (sellerData.alcoholLicense) {
-        const alcRef = ref(storage, `storeAlcoholLicense/${user.uid}/${sellerData.alcoholLicense.name}`);
+        const alcRef = ref(storage, `alcoholLicenses/${user.uid}_${sellerData.alcoholLicense.name}`);
         await uploadBytes(alcRef, sellerData.alcoholLicense);
         alcoholLicenseUrl = await getDownloadURL(alcRef);
       }
@@ -230,7 +253,9 @@ function CreateShopPage() {
         businessId: sellerData.businessId || '',
         certificate: certificateUrl,
         foodHygiene: foodHygieneUrl,
+        foodHygieneProof: foodHygieneProofUrl,
         marketStallLicence: marketStallLicenceUrl,
+        sellsPerishableFood: sellerData.sellsPerishableFood || '',
         // Legacy format for backward compatibility
         platform: sellerData.platform || '',
         socialHandle: sellerData.socialHandle || '',

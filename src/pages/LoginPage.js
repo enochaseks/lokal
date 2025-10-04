@@ -5,6 +5,7 @@ import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { checkAndSyncEmailVerification } from '../utils/emailVerification';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -27,7 +28,6 @@ function LoginPage() {
       const auth = getAuth(app);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
       // Check if user is deactivated or deleted in Firestore
       let userDocSnap = await getDoc(doc(db, 'users', user.uid));
       if (!userDocSnap.exists()) {
