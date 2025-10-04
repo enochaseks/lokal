@@ -4256,7 +4256,6 @@ function HelpCenterPage() {
                     <li><strong>Explore Page:</strong> Browse stores by location and category</li>
                     <li><strong>Search Function:</strong> Look for specific products or store names</li>
                     <li><strong>Categories:</strong> Filter by business type (food, retail, services, etc.)</li>
-                    <li><strong>Distance Filter:</strong> Adjust how far you're willing to travel</li>
                   </ul>
                   <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
                     <p><strong>Tip:</strong> Use the 📍 pin icon to refresh your location and see the most accurate nearby stores.</p>
