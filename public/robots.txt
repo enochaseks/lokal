@@ -1,3 +1,38 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+
+# Allow important pages
+Allow: /find-stores
+Allow: /register
+Allow: /about
+Allow: /contact
+Allow: /blog
+Allow: /african-stores
+Allow: /caribbean-stores
+Allow: /african-restaurants
+Allow: /caribbean-restaurants
+
+# Block private/admin areas
+Disallow: /admin
+Disallow: /profile
+Disallow: /messages
+Disallow: /dashboard
+Disallow: /api/
+Disallow: /private/
+
+# Block search parameters
+Disallow: /*?*
+Allow: /*?page=*
+Allow: /*?category=*
+Allow: /*?location=*
+
+# Block duplicate content
+Disallow: /*/print
+Disallow: /*/pdf
+
+# Sitemap location
+Sitemap: https://lokalshops.co.uk/sitemap.xml
+
+# Crawl delay (be nice to servers)
+Crawl-delay: 1
