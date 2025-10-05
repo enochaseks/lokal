@@ -1428,6 +1428,78 @@ function ExplorePage() {
     });
     return () => unsubscribe();
   }, []);
+
+  // SEO optimization for Explore Page
+  useEffect(() => {
+    const categoryParam = new URLSearchParams(window.location.search).get('category');
+    const locationParam = new URLSearchParams(window.location.search).get('location');
+    
+    let pageTitle = "Explore African, Caribbean & Black Businesses";
+    let pageDescription = "Discover authentic African, Caribbean & Black-owned businesses in your area. Find food stores, beauty supplies, wholesale goods, and specialty services.";
+    let pageKeywords = "explore businesses, african businesses, caribbean businesses, black owned businesses, find local businesses";
+    
+    // Dynamic SEO based on filters
+    if (categoryParam) {
+      pageTitle = `${categoryParam.charAt(0).toUpperCase() + categoryParam.slice(1)} Businesses - African, Caribbean & Black Owned`;
+      pageDescription = `Find the best ${categoryParam} businesses owned by African, Caribbean & Black entrepreneurs. Browse authentic ${categoryParam} options in your area.`;
+      pageKeywords = `${categoryParam} businesses, african ${categoryParam}, caribbean ${categoryParam}, black owned ${categoryParam}`;
+    }
+    
+    if (locationParam) {
+      pageTitle = `${pageTitle} in ${locationParam}`;
+      pageDescription = `${pageDescription} Located in ${locationParam}, UK.`;
+      pageKeywords = `${pageKeywords}, ${locationParam} businesses`;
+    }
+    
+    document.title = `${pageTitle} | Lokal Shops`;
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', pageDescription);
+    }
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      const baseUrl = 'https://lokalshops.co.uk/explore';
+      const params = new URLSearchParams();
+      if (categoryParam) params.set('category', categoryParam);
+      if (locationParam) params.set('location', locationParam);
+      const canonicalUrl = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+      canonicalLink.setAttribute('href', canonicalUrl);
+    }
+
+    // Update keywords
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', pageKeywords);
+    }
+
+    // Add structured data for local business directory
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": pageTitle,
+      "description": pageDescription,
+      "url": `https://lokalshops.co.uk/explore${window.location.search}`,
+      "mainEntity": {
+        "@type": "ItemList",
+        "name": "African, Caribbean & Black Business Directory",
+        "description": "Directory of authentic African, Caribbean & Black-owned businesses across the UK"
+      }
+    };
+
+    // Remove existing structured data
+    const existingScript = document.querySelector('script[type="application/ld+json"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    // Add new structured data
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }, [selectedCategory, selectedCity, searchTerm]);
   
   // Handle boosting a store
   const handleBoostStore = async () => {

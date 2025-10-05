@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { app } from '../firebase';
@@ -8,6 +8,56 @@ import { db } from '../firebase';
 import { checkAndSyncEmailVerification } from '../utils/emailVerification';
 
 function LoginPage() {
+  // SEO optimization for login page
+  useEffect(() => {
+    document.title = "Login - Access Your Lokal Shops Account | African, Caribbean & Black Business Directory";
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 
+        'Login to your Lokal Shops account to discover African, Caribbean & Black businesses or manage your business listing.'
+      );
+    }
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', 'https://lokalshops.co.uk/login');
+    }
+
+    // Update keywords for login page
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 
+        'login lokal shops, sign in account, african caribbean business directory, black business directory, account access'
+      );
+    }
+
+    // Add structured data for login
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Login - Lokal Shops",
+      "description": "Login to your account to access African, Caribbean & Black business directory",
+      "url": "https://lokalshops.co.uk/login",
+      "mainEntity": {
+        "@type": "LoginAction",
+        "target": "https://lokalshops.co.uk/login",
+        "name": "Account Login"
+      }
+    };
+
+    // Remove existing structured data
+    const existingScript = document.querySelector('script[type="application/ld+json"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    // Add new structured data
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }, []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

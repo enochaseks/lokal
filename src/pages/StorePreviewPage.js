@@ -205,6 +205,75 @@ function StorePreviewPage() {
         const storeData = docSnap.data();
         setStore(storeData);
         
+        // SEO optimization for individual store pages
+        if (storeData) {
+          const storeName = storeData.businessName || storeData.storeName || 'Business';
+          const storeCategory = storeData.category || 'African, Caribbean & Black Business';
+          const storeLocation = storeData.city || storeData.address || 'UK';
+          
+          document.title = `${storeName} - ${storeCategory} | Lokal Shops`;
+          
+          const metaDescription = document.querySelector('meta[name="description"]');
+          if (metaDescription) {
+            metaDescription.setAttribute('content', 
+              `Shop at ${storeName}, a trusted ${storeCategory.toLowerCase()} business in ${storeLocation}. ${storeData.description || 'Authentic products and excellent service from an African, Caribbean or Black-owned business.'}`
+            );
+          }
+
+          const canonicalLink = document.querySelector('link[rel="canonical"]');
+          if (canonicalLink) {
+            canonicalLink.setAttribute('href', `https://lokalshops.co.uk/store/${id}`);
+          }
+
+          // Update keywords for store page
+          let metaKeywords = document.querySelector('meta[name="keywords"]');
+          if (metaKeywords) {
+            metaKeywords.setAttribute('content', 
+              `${storeName}, ${storeCategory}, ${storeLocation} business, african business, caribbean business, black owned business, authentic products`
+            );
+          }
+
+          // Add structured data for local business
+          const structuredData = {
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "name": storeName,
+            "description": storeData.description || `${storeCategory} business serving authentic products`,
+            "url": `https://lokalshops.co.uk/store/${id}`,
+            "telephone": storeData.phone,
+            "email": storeData.email,
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": storeData.address,
+              "addressLocality": storeData.city || storeLocation,
+              "addressCountry": "GB"
+            },
+            "geo": storeData.coordinates ? {
+              "@type": "GeoCoordinates",
+              "latitude": storeData.coordinates.latitude,
+              "longitude": storeData.coordinates.longitude
+            } : undefined,
+            "openingHours": storeData.operatingHours ? Object.entries(storeData.operatingHours).map(([day, hours]) => 
+              hours.open && hours.close ? `${day.substring(0,2)} ${hours.open}-${hours.close}` : null
+            ).filter(Boolean) : undefined,
+            "priceRange": storeData.priceRange || "$$",
+            "servesCuisine": storeCategory.includes('Food') ? storeCategory : undefined,
+            "hasMenu": items.length > 0 ? `https://lokalshops.co.uk/store/${id}` : undefined
+          };
+
+          // Remove existing structured data
+          const existingScript = document.querySelector('script[type="application/ld+json"]');
+          if (existingScript) {
+            existingScript.remove();
+          }
+
+          // Add new structured data
+          const script = document.createElement('script');
+          script.type = 'application/ld+json';
+          script.textContent = JSON.stringify(structuredData);
+          document.head.appendChild(script);
+        }
+        
         // Handle fee settings in same listener to avoid duplicate fetching
         if (storeData.feeSettings) {
           setStoreFeeSettings({

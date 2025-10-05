@@ -55,6 +55,57 @@ function FeedPage() {
   // Responsive state for mobile detection
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
+  // SEO optimization for Feed Page
+  useEffect(() => {
+    document.title = "Community Feed - African, Caribbean & Black Business Updates | Lokal Shops";
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 
+        'Stay connected with African, Caribbean & Black businesses in your community. See latest updates, offers, and news from local businesses on Lokal Shops feed.'
+      );
+    }
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', 'https://lokalshops.co.uk/feed');
+    }
+
+    // Update keywords for feed page
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 
+        'community feed, business updates, african business news, caribbean business posts, black business community, local business feed, business offers'
+      );
+    }
+
+    // Add structured data for social media feed
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Community Feed - Lokal Shops",
+      "description": "Community feed showcasing updates from African, Caribbean & Black businesses",
+      "url": "https://lokalshops.co.uk/feed",
+      "mainEntity": {
+        "@type": "SocialMediaPosting",
+        "headline": "African, Caribbean & Black Business Community Feed",
+        "description": "Real-time updates from local businesses in the African, Caribbean and Black community"
+      }
+    };
+
+    // Remove existing structured data
+    const existingScript = document.querySelector('script[type="application/ld+json"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    // Add new structured data
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }, []);
+
   // Handle window resize for responsive design
   useEffect(() => {
     const handleResize = () => {

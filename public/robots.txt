@@ -5,13 +5,17 @@ Allow: /
 # Allow important pages
 Allow: /find-stores
 Allow: /register
+Allow: /register-business
 Allow: /about
 Allow: /contact
 Allow: /blog
 Allow: /african-stores
 Allow: /caribbean-stores
-Allow: /african-restaurants
-Allow: /caribbean-restaurants
+Allow: /food-goods-stores
+Allow: /wholesale-suppliers
+Allow: /beauty-hair-supplies
+Allow: /meat-poultry-suppliers
+Allow: /black-owned-businesses
 
 # Block private/admin areas
 Disallow: /admin

@@ -30,6 +30,30 @@ function StoreReviewPreviewPage() {
       if (storeSnap.exists()) {
         const storeData = { id: storeSnap.id, ...storeSnap.data() };
         setStore(storeData);
+        
+        // SEO optimization for store reviews
+        document.title = `${storeData.name} Reviews - Customer Feedback | Lokal Shops`;
+        
+        const metaDescription = document.querySelector('meta[name="description"]');
+        if (metaDescription) {
+          metaDescription.setAttribute('content', 
+            `Read authentic customer reviews for ${storeData.name}, a ${storeData.category || 'African, Caribbean or Black-owned'} business. See ratings, feedback and experiences from real customers on Lokal Shops.`
+          );
+        }
+
+        const canonicalLink = document.querySelector('link[rel="canonical"]');
+        if (canonicalLink) {
+          canonicalLink.setAttribute('href', `https://lokalshops.co.uk/store/${storeId}/reviews`);
+        }
+
+        // Update keywords for reviews page
+        let metaKeywords = document.querySelector('meta[name="keywords"]');
+        if (metaKeywords) {
+          metaKeywords.setAttribute('content', 
+            `${storeData.name} reviews, customer feedback, business reviews, ${storeData.category} reviews, african business reviews, caribbean business reviews, black business reviews`
+          );
+        }
+
         if (authUser && storeData.ownerId && authUser.uid === storeData.ownerId) {
           setIsStoreOwner(true);
         } else {
@@ -40,6 +64,55 @@ function StoreReviewPreviewPage() {
         // Sort by newest first
         reviewsArr.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setReviews(reviewsArr);
+
+        // Add structured data for reviews to appear in Google
+        if (reviewsArr.length > 0) {
+          const avgRating = reviewsArr.reduce((sum, review) => sum + (review.rating || 5), 0) / reviewsArr.length;
+          
+          const structuredData = {
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "name": storeData.name,
+            "description": storeData.description || `${storeData.category} business serving the African, Caribbean and Black community`,
+            "url": `https://lokalshops.co.uk/store/${storeId}`,
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": storeData.address,
+              "addressLocality": storeData.city || "London",
+              "addressCountry": "GB"
+            },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": avgRating.toFixed(1),
+              "reviewCount": reviewsArr.length
+            },
+            "review": reviewsArr.slice(0, 5).map(review => ({
+              "@type": "Review",
+              "author": {
+                "@type": "Person",
+                "name": review.userName || "Anonymous Customer"
+              },
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": review.rating || 5
+              },
+              "reviewBody": review.review,
+              "datePublished": review.createdAt ? new Date(review.createdAt.seconds * 1000).toISOString() : new Date().toISOString()
+            }))
+          };
+
+          // Remove existing structured data
+          const existingScript = document.querySelector('script[type="application/ld+json"]');
+          if (existingScript) {
+            existingScript.remove();
+          }
+
+          // Add new structured data
+          const script = document.createElement('script');
+          script.type = 'application/ld+json';
+          script.textContent = JSON.stringify(structuredData);
+          document.head.appendChild(script);
+        }
       } else {
         setStore(null);
         setReviews([]);
