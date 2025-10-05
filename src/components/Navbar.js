@@ -1602,6 +1602,170 @@ function Navbar() {
                   </a>
                 </>
               )}
+              
+              {/* Social Media & Community Links */}
+              <div style={{ 
+                marginTop: '1.5rem', 
+                paddingTop: '1.5rem', 
+                borderTop: '1px solid #E5E7EB' 
+              }}>
+                {/* WhatsApp Community */}
+                <a 
+                  href="https://chat.whatsapp.com/GZlpWSCpjHRAMCBLETlF3G" 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setSidebarOpen(false)}
+                  style={{ 
+                    color: '#25D366', 
+                    textDecoration: 'none', 
+                    fontWeight: '600', 
+                    fontSize: '1rem',
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '0.5rem',
+                    borderRadius: '12px',
+                    background: 'rgba(37, 211, 102, 0.05)',
+                    border: '1px solid rgba(37, 211, 102, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = 'rgba(37, 211, 102, 0.1)';
+                    e.target.style.transform = 'translateX(4px)';
+                    e.target.style.boxShadow = '0 4px 15px rgba(37, 211, 102, 0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'rgba(37, 211, 102, 0.05)';
+                    e.target.style.transform = 'translateX(0)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>💬</span>
+                  Join Community
+                </a>
+                
+                {/* Social Media Icons Row */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  gap: '0.75rem', 
+                  marginTop: '1rem',
+                  marginBottom: '1rem'
+                }}>
+                  {/* Instagram */}
+                  <a 
+                    href="https://instagram.com/lokallshops" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      textDecoration: 'none',
+                      padding: '0.5rem',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.3s ease',
+                      width: '40px',
+                      height: '40px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.transform = 'scale(1.1)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                    }}
+                    title="Follow us on Instagram @lokallshops"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                    </svg>
+                  </a>
+                  
+                  {/* TikTok */}
+                  <a 
+                    href="https://tiktok.com/@lokalshops" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      textDecoration: 'none',
+                      padding: '0.5rem',
+                      borderRadius: '50%',
+                      background: '#000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.3s ease',
+                      width: '40px',
+                      height: '40px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.transform = 'scale(1.1)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                    }}
+                    title="Follow us on TikTok @lokalshops"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1.68 13.22c2.76 0 5-2.24 5-5V9.26a8.84 8.84 0 0 0 4.41 1.2V7.14a4.86 4.86 0 0 1-1.98-.45z"/>
+                    </svg>
+                  </a>
+                  
+                  {/* Admin Support */}
+                  <a 
+                    href="https://instagram.com/lokaladmin" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ 
+                      textDecoration: 'none',
+                      padding: '0.5rem',
+                      borderRadius: '50%',
+                      background: '#DC2626',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.3s ease',
+                      width: '40px',
+                      height: '40px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={e => {
+                      e.target.style.transform = 'scale(1.1)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(220, 38, 38, 0.3)';
+                    }}
+                    onMouseLeave={e => {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                    }}
+                    title="Admin Support @lokaladmin"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                      <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
+                    </svg>
+                  </a>
+                </div>
+                
+                <p style={{ 
+                  color: '#6B7280', 
+                  fontSize: '0.875rem', 
+                  textAlign: 'center',
+                  marginTop: '0.5rem'
+                }}>
+                  Follow us & get support
+                </p>
+              </div>
             </div>
           </div>
           <style>

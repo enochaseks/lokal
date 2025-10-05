@@ -15,7 +15,7 @@ class SEOAnalytics {
   // Track page views
   trackPageView(pagePath, pageTitle) {
     if (this.isGA4Loaded) {
-      gtag('config', 'GA_MEASUREMENT_ID', {
+      gtag('config', 'G-QZ4BEB9JGQ', {
         page_path: pagePath,
         page_title: pageTitle
       });
