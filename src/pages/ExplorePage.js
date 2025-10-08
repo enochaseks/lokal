@@ -869,6 +869,98 @@ const categories = [
   'Beauty & Hair',
 ];
 
+const originCategories = {
+  african: [
+    'African',
+    'Black African',
+    'Black British African',
+    'Nigeria',
+    'Ghana', 
+    'Kenya', 
+    'South Africa', 
+    'Egypt', 
+    'Ethiopia', 
+    'Morocco', 
+    'Uganda', 
+    'Tanzania', 
+    'Algeria', 
+    'Angola', 
+    'Cameroon', 
+    'Ivory Coast', 
+    'Senegal', 
+    'Zimbabwe', 
+    'Zambia', 
+    'Botswana', 
+    'Namibia', 
+    'Rwanda', 
+    'Burundi', 
+    'Mali', 
+    'Malawi', 
+    'Mozambique', 
+    'Tunisia', 
+    'Libya', 
+    'Sudan', 
+    'Somalia', 
+    'Chad', 
+    'Niger', 
+    'Benin', 
+    'Burkina Faso', 
+    'Guinea', 
+    'Sierra Leone', 
+    'Liberia', 
+    'Togo', 
+    'Central African Republic', 
+    'Congo', 
+    'Gabon', 
+    'Gambia', 
+    'Lesotho', 
+    'Mauritius', 
+    'Swaziland', 
+    'Djibouti', 
+    'Eritrea', 
+    'Seychelles', 
+    'Comoros', 
+    'Cape Verde', 
+    'Sao Tome and Principe'
+  ],
+  caribbean: [
+    'Caribbean',
+    'Black Caribbean',
+    'Black British Caribbean',
+    'Jamaica', 
+    'Trinidad and Tobago', 
+    'Barbados', 
+    'Bahamas', 
+    'Saint Lucia', 
+    'Grenada', 
+    'Saint Vincent and the Grenadines', 
+    'Antigua and Barbuda', 
+    'Dominica', 
+    'Saint Kitts and Nevis', 
+    'Cuba', 
+    'Haiti', 
+    'Dominican Republic', 
+    'Puerto Rico', 
+    'Aruba', 
+    'Curacao', 
+    'Saint Martin', 
+    'Saint Barthelemy', 
+    'Anguilla', 
+    'Montserrat', 
+    'British Virgin Islands', 
+    'US Virgin Islands', 
+    'Cayman Islands', 
+    'Turks and Caicos', 
+    'Guadeloupe', 
+    'Martinique', 
+    'Saint Pierre and Miquelon'
+  ],
+  other: [
+    'African American',
+    'Black British'
+  ]
+};
+
 // Add Haversine distance function
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the earth in km
@@ -964,6 +1056,10 @@ function ExplorePage() {
   const [similarStores, setSimilarStores] = useState([]);
   const [ratings, setRatings] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedOrigin, setSelectedOrigin] = useState('');
+  const [selectedOriginCategory, setSelectedOriginCategory] = useState('');
+  const [showOriginSubDropdown, setShowOriginSubDropdown] = useState(false);
+  const [showOriginDropdown, setShowOriginDropdown] = useState(false);
   const [filterBy, setFilterBy] = useState('');
   const [sortBy, setSortBy] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1429,6 +1525,19 @@ function ExplorePage() {
     return () => unsubscribe();
   }, []);
 
+  // Handle click outside for custom origin dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('[data-origin-dropdown]')) {
+        setShowOriginDropdown(false);
+        setShowOriginSubDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // SEO optimization for Explore Page
   useEffect(() => {
     const categoryParam = new URLSearchParams(window.location.search).get('category');
@@ -1499,7 +1608,7 @@ function ExplorePage() {
     script.type = 'application/ld+json';
     script.textContent = JSON.stringify(structuredData);
     document.head.appendChild(script);
-  }, [selectedCategory, selectedCity, searchTerm]);
+  }, [selectedCategory, selectedOrigin, selectedCity, searchTerm]);
   
   // Handle boosting a store
   const handleBoostStore = async () => {
@@ -1907,14 +2016,21 @@ function ExplorePage() {
     }
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       // Filter out disabled and deleted stores on the client side
-      const filteredShops = querySnapshot.docs
+      let filteredShops = querySnapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(shop => !shop.disabled && !shop.deleted);
+      
+      // Apply origin filter on client side
+      if (selectedOrigin) {
+        filteredShops = filteredShops.filter(shop => 
+          shop.origin && shop.origin === selectedOrigin
+        );
+      }
       
       setShops(filteredShops);
     });
     return () => unsubscribe();
-  }, [selectedCategory]);
+  }, [selectedCategory, selectedOrigin]);
 
   useEffect(() => {
     // Fetch ratings for all shops
@@ -3005,6 +3121,13 @@ function ExplorePage() {
     );
   }
 
+  // Filter by origin
+  if (selectedOrigin) {
+    displayedShops = displayedShops.filter(shop =>
+      shop.origin && shop.origin === selectedOrigin
+    );
+  }
+
   // FINAL: Filter by distance (radius) and blocked stores
   const filteredShops = displayedShops.filter(shop => {
     // Filter out stores that have blocked the current user
@@ -3483,6 +3606,262 @@ function ExplorePage() {
             </select>
           </div>
 
+            {/* Custom Origin Dropdown with Sub-dropdowns */}
+            <div 
+              data-origin-dropdown
+              style={{ 
+                flex: '1 1 0',
+                background: 'rgba(255, 255, 255, 0.9)', 
+                backdropFilter: 'blur(10px)', 
+                border: '1px solid rgba(255, 255, 255, 0.2)', 
+                borderRadius: '12px', 
+                overflow: 'visible',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+              }}>
+              <div
+                onClick={() => setShowOriginDropdown(!showOriginDropdown)}
+                style={{ 
+                  width: '100%',
+                  padding: '0.75rem 2.5rem 0.75rem 1rem', 
+                  fontSize: '1rem', 
+                  border: 'none', 
+                  color: '#1F2937', 
+                  background: 'transparent', 
+                  outline: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.75rem center',
+                  backgroundSize: '1rem',
+                }}
+              >
+                {selectedOrigin || '🌍 Origin'}
+              </div>
+              
+              {showOriginDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '0',
+                  right: '0',
+                  background: 'white',
+                  border: '1px solid rgba(0, 123, 127, 0.2)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1000,
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <div
+                    onClick={() => {
+                      setSelectedOrigin('');
+                      setSelectedOriginCategory('');
+                      setShowOriginDropdown(false);
+                      setShowOriginSubDropdown(false);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontSize: '0.9rem',
+                      color: '#666'
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#f8f9fa'}
+                    onMouseLeave={e => e.target.style.background = 'transparent'}
+                  >
+                    Clear Selection
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('African');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('African');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'African' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🌍 African →
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('Caribbean');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('Caribbean');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'Caribbean' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🏝️ Caribbean →
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('Other');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('Other');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'Other' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🌐 Other →
+                  </div>
+                </div>
+              )}
+              
+              {showOriginSubDropdown && selectedOriginCategory && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '100%',
+                  width: '250px',
+                  background: 'white',
+                  border: '1px solid rgba(0, 123, 127, 0.2)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1001,
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <div
+                    onClick={() => {
+                      setSelectedOriginCategory('');
+                      setShowOriginSubDropdown(false);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontSize: '0.9rem',
+                      color: '#007B7F',
+                      fontWeight: '600',
+                      background: '#f8f9fa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#e9ecef'}
+                    onMouseLeave={e => e.target.style.background = '#f8f9fa'}
+                  >
+                    ← Back to Categories
+                  </div>
+                  <div style={{
+                    padding: '0.5rem 1rem',
+                    background: '#f8f9fa',
+                    borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                    fontWeight: '600',
+                    fontSize: '0.9rem',
+                    color: '#007B7F'
+                  }}>
+                    {selectedOriginCategory === 'African' && '🌍 African Origins'}
+                    {selectedOriginCategory === 'Caribbean' && '🏝️ Caribbean Origins'}
+                    {selectedOriginCategory === 'Other' && '🌐 Other Origins'}
+                  </div>
+                  
+                  {selectedOriginCategory === 'African' && originCategories.african.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                  
+                  {selectedOriginCategory === 'Caribbean' && originCategories.caribbean.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                  
+                  {selectedOriginCategory === 'Other' && originCategories.other.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Filter By Dropdown */}
             <div style={{ 
               flex: '1 1 0',
@@ -3678,6 +4057,259 @@ function ExplorePage() {
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
+            <div 
+              data-origin-dropdown
+              style={{
+                position: 'relative',
+                borderRight: isMobile ? 'none' : '1px solid rgba(0, 123, 127, 0.2)',
+                minWidth: '120px',
+                textAlign: 'left'
+              }}
+            >
+              <div
+                onClick={() => setShowOriginDropdown(!showOriginDropdown)}
+                style={{ 
+                  padding: '1rem 2.5rem 1rem 1.25rem', 
+                  fontSize: '1rem', 
+                  border: 'none', 
+                  color: '#1F2937', 
+                  background: 'transparent', 
+                  outline: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  borderRadius: '0',
+                  backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23007B7F\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.75rem center',
+                  backgroundSize: '1rem',
+                  minWidth: '120px',
+                  textAlign: 'left'
+                }}
+              >
+                {selectedOrigin || '🌍 Origin'}
+              </div>
+              
+              {showOriginDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '0',
+                  right: '0',
+                  background: 'white',
+                  border: '1px solid rgba(0, 123, 127, 0.2)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1000,
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <div
+                    onClick={() => {
+                      setSelectedOrigin('');
+                      setSelectedOriginCategory('');
+                      setShowOriginDropdown(false);
+                      setShowOriginSubDropdown(false);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontSize: '0.9rem',
+                      color: '#666'
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#f8f9fa'}
+                    onMouseLeave={e => e.target.style.background = 'transparent'}
+                  >
+                    Clear Selection
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('African');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('African');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'African' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🌍 African →
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('Caribbean');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('Caribbean');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'Caribbean' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🏝️ Caribbean →
+                  </div>
+                  
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedOriginCategory('Other');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedOriginCategory('Other');
+                      setShowOriginSubDropdown(true);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      color: '#1F2937',
+                      backgroundColor: selectedOriginCategory === 'Other' ? '#f8f9fa' : 'transparent'
+                    }}
+                  >
+                    🌐 Other →
+                  </div>
+                </div>
+              )}
+              
+              {showOriginSubDropdown && selectedOriginCategory && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: isMobile ? '0' : '100%',
+                  width: isMobile ? '100%' : '250px',
+                  background: 'white',
+                  border: '1px solid rgba(0, 123, 127, 0.2)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1001,
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <div
+                    onClick={() => {
+                      setSelectedOriginCategory('');
+                      setShowOriginSubDropdown(false);
+                    }}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                      fontSize: '0.9rem',
+                      color: '#007B7F',
+                      fontWeight: '600',
+                      background: '#f8f9fa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#e9ecef'}
+                    onMouseLeave={e => e.target.style.background = '#f8f9fa'}
+                  >
+                    ← Back to Categories
+                  </div>
+                  <div style={{
+                    padding: '0.5rem 1rem',
+                    background: '#f8f9fa',
+                    borderBottom: '1px solid rgba(0, 123, 127, 0.1)',
+                    fontWeight: '600',
+                    fontSize: '0.9rem',
+                    color: '#007B7F'
+                  }}>
+                    {selectedOriginCategory === 'African' && '🌍 African Origins'}
+                    {selectedOriginCategory === 'Caribbean' && '🏝️ Caribbean Origins'}
+                    {selectedOriginCategory === 'Other' && '🌐 Other Origins'}
+                  </div>
+                  
+                  {selectedOriginCategory === 'African' && originCategories.african.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                  
+                  {selectedOriginCategory === 'Caribbean' && originCategories.caribbean.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                  
+                  {selectedOriginCategory === 'Other' && originCategories.other.map(origin => (
+                    <div
+                      key={origin}
+                      onClick={() => {
+                        setSelectedOrigin(origin);
+                        setShowOriginDropdown(false);
+                        setShowOriginSubDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid rgba(0, 123, 127, 0.05)',
+                        fontSize: '0.9rem',
+                        color: '#1F2937'
+                      }}
+                      onMouseEnter={e => e.target.style.background = '#f0f9ff'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                    >
+                      {origin}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <select
               value={filterBy}
               onChange={e => setFilterBy(e.target.value)}
