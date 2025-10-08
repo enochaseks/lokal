@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
+import ManualPaymentInfo from './ManualPaymentInfo';
 
 const UnsupportedCountryIntegration = ({ 
   currentUser, 
   countryCode,
   countryName,
-  fallbackMessage
+  fallbackMessage,
+  onProceedWithoutPayments
 }) => {
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const handleContactSupport = () => {
     // Open email or contact form
     const subject = encodeURIComponent(`Payment Setup Request - ${countryName}`);
@@ -154,12 +157,12 @@ Thanks!`);
 
         <div style={{ display: 'grid', gap: '12px' }}>
           <button
-            onClick={handleContactSupport}
+            onClick={() => setShowInfoModal(true)}
             style={{
               width: '100%',
-              background: 'rgba(255, 255, 255, 0.25)',
+              background: 'rgba(16, 185, 129, 0.3)',
               color: 'white',
-              padding: '14px 20px',
+              padding: '16px 20px',
               border: 'none',
               borderRadius: '12px',
               fontSize: '16px',
@@ -170,15 +173,40 @@ Thanks!`);
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
             }}
             onMouseOver={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.3)';
+              e.target.style.background = 'rgba(16, 185, 129, 0.4)';
               e.target.style.transform = 'translateY(-2px)';
             }}
             onMouseOut={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.25)';
+              e.target.style.background = 'rgba(16, 185, 129, 0.3)';
               e.target.style.transform = 'translateY(0)';
             }}
           >
-            📧 Contact Support for Manual Setup
+            � Learn How Manual Payments Work
+          </button>
+          
+          <button
+            onClick={handleContactSupport}
+            style={{
+              width: '100%',
+              background: 'rgba(255, 255, 255, 0.15)',
+              color: 'white',
+              padding: '12px 20px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              backdropFilter: 'blur(10px)'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.25)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+            }}
+          >
+            📧 Contact Support Team
           </button>
           
           <div style={{
@@ -198,6 +226,16 @@ Thanks!`);
           </div>
         </div>
       </div>
+      
+      {/* Manual Payment Info Modal */}
+      {showInfoModal && (
+        <ManualPaymentInfo
+          countryCode={countryCode}
+          paymentProvider={{ provider: 'none' }}
+          showInModal={true}
+          onClose={() => setShowInfoModal(false)}
+        />
+      )}
     </div>
   );
 };

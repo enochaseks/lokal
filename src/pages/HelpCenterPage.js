@@ -1032,6 +1032,46 @@ function HelpCenterPage() {
                   <li style={topicStyles.li}><strong>Manual Processing:</strong> Our support team handles payments for unsupported regions</li>
                 </ul>
               </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#f59e0b', marginBottom: '10px' }}>🌍 Countries with Manual Payment Processing</h3>
+                <div style={{ 
+                  background: '#fef3c7', 
+                  padding: '16px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #f59e0b',
+                  marginBottom: '16px'
+                }}>
+                  <p style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#92400e' }}>
+                    Don't worry if automatic payments aren't available in your country yet!
+                  </p>
+                  <p style={{ margin: '0', color: '#78350f' }}>
+                    You can still create your shop and start selling. Our support team will help process payments manually for countries including China, India, Pakistan, Bangladesh, Indonesia, Vietnam, Philippines, Russia, Turkey, Brazil, Mexico, and many others.
+                  </p>
+                </div>
+                
+                <h4 style={{ fontSize: '1rem', color: '#374151', marginBottom: '8px' }}>How Manual Processing Works:</h4>
+                <ul style={topicStyles.ul}>
+                  <li style={topicStyles.li}>✅ <strong>Create your shop freely</strong> - No payment setup required initially</li>
+                  <li style={topicStyles.li}>🛍️ <strong>Customers can browse and order</strong> - Full shopping experience available</li>
+                  <li style={topicStyles.li}>📧 <strong>Order notifications</strong> - You'll receive emails about new orders</li>
+                  <li style={topicStyles.li}>🤝 <strong>Support team assistance</strong> - We help coordinate payment collection</li>
+                  <li style={topicStyles.li}>💳 <strong>Multiple payment methods</strong> - Bank transfer, mobile money, or local payment options</li>
+                  <li style={topicStyles.li}>🚀 <strong>Future automation</strong> - You'll be first to know when automatic payments arrive</li>
+                </ul>
+                
+                <div style={{ 
+                  background: '#e0f2fe', 
+                  padding: '12px', 
+                  borderRadius: '6px', 
+                  border: '1px solid #0284c7',
+                  marginTop: '12px'
+                }}>
+                  <p style={{ margin: 0, color: '#075985', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                    💡 We're actively expanding our payment infrastructure globally. Your region may be added soon!
+                  </p>
+                </div>
+              </div>
               
               <h2 style={topicStyles.h2}>Troubleshooting</h2>
               

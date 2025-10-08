@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
+import CountryAwareRegistration from '../components/CountryAwareRegistration';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
@@ -80,6 +81,9 @@ function RegisterPage() {
   const [marketingConsent, setMarketingConsent] = useState(false);
   const navigate = useNavigate();
 
+  // Country detection state
+  const [countryInfo, setCountryInfo] = useState(null);
+
   // Password validation function
   const validatePassword = (password) => {
     const validation = {
@@ -101,6 +105,12 @@ function RegisterPage() {
     const newPassword = e.target.value;
     setPassword(newPassword);
     validatePassword(newPassword);
+  };
+
+  // Handle country detection callback
+  const handleCountryDetected = (info) => {
+    setCountryInfo(info);
+    console.log('🌍 Country info received in RegisterPage:', info);
   };
 
   // No auth state listener needed on registration page
@@ -157,7 +167,14 @@ function RegisterPage() {
         onboardingStep: 'onboarding',
         marketingConsent: marketingConsent,
         emailVerified: false,
-        uid: user.uid
+        uid: user.uid,
+        // Store country and payment provider info for later use
+        registrationCountryInfo: countryInfo || {
+          country: 'unknown',
+          provider: { provider: 'unknown', supported: false },
+          supportsPayments: false,
+          detectedAt: new Date().toISOString()
+        }
       };
 
       await setDoc(doc(db, 'users', user.uid), userDoc);
@@ -222,7 +239,11 @@ function RegisterPage() {
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <Navbar />
       <div style={{ maxWidth: 400, margin: '2rem auto', background: '#fff', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 8px #B8B8B8' }}>
-        <h2 style={{ color: '#D92D20', marginBottom: '1rem' }}>Register</h2>
+        <CountryAwareRegistration 
+          onCountryDetected={handleCountryDetected}
+          showPaymentWarning={true}
+        >
+          <h2 style={{ color: '#D92D20', marginBottom: '1rem' }}>Register</h2>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Email</label>
@@ -644,6 +665,7 @@ function RegisterPage() {
           <span style={{ color: '#1C1C1C' }}>Already have an account? </span>
           <a href="/login" style={{ color: '#007B7F', fontWeight: 'bold', textDecoration: 'none' }}>Login</a>
         </div>
+        </CountryAwareRegistration>
       </div>
     </div>
   );
