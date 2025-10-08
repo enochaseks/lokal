@@ -12,6 +12,8 @@ import StripeGooglePayButton from '../components/StripeGooglePayButton';
 import BankTransferForm from '../components/BankTransferForm';
 import PaymentProviderSelector from '../components/PaymentProviderSelector';
 import { useMessage } from '../MessageContext';
+import { detectUserCountry, getPaymentProvider, getCountryName } from '../utils/countryDetection';
+import { useToast } from '../contexts/ToastContext';
 
 // Function to save store info to localStorage
 const saveStoreInfoToLocalStorage = (conversationId, storeData) => {
@@ -84,6 +86,7 @@ function MessagesPage() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('messages');
   const { markMessagesAsRead } = useMessage();
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   
   // Stripe Promise with Link disabled to force native wallets
   const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY, {
@@ -220,7 +223,11 @@ function MessagesPage() {
     serviceFeeRate: 2.5, // percentage
     serviceFeeAmount: 0, // fixed amount
     serviceFeeMax: 0, // max cap for percentage
-    refundsEnabled: true // allow refunds by default
+    refundsEnabled: true, // allow refunds by default
+    // Payment method settings
+    cardPaymentsEnabled: true, // allow card payments by default
+    googlePayEnabled: true, // allow Google Pay by default
+    manualTransferOnly: false // false = accept all payments, true = manual transfer only
   });
 
   // Delivery states
@@ -247,6 +254,11 @@ function MessagesPage() {
   // Stripe Connect states
   const [sellerConnectAccount, setSellerConnectAccount] = useState(null);
   const [stripeConnectBalance, setStripeConnectBalance] = useState({ available: 0, pending: 0 });
+  
+  // Country detection states
+  const [userCountryCode, setUserCountryCode] = useState(null);
+  const [userPaymentProvider, setUserPaymentProvider] = useState(null);
+  const [countryDetectionLoading, setCountryDetectionLoading] = useState(true);
   
   // Refund transfer confirmation states
   const [showRefundTransferModal, setShowRefundTransferModal] = useState(false);
@@ -557,7 +569,7 @@ function MessagesPage() {
   // Process withdrawal request
   const processWithdrawal = async () => {
     if (!withdrawalForm.amount || !withdrawalForm.accountHolderName) {
-      alert('Please fill in all required fields');
+      showWarning('Please fill in all required fields');
       return;
     }
 
@@ -567,13 +579,13 @@ function MessagesPage() {
 
     // Validate amount
     if (amount < config.minAmount || amount > config.maxAmount) {
-      alert(`Withdrawal amount must be between ${getCurrencySymbol(config.currency)}${config.minAmount} and ${getCurrencySymbol(config.currency)}${config.maxAmount}`);
+      showWarning(`Withdrawal amount must be between ${getCurrencySymbol(config.currency)}${config.minAmount} and ${getCurrencySymbol(config.currency)}${config.maxAmount}`);
       return;
     }
 
     // Check monthly limit
     if (withdrawalEligibility.monthlyWithdrawals >= config.monthlyLimit) {
-      alert(`You have reached the monthly withdrawal limit of ${config.monthlyLimit} withdrawals`);
+      showWarning(`You have reached the monthly withdrawal limit of ${config.monthlyLimit} withdrawals`);
       return;
     }
 
@@ -660,7 +672,7 @@ function MessagesPage() {
           timestamp: serverTimestamp()
         });
 
-        alert(`✅ Withdrawal of ${getCurrencySymbol(config.currency)}${amount.toFixed(2)} has been processed!\n\nTransfer ID: ${result.transferId}\n\nFunds will arrive in your account within 1-2 business days.`);
+        showSuccess(`Withdrawal of ${getCurrencySymbol(config.currency)}${amount.toFixed(2)} has been processed! Transfer ID: ${result.transferId}. Funds will arrive in your account within 1-2 business days.`);
         
         setShowWithdrawModal(false);
         setWithdrawalForm({
@@ -686,7 +698,7 @@ function MessagesPage() {
 
     } catch (error) {
       console.error('❌ Withdrawal error:', error);
-      alert(`❌ Withdrawal failed: ${error.message}\n\nPlease check your details and try again.`);
+      showError(`Withdrawal failed: ${error.message}. Please check your details and try again.`);
     }
 
     setWithdrawalProcessing(false);
@@ -773,88 +785,137 @@ function MessagesPage() {
   };
 
   // Payment methods by region/currency
-  const getPaymentMethods = (currency) => {
-    const baseMethods = [
-      { id: 'card', name: 'Credit/Debit Card', icon: '💳', description: 'Visa, Mastercard, American Express' }
-    ];
+  const getPaymentMethods = (currency, storeFeeSettings = null) => {
+    // Check if this store has specific payment method restrictions
+    const useStoreFeeSettings = storeFeeSettings || feeSettings;
+    
+    // If manual transfer only is enabled, return only manual transfer options
+    if (useStoreFeeSettings.manualTransferOnly) {
+      const manualOnlyMethods = [];
+      
+      // Add appropriate manual transfer method based on currency
+      switch (currency) {
+        case 'GBP':
+          manualOnlyMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Manual bank transfer required' });
+          break;
+        case 'EUR':
+          manualOnlyMethods.push({ id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'Manual SEPA transfer required' });
+          break;
+        case 'NGN':
+          manualOnlyMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Manual Nigerian bank transfer required' });
+          break;
+        case 'USD':
+          manualOnlyMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Manual bank transfer required' });
+          break;
+        case 'GHS':
+          manualOnlyMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Manual Ghana bank transfer required' });
+          break;
+        case 'ZAR':
+          manualOnlyMethods.push({ id: 'eft', name: 'EFT', icon: '🏦', description: 'Manual electronic funds transfer required' });
+          break;
+        default:
+          manualOnlyMethods.push({ id: 'bank_transfer', name: 'Manual Transfer', icon: '🏦', description: 'Manual bank transfer required' });
+          break;
+      }
+      return manualOnlyMethods;
+    }
 
+    // Build methods array based on enabled payment options
+    const baseMethods = [];
+    
+    // Add card payments if enabled
+    if (useStoreFeeSettings.cardPaymentsEnabled !== false) {
+      baseMethods.push({ id: 'card', name: 'Credit/Debit Card', icon: '💳', description: 'Visa, Mastercard, American Express' });
+    }
+
+    const additionalMethods = [];
+    
     switch (currency) {
       case 'USD':
-        return [
-          ...baseMethods,
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'venmo', name: 'Venmo', icon: '📱', description: 'Split with friends' }
-        ];
+        // Add Google Pay if enabled
+        if (useStoreFeeSettings.googlePayEnabled !== false) {
+          additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+        }
+        additionalMethods.push({ id: 'venmo', name: 'Venmo', icon: '📱', description: 'Split with friends' });
+        break;
       case 'GBP':
-        return [
-          ...baseMethods,
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Direct bank transfer' }
-        ];
+        // Add Google Pay if enabled
+        if (useStoreFeeSettings.googlePayEnabled !== false) {
+          additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+        }
+        additionalMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Direct bank transfer' });
+        break;
       case 'EUR':
-        return [
-          ...baseMethods,
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
-          { id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'European bank transfer' },
-          { id: 'klarna', name: 'Klarna', icon: '🛡️', description: 'Buy now, pay later' }
-        ];
+        // Add Google Pay if enabled
+        if (useStoreFeeSettings.googlePayEnabled !== false) {
+          additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+        }
+        additionalMethods.push({ id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'European bank transfer' });
+        additionalMethods.push({ id: 'klarna', name: 'Klarna', icon: '🛡️', description: 'Buy now, pay later' });
+        break;
       case 'NGN':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'flutterwave', name: 'Flutterwave', icon: '💳', description: 'Pay with Flutterwave' },
           { id: 'paystack', name: 'Paystack', icon: '⚡', description: 'Quick Nigerian payments' },
           { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Nigerian bank transfer' },
           { id: 'ussd', name: 'USSD', icon: '📞', description: 'Dial *code# to pay' }
-        ];
+        );
+        break;
       case 'KES':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'mpesa', name: 'M-Pesa', icon: '📱', description: 'Kenya mobile money' },
           { id: 'airtel_money', name: 'Airtel Money', icon: '📲', description: 'Airtel mobile money' },
           { id: 'flutterwave', name: 'Flutterwave', icon: '💳', description: 'Pay with Flutterwave' }
-        ];
+        );
+        break;
       case 'GHS':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'momo', name: 'Mobile Money', icon: '📱', description: 'MTN, Vodafone, AirtelTigo' },
           { id: 'flutterwave', name: 'Flutterwave', icon: '💳', description: 'Pay with Flutterwave' },
           { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Ghana bank transfer' }
-        ];
+        );
+        break;
       case 'ZAR':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'payfast', name: 'PayFast', icon: '⚡', description: 'South African payments' },
           { id: 'eft', name: 'EFT', icon: '🏦', description: 'Electronic funds transfer' },
           { id: 'instant_eft', name: 'Instant EFT', icon: '⚡', description: 'Instant bank payment' }
-        ];
+        );
+        break;
       case 'INR':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'upi', name: 'UPI', icon: '📱', description: 'PhonePe, GPay, Paytm' },
           { id: 'razorpay', name: 'Razorpay', icon: '💙', description: 'Multiple payment options' },
           { id: 'paytm', name: 'Paytm', icon: '💳', description: 'Paytm wallet & more' },
           { id: 'netbanking', name: 'Net Banking', icon: '🏦', description: 'All major banks' }
-        ];
+        );
+        break;
       case 'CNY':
-        return [
-          ...baseMethods,
+        additionalMethods.push(
           { id: 'alipay', name: 'Alipay', icon: '💙', description: 'Ant Financial payment' },
           { id: 'wechat_pay', name: 'WeChat Pay', icon: '💬', description: 'Tencent mobile payment' },
           { id: 'unionpay', name: 'UnionPay', icon: '🏦', description: 'China UnionPay cards' }
-        ];
+        );
+        break;
       case 'JPY':
-        return [
-          ...baseMethods,
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' },
+        // Add Google Pay if enabled
+        if (useStoreFeeSettings.googlePayEnabled !== false) {
+          additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+        }
+        additionalMethods.push(
           { id: 'konbini', name: 'Konbini', icon: '🏪', description: 'Pay at convenience store' },
           { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Japanese bank transfer' }
-        ];
+        );
+        break;
       default:
-        return [
-          ...baseMethods,
-          { id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' }
-        ];
+        // Add Google Pay if enabled
+        if (useStoreFeeSettings.googlePayEnabled !== false) {
+          additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+        }
+        break;
     }
+    
+    return [...baseMethods, ...additionalMethods];
   };
 
   // Card validation functions
@@ -1057,6 +1118,39 @@ function MessagesPage() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Country detection effect
+  useEffect(() => {
+    const detectCountryAndProvider = async () => {
+      try {
+        setCountryDetectionLoading(true);
+        const countryCode = await detectUserCountry();
+        const provider = getPaymentProvider(countryCode);
+        
+        setUserCountryCode(countryCode);
+        setUserPaymentProvider(provider);
+        
+        console.log('🌍 MessagesPage country detection:', {
+          country: getCountryName(countryCode),
+          provider: provider.provider,
+          supported: provider.supported
+        });
+      } catch (error) {
+        console.error('Error detecting country in MessagesPage:', error);
+        // Default to GB/Stripe
+        setUserCountryCode('GB');
+        setUserPaymentProvider({
+          provider: 'stripe',
+          name: 'Stripe Connect',
+          supported: true
+        });
+      } finally {
+        setCountryDetectionLoading(false);
+      }
+    };
+
+    detectCountryAndProvider();
   }, []);
 
   useEffect(() => {
@@ -2086,11 +2180,11 @@ function MessagesPage() {
       setBlockRequestDuration('7');
       setShowBlockRequestModal(false);
       
-      alert('✅ Block request submitted successfully!\n\nYour request has been sent to the admin for review. You will be notified once a decision is made.');
+      showSuccess('Block request submitted successfully! Your request has been sent to the admin for review. You will be notified once a decision is made.');
       
     } catch (error) {
       console.error('Error submitting block request:', error);
-      alert('Failed to submit block request. Please try again.');
+      showError('Failed to submit block request. Please try again.');
     } finally {
       setSubmittingBlockRequest(false);
     }
@@ -2271,6 +2365,23 @@ function MessagesPage() {
       currency
     });
     
+    // Get payment methods based on store settings
+    let availablePaymentMethods = getPaymentMethods(currency);
+    
+    // If we have store-specific settings, use them to filter payment methods
+    if (storeId) {
+      try {
+        const storeDoc = await getDoc(doc(db, 'stores', storeId));
+        if (storeDoc.exists()) {
+          const storeData = storeDoc.data();
+          const storeFeeSettings = storeData.feeSettings || {};
+          availablePaymentMethods = getPaymentMethods(currency, storeFeeSettings);
+        }
+      } catch (error) {
+        console.error('Error fetching store settings for payment methods:', error);
+      }
+    }
+
     return {
       subtotal,
       deliveryFee,
@@ -2281,7 +2392,8 @@ function MessagesPage() {
       feeBreakdown: {
         deliveryEnabled: deliveryFee > 0,
         serviceFeeEnabled: serviceFee > 0
-      }
+      },
+      availablePaymentMethods
     };
   };
 
@@ -11731,8 +11843,9 @@ I hereby confirm this is a formal report and all information provided is accurat
               <div className="loading-state">Loading wallet...</div>
             ) : (
               <>
-                {/* Stripe Connect Setup Alert for Existing Sellers */}
-                {!sellerConnectAccount && (
+                {/* Payment Provider Upgrade Section for Users in Non-Stripe Countries */}
+                {!sellerConnectAccount && userPaymentProvider && 
+                 (userPaymentProvider.provider === 'paystack' || userPaymentProvider.provider === 'none') && (
                   <div style={{
                     background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
                     border: '2px solid #f59e0b',
@@ -11742,32 +11855,32 @@ I hereby confirm this is a formal report and all information provided is accurat
                     position: 'relative'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px' }}>
-                      <div style={{ fontSize: '2rem', flexShrink: 0 }}>🚀</div>
+                      <div style={{ fontSize: '2rem', flexShrink: 0 }}>🌍</div>
                       <div style={{ flex: 1 }}>
                         <h3 style={{ margin: '0 0 10px 0', color: '#92400e', fontSize: '1.3rem' }}>
-                          Upgrade to Real Money Payments!
+                          Payment Solution for {userCountryCode && getCountryName(userCountryCode)}
                         </h3>
                         <p style={{ margin: '0 0 15px 0', color: '#92400e', lineHeight: '1.5' }}>
-                          <strong>Get paid instantly!</strong> Set up your Stripe Connect account to receive real money directly from customers into your bank account. No more waiting for platform payouts!
+                          <strong>We've got you covered!</strong> While Stripe isn't available in your region yet, we have alternative payment solutions to help you accept payments and grow your business.
                         </p>
                         
                         <div style={{ background: 'rgba(255,255,255,0.7)', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', fontSize: '0.9rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>💰</span>
-                              <span><strong>Instant real money</strong></span>
+                              <span><strong>Accept real payments</strong></span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>🏦</span>
-                              <span><strong>Direct bank withdrawals</strong></span>
+                              <span><strong>Regional payment methods</strong></span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>📊</span>
-                              <span><strong>Professional tax docs</strong></span>
+                              <span><strong>Full payment tracking</strong></span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>🛡️</span>
-                              <span><strong>Fraud protection</strong></span>
+                              <span><strong>Secure transactions</strong></span>
                             </div>
                           </div>
                         </div>
@@ -11777,7 +11890,7 @@ I hereby confirm this is a formal report and all information provided is accurat
                             currentUser={currentUser}
                             onAccountCreated={(accountId) => {
                               setSellerConnectAccount({ accountId });
-                              console.log('✅ Connect account created in Messages:', accountId);
+                              console.log('✅ Payment account created in Messages:', accountId);
                             }}
                             onBalanceUpdate={(balance) => {
                               setStripeConnectBalance(balance);
@@ -12144,7 +12257,7 @@ I hereby confirm this is a formal report and all information provided is accurat
               <div className="payment-section">
                 <h3>Choose Payment Method</h3>
                 <div className="payment-methods">
-                  {getPaymentMethods(paymentData.currency).map((method) => (
+                  {(paymentData.availablePaymentMethods || getPaymentMethods(paymentData.currency)).map((method) => (
                     <div 
                       key={method.id}
                       className={`payment-method ${selectedPaymentMethod === method.id ? 'selected' : ''}`}
@@ -13021,6 +13134,69 @@ I hereby confirm this is a formal report and all information provided is accurat
                       ? "Customers can request refunds for orders from your store." 
                       : "⚠️ Customers will see that this store does not offer refunds. This cannot be changed for existing orders."}
                   </p>
+                </div>
+              </div>
+
+              {/* Payment Methods Settings */}
+              <div className="payment-section">
+                <h3>Payment Methods</h3>
+                <div className="fee-setting-group">
+                  <label className="fee-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={feeSettings.manualTransferOnly}
+                      onChange={(e) => {
+                        const isManualOnly = e.target.checked;
+                        setFeeSettings(prev => ({
+                          ...prev,
+                          manualTransferOnly: isManualOnly,
+                          // If manual only is enabled, disable card and Google Pay
+                          cardPaymentsEnabled: !isManualOnly,
+                          googlePayEnabled: !isManualOnly
+                        }));
+                      }}
+                    />
+                    Manual transfer payments only
+                  </label>
+                  <p className="fee-setting-description">
+                    {feeSettings.manualTransferOnly 
+                      ? "⚠️ Only manual bank transfers will be accepted. Card and Google Pay will be disabled." 
+                      : "Customers can pay using cards, Google Pay, or manual transfers."}
+                  </p>
+
+                  {!feeSettings.manualTransferOnly && (
+                    <div className="payment-method-controls" style={{ marginTop: '1rem', paddingLeft: '1.5rem' }}>
+                      <div className="fee-setting-group">
+                        <label className="fee-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={feeSettings.cardPaymentsEnabled}
+                            onChange={(e) => setFeeSettings(prev => ({
+                              ...prev,
+                              cardPaymentsEnabled: e.target.checked
+                            }))}
+                          />
+                          Accept card payments
+                        </label>
+                      </div>
+                      <div className="fee-setting-group">
+                        <label className="fee-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={feeSettings.googlePayEnabled}
+                            onChange={(e) => setFeeSettings(prev => ({
+                              ...prev,
+                              googlePayEnabled: e.target.checked
+                            }))}
+                          />
+                          Accept Google Pay
+                        </label>
+                      </div>
+                      <p className="fee-setting-description" style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
+                        Manual bank transfers are always available as a payment option.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 

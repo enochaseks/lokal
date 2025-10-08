@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStripe } from '@stripe/react-stripe-js';
+import { showToast } from './ToastNotification';
 
 const StripeGooglePayButton = ({ 
   paymentData, 
@@ -330,18 +331,18 @@ const StripeGooglePayButton = ({
               // Try direct Google Pay API as fallback
               if (window.google && window.google.payments) {
                 console.log('🔄 Trying direct Google Pay API...');
-                alert('Google Pay is available but Stripe integration failed. Please try again or use a different payment method.');
+                showToast('Google Pay is available but Stripe integration failed. Please try again or use a different payment method.', 'error', 6000);
               } else {
-                alert('Google Pay is not available on this device/browser. Please use Chrome.');
+                showToast('Google Pay is not available on this device/browser. Please use Chrome or Safari for Google Pay.', 'warning', 6000);
               }
             }
           } catch (error) {
             console.error('❌ Failed to show Google Pay interface:', error);
-            alert('Failed to open Google Pay. Please try again or use a different payment method.');
+            showToast('Failed to open Google Pay. Please try again or use a different payment method.', 'error');
           }
         } else if (!paymentRequest) {
           console.error('❌ Payment request not initialized');
-          alert('Google Pay is not properly initialized. Please refresh and try again.');
+          showToast('Google Pay is not properly initialized. Please refresh and try again.', 'error');
         }
       }}
       >

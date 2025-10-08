@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getAuth } from 'firebase/auth';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { showToast } from './ToastNotification';
 
 const PaystackIntegration = ({ 
   currentUser, 
@@ -55,7 +56,9 @@ const PaystackIntegration = ({
     try {
       // This would be implemented when adding Paystack backend
       console.log('Paystack integration coming soon...');
-      setError('Paystack integration is not yet available. Please use bank transfer for now.');
+      const errorMsg = 'Paystack integration is not yet available. Please use bank transfer for now.';
+      setError(errorMsg);
+      showToast(errorMsg, 'info', 6000);
     } catch (err) {
       console.error('Error creating Paystack account:', err);
       setError('Failed to create Paystack account. Please try again.');
@@ -68,10 +71,10 @@ const PaystackIntegration = ({
     try {
       // Placeholder for Paystack withdrawal
       console.log('Paystack withdrawal coming soon...');
-      alert('Paystack withdrawals will be available soon. Please contact support for manual payouts.');
+      showToast('Paystack withdrawals will be available soon. Please contact support for manual payouts.', 'info', 6000);
     } catch (err) {
       console.error('Withdrawal error:', err);
-      alert('Withdrawal failed. Please try again.');
+      showToast('Withdrawal failed. Please try again.', 'error');
     }
   };
 

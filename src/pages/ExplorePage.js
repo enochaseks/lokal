@@ -1820,9 +1820,9 @@ function ExplorePage() {
               setLocationLoading(false);
             },
             {
-              timeout: 8000, // Reduced from 10s to 8s for faster fallback
-              enableHighAccuracy: false, // Use false for faster detection
-              maximumAge: 300000 // 5 minutes cache
+              timeout: 15000, // Increased to 15s to prevent timeout errors
+              enableHighAccuracy: false, // Keep false for faster detection
+              maximumAge: 600000 // 10 minutes cache to reduce repeated requests
             }
           );
         } else {
@@ -3208,9 +3208,9 @@ function ExplorePage() {
           setLocationLoading(false);
         },
         {
-          timeout: 6000, // Faster timeout for manual refresh
-          enableHighAccuracy: true, // Use high accuracy for manual refresh
-          maximumAge: 0 // Don't use cached location for manual refresh
+          timeout: 12000, // Increased timeout to prevent timeout errors
+          enableHighAccuracy: false, // Use false to prevent slow GPS requests
+          maximumAge: 60000 // Use 1 minute cache for manual refresh
         }
       );
     } else {

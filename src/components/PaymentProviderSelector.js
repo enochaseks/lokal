@@ -112,7 +112,62 @@ const PaymentProviderSelector = ({
 
   return (
     <div className="space-y-6">
-      {/* Country Detection Info */}
+      {/* Render Appropriate Provider Component */}
+      {paymentProvider?.provider === 'paystack' ? (
+        <PaystackIntegration
+          currentUser={currentUser}
+          onAccountCreated={onAccountCreated}
+          onBalanceUpdate={onBalanceUpdate}
+          showAccountCreation={showAccountCreation}
+        />
+      ) : paymentProvider?.provider === 'stripe' ? (
+        <StripeConnectIntegration
+          currentUser={currentUser}
+          onAccountCreated={onAccountCreated}
+          onBalanceUpdate={onBalanceUpdate}
+          showAccountCreation={showAccountCreation}
+        />
+      ) : paymentProvider?.provider === 'stripe_limited' || paymentProvider?.provider === 'stripe_unknown' ? (
+        <LimitedStripeIntegration
+          currentUser={currentUser}
+          countryCode={paymentProvider.countryCode}
+          countryName={getCountryName(paymentProvider.countryCode)}
+          fallbackMessage={paymentProvider.fallbackMessage}
+          region={paymentProvider.region}
+        />
+      ) : paymentProvider?.provider === 'none' ? (
+        <UnsupportedCountryIntegration
+          currentUser={currentUser}
+          countryCode={paymentProvider.countryCode}
+          countryName={getCountryName(paymentProvider.countryCode)}
+          fallbackMessage={paymentProvider.fallbackMessage}
+        />
+      ) : paymentProvider?.supported ? (
+        <StripeConnectIntegration
+          currentUser={currentUser}
+          onAccountCreated={onAccountCreated}
+          onBalanceUpdate={onBalanceUpdate}
+          showAccountCreation={showAccountCreation}
+        />
+      ) : (
+        <div style={{
+          background: '#f3f4f6',
+          border: '2px solid #e5e7eb',
+          borderRadius: '12px',
+          padding: '20px',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⚠️</div>
+          <h3 style={{ margin: '0 0 10px 0', color: '#374151' }}>
+            Payment Setup Unavailable
+          </h3>
+          <p style={{ margin: 0, color: '#6b7280' }}>
+            We're working on payment solutions for your region. Please contact support for assistance.
+          </p>
+        </div>
+      )}
+
+      {/* Country Detection Info - Below wallet overview */}
       <div style={{
         background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
         borderRadius: '16px',
@@ -220,84 +275,6 @@ const PaymentProviderSelector = ({
           )}
         </div>
       </div>
-
-      {/* Unsupported Country Warning */}
-      {!paymentProvider?.supported && (
-        <div style={{
-          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-          borderRadius: '12px',
-          padding: '18px',
-          color: 'white'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: '50%',
-              padding: '6px',
-              marginRight: '12px'
-            }}>
-              <span style={{ fontSize: '16px' }}>⚠️</span>
-            </div>
-            <div>
-              <h3 style={{
-                fontSize: '15px',
-                fontWeight: '600',
-                margin: '0 0 4px 0',
-                color: 'white'
-              }}>
-                Heads up! 
-              </h3>
-              <p style={{
-                fontSize: '14px',
-                margin: '0',
-                color: 'rgba(255, 255, 255, 0.95)',
-                lineHeight: '1.4'
-              }}>
-                {paymentProvider?.fallbackMessage} We're here to help though! 😊
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Render Appropriate Provider Component */}
-      {paymentProvider?.provider === 'paystack' ? (
-        <PaystackIntegration
-          currentUser={currentUser}
-          onAccountCreated={onAccountCreated}
-          onBalanceUpdate={onBalanceUpdate}
-          showAccountCreation={showAccountCreation}
-        />
-      ) : paymentProvider?.provider === 'stripe' ? (
-        <StripeConnectIntegration
-          currentUser={currentUser}
-          onAccountCreated={onAccountCreated}
-          onBalanceUpdate={onBalanceUpdate}
-          showAccountCreation={showAccountCreation}
-        />
-      ) : paymentProvider?.provider === 'stripe_limited' || paymentProvider?.provider === 'stripe_unknown' ? (
-        <LimitedStripeIntegration
-          currentUser={currentUser}
-          countryCode={paymentProvider.countryCode}
-          countryName={getCountryName(paymentProvider.countryCode)}
-          fallbackMessage={paymentProvider.fallbackMessage}
-          region={paymentProvider.region}
-        />
-      ) : paymentProvider?.provider === 'none' ? (
-        <UnsupportedCountryIntegration
-          currentUser={currentUser}
-          countryCode={paymentProvider.countryCode}
-          countryName={getCountryName(paymentProvider.countryCode)}
-          fallbackMessage={paymentProvider.fallbackMessage}
-        />
-      ) : (
-        <StripeConnectIntegration
-          currentUser={currentUser}
-          onAccountCreated={onAccountCreated}
-          onBalanceUpdate={onBalanceUpdate}
-          showAccountCreation={showAccountCreation}
-        />
-      )}
 
       {/* Alternative Provider Info - Only show for supported countries */}
       {paymentProvider?.provider !== 'none' && (
@@ -415,6 +392,7 @@ const PaymentProviderSelector = ({
         </div>
         </div>
       )}
+
     </div>
   );
 };

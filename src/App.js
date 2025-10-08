@@ -23,6 +23,7 @@ import StoreReviewPreviewPage from './pages/StoreReviewPreviewPage';
 import MessagesPage from './pages/MessagesPage';
 import { CartProvider } from './CartContext';
 import { MessageProvider } from './MessageContext';
+import { ToastProvider } from './contexts/ToastContext';
 import ShopCartPage from './pages/ShopCartPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -189,8 +190,9 @@ function App() {
   }, []);
 
   return (
-    <MessageProvider>
-      <CartProvider>
+    <ToastProvider>
+      <MessageProvider>
+        <CartProvider>
         <Router>
           <LoadingSplashManager 
             isLoading={appLoading} 
@@ -397,8 +399,9 @@ function App() {
           </DeletedAccountGuard>
           </LoadingSplashManager>
       </Router>
-    </CartProvider>
-    </MessageProvider>
+        </CartProvider>
+      </MessageProvider>
+    </ToastProvider>
   );
 }
 

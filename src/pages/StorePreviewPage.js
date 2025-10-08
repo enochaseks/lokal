@@ -14,6 +14,59 @@ import StripePaymentForm from '../components/StripePaymentForm';
 // Using the REACT_APP_STRIPE_PUBLIC_KEY from .env file
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
 
+// Simple payment methods function for Store Preview
+const getPaymentMethods = (currency, storeFeeSettings = null) => {
+  // If manual transfer only is enabled, return only manual transfer options
+  if (storeFeeSettings?.manualTransferOnly) {
+    switch (currency) {
+      case 'GBP':
+        return [{ id: 'bank_transfer', name: 'Bank Transfer Only', icon: '🏦', description: 'Manual bank transfer required' }];
+      case 'EUR':
+        return [{ id: 'sepa', name: 'SEPA Transfer Only', icon: '🏦', description: 'Manual SEPA transfer required' }];
+      case 'NGN':
+        return [{ id: 'bank_transfer', name: 'Bank Transfer Only', icon: '🏦', description: 'Manual Nigerian bank transfer required' }];
+      case 'USD':
+        return [{ id: 'bank_transfer', name: 'Bank Transfer Only', icon: '🏦', description: 'Manual bank transfer required' }];
+      default:
+        return [{ id: 'bank_transfer', name: 'Manual Transfer Only', icon: '🏦', description: 'Manual bank transfer required' }];
+    }
+  }
+
+  // Build available methods based on enabled options
+  const methods = [];
+  
+  // Add card payments if enabled (default true)
+  if (storeFeeSettings?.cardPaymentsEnabled !== false) {
+    methods.push({ id: 'card', name: 'Credit/Debit Card', icon: '💳', description: 'Visa, Mastercard, American Express' });
+  }
+  
+  // Add Google Pay if enabled (default true)
+  if (storeFeeSettings?.googlePayEnabled !== false) {
+    methods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
+  }
+  
+  // Always add manual transfer option
+  switch (currency) {
+    case 'GBP':
+      methods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Direct bank transfer' });
+      break;
+    case 'EUR':
+      methods.push({ id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'European bank transfer' });
+      break;
+    case 'NGN':
+      methods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Nigerian bank transfer' });
+      break;
+    case 'USD':
+      methods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Bank transfer' });
+      break;
+    default:
+      methods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Bank transfer' });
+      break;
+  }
+  
+  return methods;
+};
+
 const currencySymbols = {
   GBP: "£",
   USD: "$",
@@ -134,7 +187,11 @@ function StorePreviewPage() {
     serviceFeeRate: 2.5,
     serviceFeeAmount: 0,
     serviceFeeMax: 0,
-    refundsEnabled: true
+    refundsEnabled: true,
+    // Payment method settings
+    cardPaymentsEnabled: true,
+    googlePayEnabled: true,
+    manualTransferOnly: false
   });
 
   // Only declare daysOfWeek ONCE at the top of the file
@@ -2374,15 +2431,46 @@ function StorePreviewPage() {
               </div>
             )}
             
-            {store.paymentType && (
-              <div className="payment-method">
-                <span className="payment-label">Payment Method:</span> 
-                <span className="payment-value">
-                  {store.paymentType === 'Own Card/Bank Details' ? 'Card Payment' : 
-                   (store.paymentType === 'Other' ? 'Pay at Store' : store.paymentType)}
-                </span>
-              </div>
-            )}
+            {/* Enhanced Payment Methods Display */}
+            <div className="payment-methods-section">
+              <span className="payment-label">Available Payment Methods:</span>
+              
+              {storeFeeSettings.manualTransferOnly ? (
+                <div className="manual-only-notice">
+                  <div className="manual-only-header">
+                    🏦 Manual Transfer Only
+                  </div>
+                  <div className="manual-only-text">
+                    This store only accepts manual bank transfers. You'll receive payment instructions after placing your order.
+                  </div>
+                </div>
+              ) : (
+                <div className="payment-methods-list">
+                  {getPaymentMethods(store.currency || 'GBP', storeFeeSettings).map((method, index) => (
+                    <div key={method.id} className="payment-method-item">
+                      <span className="method-icon">{method.icon}</span>
+                      <span className="method-name">{method.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Show restriction notices */}
+              {!storeFeeSettings.manualTransferOnly && (
+                <>
+                  {!storeFeeSettings.cardPaymentsEnabled && (
+                    <div className="payment-restriction-notice">
+                      ⚠️ Card payments are not accepted by this store
+                    </div>
+                  )}
+                  {!storeFeeSettings.googlePayEnabled && (
+                    <div className="payment-restriction-notice">
+                      ⚠️ Google Pay is not accepted by this store
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             
             <style>{`
               .refunds-notification {
@@ -2430,6 +2518,67 @@ function StorePreviewPage() {
                 align-items: center;
                 gap: 6px;
                 flex-wrap: wrap;
+              }
+              
+              .payment-methods-section {
+                margin-top: 12px;
+                color: #007B7F;
+              }
+              
+              .payment-methods-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 8px;
+              }
+              
+              .payment-method-item {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                background: #f0f9ff;
+                padding: 6px 10px;
+                border-radius: 6px;
+                font-size: 0.9rem;
+                border: 1px solid #e0f2fe;
+              }
+              
+              .method-icon {
+                font-size: 1rem;
+              }
+              
+              .method-name {
+                font-weight: 500;
+                color: #0369a1;
+              }
+              
+              .manual-only-notice {
+                background: #fff7ed;
+                border: 1px solid #fed7aa;
+                border-radius: 8px;
+                padding: 12px;
+                margin-top: 8px;
+              }
+              
+              .manual-only-header {
+                font-weight: 600;
+                color: #c2410c;
+                margin-bottom: 4px;
+              }
+              
+              .manual-only-text {
+                color: #9a3412;
+                font-size: 0.9rem;
+              }
+              
+              .payment-restriction-notice {
+                background: #fefce8;
+                border: 1px solid #fde047;
+                border-radius: 6px;
+                padding: 8px 12px;
+                margin-top: 6px;
+                font-size: 0.85rem;
+                color: #a16207;
               }
               
               .payment-label {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getAuth } from 'firebase/auth';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { showToast } from './ToastNotification';
 
 const StripeConnectIntegration = ({ 
   currentUser, 
@@ -91,7 +92,9 @@ const StripeConnectIntegration = ({
       setConnectAccount(null);
       setAccountStatus(null);
       setStripeBalance({ available: 0, pending: 0 });
-      setError('Your Stripe account was removed. You can create a new one below.');
+      const errorMsg = 'Your Stripe account was removed. You can create a new one below.';
+      setError(errorMsg);
+      showToast('Your Stripe account was removed from the system. Please create a new account.', 'warning', 6000);
       
       console.log('✅ Cleared deleted account data');
     } catch (error) {
@@ -186,12 +189,19 @@ const StripeConnectIntegration = ({
         onAccountCreated(createData.accountId);
       }
 
-      // Redirect to Stripe onboarding
-      window.location.href = linkData.url;
+      // Show success message
+      showToast('Stripe Connect account created successfully! Redirecting to complete setup...', 'success', 4000);
+
+      // Redirect to Stripe onboarding after a brief delay
+      setTimeout(() => {
+        window.location.href = linkData.url;
+      }, 1500);
 
     } catch (err) {
       console.error('Error creating Connect account:', err);
-      setError(err.message || 'Failed to create account');
+      const errorMsg = err.message || 'Failed to create Stripe Connect account';
+      setError(errorMsg);
+      showToast(`Stripe account creation failed: ${errorMsg}`, 'error');
     } finally {
       setCreating(false);
     }
