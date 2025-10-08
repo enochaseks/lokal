@@ -10,7 +10,7 @@ import { checkAndSyncEmailVerification } from '../utils/emailVerification';
 function LoginPage() {
   // SEO optimization for login page
   useEffect(() => {
-    document.title = "Login - Access Your Lokal Shops Account | African, Caribbean & Black Business Directory";
+    document.title = "Lokal - Login";
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {

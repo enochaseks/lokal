@@ -57,7 +57,7 @@ function FeedPage() {
 
   // SEO optimization for Feed Page
   useEffect(() => {
-    document.title = "Community Feed - African, Caribbean & Black Business Updates | Lokal Shops";
+    document.title = "Lokal - Feed";
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {

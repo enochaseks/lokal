@@ -1434,7 +1434,7 @@ function ExplorePage() {
     const categoryParam = new URLSearchParams(window.location.search).get('category');
     const locationParam = new URLSearchParams(window.location.search).get('location');
     
-    let pageTitle = "Explore African, Caribbean & Black Businesses";
+    let pageTitle = "Explore";
     let pageDescription = "Discover authentic African, Caribbean & Black-owned businesses in your area. Find food stores, beauty supplies, wholesale goods, and specialty services.";
     let pageKeywords = "explore businesses, african businesses, caribbean businesses, black owned businesses, find local businesses";
     
@@ -1451,7 +1451,7 @@ function ExplorePage() {
       pageKeywords = `${pageKeywords}, ${locationParam} businesses`;
     }
     
-    document.title = `${pageTitle} | Lokal Shops`;
+    document.title = `Lokal`;
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {

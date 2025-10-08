@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
-import CountryAwareRegistration from '../components/CountryAwareRegistration';
 import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +11,7 @@ import { addOrUpdateContact } from '../utils/hubspotClient';
 function RegisterPage() {
   // SEO optimization for register page
   useEffect(() => {
-    document.title = "Sign Up - Join Lokal Shops | African, Caribbean & Black Business Directory";
+    document.title = "Lokal - Sign Up";
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
@@ -81,8 +80,7 @@ function RegisterPage() {
   const [marketingConsent, setMarketingConsent] = useState(false);
   const navigate = useNavigate();
 
-  // Country detection state
-  const [countryInfo, setCountryInfo] = useState(null);
+
 
   // Password validation function
   const validatePassword = (password) => {
@@ -107,11 +105,7 @@ function RegisterPage() {
     validatePassword(newPassword);
   };
 
-  // Handle country detection callback
-  const handleCountryDetected = (info) => {
-    setCountryInfo(info);
-    console.log('🌍 Country info received in RegisterPage:', info);
-  };
+
 
   // No auth state listener needed on registration page
   // Users will manually verify their email and navigate away
@@ -168,13 +162,7 @@ function RegisterPage() {
         marketingConsent: marketingConsent,
         emailVerified: false,
         uid: user.uid,
-        // Store country and payment provider info for later use
-        registrationCountryInfo: countryInfo || {
-          country: 'unknown',
-          provider: { provider: 'unknown', supported: false },
-          supportsPayments: false,
-          detectedAt: new Date().toISOString()
-        }
+
       };
 
       await setDoc(doc(db, 'users', user.uid), userDoc);
@@ -239,10 +227,6 @@ function RegisterPage() {
     <div style={{ background: '#F9F5EE', minHeight: '100vh' }}>
       <Navbar />
       <div style={{ maxWidth: 400, margin: '2rem auto', background: '#fff', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 8px #B8B8B8' }}>
-        <CountryAwareRegistration 
-          onCountryDetected={handleCountryDetected}
-          showPaymentWarning={true}
-        >
           <h2 style={{ color: '#D92D20', marginBottom: '1rem' }}>Register</h2>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1rem' }}>
@@ -665,7 +649,6 @@ function RegisterPage() {
           <span style={{ color: '#1C1C1C' }}>Already have an account? </span>
           <a href="/login" style={{ color: '#007B7F', fontWeight: 'bold', textDecoration: 'none' }}>Login</a>
         </div>
-        </CountryAwareRegistration>
       </div>
     </div>
   );
