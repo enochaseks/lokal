@@ -343,6 +343,50 @@ function StoreProfilePage() {
     return () => unsubscribe();
   }, []);
 
+  // Add a helper to check if the store can go live - comprehensive requirements
+  const canGoLive =
+    profile &&
+    profile.backgroundImg &&
+    profile.storeName &&
+    profile.storeLocation &&
+    profile.origin &&
+    profile.deliveryType &&
+    profile.paymentType &&
+    (profile.openingTime || profile.openingTimes) &&
+    (profile.closingTime || profile.closingTimes) &&
+    profile.sellsPerishableFood &&
+    storeItems.length > 0;
+
+  // Monitor requirements and automatically take store offline if requirements become incomplete
+  useEffect(() => {
+    const checkRequirementsAndUpdate = async () => {
+      if (!profile || !currentUser) return;
+      
+      // Check if store is currently live but requirements are no longer met
+      if (profile.live && !canGoLive) {
+        console.log('Store requirements no longer met. Taking store offline automatically.');
+        try {
+          const storeRef = doc(db, 'stores', currentUser.uid);
+          await updateDoc(storeRef, { 
+            live: false,
+            autoOfflineReason: 'requirements_incomplete',
+            autoOfflineTimestamp: new Date().toISOString()
+          });
+          
+          // Update local state
+          setProfile(prev => ({ ...prev, live: false }));
+          
+          // Optional: Show notification to user
+          console.log('Store automatically taken offline due to incomplete requirements');
+        } catch (error) {
+          console.error('Error taking store offline:', error);
+        }
+      }
+    };
+
+    checkRequirementsAndUpdate();
+  }, [profile, canGoLive, currentUser, storeItems.length]);
+
   // Handle query parameters for direct item editing and adding
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
@@ -945,16 +989,6 @@ function StoreProfilePage() {
     return <img src={URL.createObjectURL(file)} alt="" style={{ maxWidth: 180, maxHeight: 180, borderRadius: 12, marginBottom: 16, objectFit: 'cover' }} />;
   };
 
-  // Add a helper to check if the store can go live
-  const canGoLive =
-    profile &&
-    profile.backgroundImg &&
-    profile.storeName &&
-    profile.storeLocation &&
-    profile.origin &&
-    profile.deliveryType &&
-    storeItems.length > 0;
-
   const handleGoLive = async () => {
     if (!canGoLive) {
       console.log('Cannot go live. Missing requirements:', {
@@ -963,6 +997,10 @@ function StoreProfilePage() {
         storeLocation: !!profile?.storeLocation,
         origin: !!profile?.origin,
         deliveryType: !!profile?.deliveryType,
+        paymentType: !!profile?.paymentType,
+        openingTime: !!(profile?.openingTime || profile?.openingTimes),
+        closingTime: !!(profile?.closingTime || profile?.closingTimes),
+        sellsPerishableFood: !!profile?.sellsPerishableFood,
         hasItems: storeItems.length > 0
       });
       return;
@@ -1395,9 +1433,9 @@ function StoreProfilePage() {
                 position: 'absolute', 
                 right: 24, 
                 top: 24, 
-                background: canGoLive ? 'rgba(0, 123, 127, 0.9)' : '#ccc', 
-                color: '#fff', 
-                border: 'none', 
+                background: canGoLive ? 'rgba(0, 123, 127, 0.9)' : 'rgba(156, 163, 175, 0.8)', 
+                color: canGoLive ? '#fff' : 'rgba(255, 255, 255, 0.7)', 
+                border: canGoLive ? 'none' : '1px solid rgba(156, 163, 175, 0.5)', 
                 borderRadius: 12, 
                 padding: '0.7rem 1.4rem', 
                 fontWeight: 600, 
@@ -1407,15 +1445,19 @@ function StoreProfilePage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: canGoLive ? '0 4px 12px rgba(0, 123, 127, 0.25)' : 'none',
-                transition: 'all 0.2s ease'
+                boxShadow: canGoLive ? '0 4px 12px rgba(0, 123, 127, 0.25)' : '0 2px 6px rgba(0, 0, 0, 0.1)',
+                transition: 'all 0.2s ease',
+                opacity: canGoLive ? 1 : 0.6
               }}
-              onClick={handleGoLive}
+              onClick={canGoLive ? handleGoLive : undefined}
               onMouseOver={(e) => {
                 if (canGoLive) {
                   e.currentTarget.style.background = 'rgba(0, 123, 127, 1)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 123, 127, 0.3)';
+                } else {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)';
+                  e.currentTarget.style.color = '#fff';
                 }
               }}
               onMouseOut={(e) => {
@@ -1423,13 +1465,18 @@ function StoreProfilePage() {
                   e.currentTarget.style.background = 'rgba(0, 123, 127, 0.9)';
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 123, 127, 0.25)';
+                } else {
+                  e.currentTarget.style.background = 'rgba(156, 163, 175, 0.8)';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
                 }
               }}
               disabled={!canGoLive}
-              title={canGoLive ? 'Make your store available to customers' : 'Add all required info and at least one item to go live'}
+              title={canGoLive ? 'Make your store available to customers' : 'Complete all requirements in the checklist below. Store will automatically go offline if any requirement is removed.'}
             >
-              <span role="img" aria-label="offline" style={{ fontSize: '1rem' }}>⚫</span>
-              Go Live
+              <span role="img" aria-label={canGoLive ? "ready" : "blocked"} style={{ fontSize: '1rem' }}>
+                {canGoLive ? '🚀' : '🔒'}
+              </span>
+              {canGoLive ? 'Go Live' : 'Requirements Missing'}
             </button>
           )}
         </div>
@@ -1860,6 +1907,87 @@ function StoreProfilePage() {
               <span role="img" aria-label="add" style={{ fontSize: '1.1rem' }}>➕</span> Add Items
             </button>
           </div>
+          
+          {/* Store Requirements Checklist - Only show when store is not live or has incomplete requirements */}
+          {(!profile?.live || !canGoLive) && (
+          <div style={{ 
+            marginTop: '24px',
+            padding: '16px',
+            background: canGoLive ? (profile?.live ? '#f0fdf4' : '#f0f9ff') : '#fef3f2',
+            border: `2px solid ${canGoLive ? (profile?.live ? '#bbf7d0' : '#bfdbfe') : '#fecaca'}`,
+            borderRadius: '12px',
+            fontSize: '0.9rem',
+            width: '100%'
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: '12px', color: canGoLive ? (profile?.live ? '#15803d' : '#1e40af') : '#dc2626', fontSize: '1rem' }}>
+              {profile?.live 
+                ? '🟢 Your Store is Live and Visible to Customers!' 
+                : canGoLive 
+                  ? '✅ Ready to Go Live!' 
+                  : '⚠️ Complete these requirements to make your store live:'
+              }
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+              <div style={{ color: profile?.backgroundImg ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.backgroundImg ? '✅' : '❌'} <strong>Background Image</strong>
+              </div>
+              <div style={{ color: profile?.storeName ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.storeName ? '✅' : '❌'} <strong>Store Name</strong>
+              </div>
+              <div style={{ color: profile?.storeLocation ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.storeLocation ? '✅' : '❌'} <strong>Store Location</strong>
+              </div>
+              <div style={{ color: profile?.origin ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.origin ? '✅' : '❌'} <strong>Origin</strong>
+              </div>
+              <div style={{ color: profile?.deliveryType ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.deliveryType ? '✅' : '❌'} <strong>Delivery Type</strong>
+              </div>
+              <div style={{ color: profile?.paymentType ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.paymentType ? '✅' : '❌'} <strong>Payment Method</strong>
+              </div>
+              <div style={{ color: (profile?.openingTime || profile?.openingTimes) ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {(profile?.openingTime || profile?.openingTimes) ? '✅' : '❌'} <strong>Opening Hours</strong>
+              </div>
+              <div style={{ color: (profile?.closingTime || profile?.closingTimes) ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {(profile?.closingTime || profile?.closingTimes) ? '✅' : '❌'} <strong>Closing Hours</strong>
+              </div>
+              <div style={{ color: profile?.sellsPerishableFood ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {profile?.sellsPerishableFood ? '✅' : '❌'} <strong>Food Safety Info</strong>
+              </div>
+              <div style={{ color: storeItems.length > 0 ? '#10b981' : '#ef4444', padding: '4px 0' }}>
+                {storeItems.length > 0 ? '✅' : '❌'} <strong>At least 1 item</strong> ({storeItems.length})
+              </div>
+            </div>
+            {!profile?.live && !canGoLive && (
+              <div style={{ 
+                marginTop: '12px', 
+                padding: '12px', 
+                background: '#fff3cd', 
+                borderRadius: '8px', 
+                fontSize: '0.85rem', 
+                color: '#856404',
+                border: '1px solid #fdd835'
+              }}>
+                💡 <strong>Dynamic Requirements:</strong> Complete all requirements above to enable the "Go Live" button. If you remove any requirement later, your store will automatically go offline until it's fixed!
+              </div>
+            )}
+            {canGoLive && !profile?.live && (
+              <div style={{ 
+                marginTop: '12px', 
+                padding: '12px', 
+                background: '#e0f2fe', 
+                borderRadius: '8px', 
+                fontSize: '0.85rem', 
+                color: '#0277bd',
+                border: '1px solid #81d4fa'
+              }}>
+                🚀 <strong>Ready!</strong> All requirements completed. Click "Go Live" to make your store visible to customers!
+              </div>
+            )}
+          </div>
+          )}
+          
           {/* Store items list - modernized */}
           {storeItems.length > 0 && (
             <div style={{ width: '100%', marginTop: 28 }}>
@@ -1893,42 +2021,6 @@ function StoreProfilePage() {
                   {storeItems.length} {storeItems.length === 1 ? 'Item' : 'Items'}
                 </div>
               </div>
-              
-              {/* Go Live Status Debug */}
-              {!profile?.live && (
-                <div style={{ 
-                  marginTop: '16px',
-                  padding: '12px',
-                  background: canGoLive ? '#f0f9ff' : '#fef3f2',
-                  border: `1px solid ${canGoLive ? '#bfdbfe' : '#fecaca'}`,
-                  borderRadius: '8px',
-                  fontSize: '0.85rem'
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: '8px', color: canGoLive ? '#1e40af' : '#dc2626' }}>
-                    {canGoLive ? '✅ Ready to Go Live!' : '⚠️ Requirements for Going Live:'}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '4px' }}>
-                    <div style={{ color: profile?.backgroundImg ? '#10b981' : '#ef4444' }}>
-                      {profile?.backgroundImg ? '✅' : '❌'} Background Image
-                    </div>
-                    <div style={{ color: profile?.storeName ? '#10b981' : '#ef4444' }}>
-                      {profile?.storeName ? '✅' : '❌'} Store Name
-                    </div>
-                    <div style={{ color: profile?.storeLocation ? '#10b981' : '#ef4444' }}>
-                      {profile?.storeLocation ? '✅' : '❌'} Store Location
-                    </div>
-                    <div style={{ color: profile?.origin ? '#10b981' : '#ef4444' }}>
-                      {profile?.origin ? '✅' : '❌'} Origin
-                    </div>
-                    <div style={{ color: profile?.deliveryType ? '#10b981' : '#ef4444' }}>
-                      {profile?.deliveryType ? '✅' : '❌'} Delivery Type
-                    </div>
-                    <div style={{ color: storeItems.length > 0 ? '#10b981' : '#ef4444' }}>
-                      {storeItems.length > 0 ? '✅' : '❌'} At least 1 item ({storeItems.length})
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div style={{ 
                 display: 'grid', 
@@ -2554,13 +2646,14 @@ function StoreProfilePage() {
                   </div>
                 )}
                 
-                {/* Meat/Chicken/Perishable Food Section */}
+                {/* Food Sales Section */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Do you sell meat, chicken, fish, or other food items that could easily spoil at your store?</label>
                   <select value={editSellsPerishableFood} onChange={e => setEditSellsPerishableFood(e.target.value)} style={{ width: '100%', padding: '0.5rem', border: '1px solid #B8B8B8', borderRadius: 4 }} required>
                     <option value="">Select</option>
                     <option value="yes">Yes, I sell perishable food items</option>
                     <option value="no">No, I only sell non-perishable food items</option>
+                    <option value="none">No, I don't sell any food items (beauty, hair, services, etc.)</option>
                   </select>
                 </div>
                 {editSellsPerishableFood === 'yes' && (

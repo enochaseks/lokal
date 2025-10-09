@@ -86,7 +86,6 @@ function CreateShopPage() {
   
   // Stripe Connect states
   const [stripeConnectAccountId, setStripeConnectAccountId] = useState(null);
-  const [stripeConnectRequired, setStripeConnectRequired] = useState(true);
   const [showStripeConnectStep, setShowStripeConnectStep] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   
@@ -111,22 +110,19 @@ function CreateShopPage() {
         
         // Check if this country supports automatic payment processing
         const supportsPayments = provider.provider !== 'none';
-        const requiresStripe = provider.provider === 'stripe' && provider.supported;
         
         setCountrySupportsStripe(supportsPayments);
-        setStripeConnectRequired(requiresStripe);
         
         console.log('🌍 Country detection for CreateShop:', {
           country,
           provider: provider.provider,
           supportsPayments,
-          requiresStripe
+          stripeOptional: true
         });
       } catch (error) {
         console.error('Error detecting country:', error);
-        // Default to requiring Stripe for safety
+        // Default to supporting Stripe but not requiring it
         setCountrySupportsStripe(true);
-        setStripeConnectRequired(true);
       }
     };
 
@@ -153,15 +149,19 @@ function CreateShopPage() {
       return;
     }
 
-    // Check payment account requirements based on country support
-    if (stripeConnectRequired && !stripeConnectAccountId) {
-      alert('⚠️ Payment Account Required: You must set up your Stripe Connect account to create a shop. This is how you will receive real money directly from customers into your bank account.');
-      setShowStripeConnectStep(true);
-      setLoading(false);
-      return;
+    // Stripe Connect is now optional - warn users about limitations if they skip it
+    if (countrySupportsStripe && !stripeConnectAccountId) {
+      const confirmProceed = window.confirm(
+        `💳 Payment Account Not Set Up\n\nYou can create your shop without setting up automatic payments, but:\n\n✅ You can showcase your products and connect with customers\n✅ Customers can browse and contact you\n⚠️ You'll need to handle payments manually (cash, bank transfer, etc.)\n⚠️ No automatic payment processing or instant withdrawals\n\n💡 You can always set up automatic payments later in your store settings.\n\nWould you like to continue creating your shop without automatic payments?`
+      );
+      
+      if (!confirmProceed) {
+        setLoading(false);
+        return;
+      }
     }
 
-    // For unsupported countries, warn about manual payment handling
+    // For unsupported countries, inform about manual payment handling (no change needed)
     if (!countrySupportsStripe && !stripeConnectAccountId) {
       const confirmProceed = window.confirm(
         `🌍 Manual Payment Setup Required\n\nWe detected you're in a region where automatic payment processing isn't available yet. You can still create your shop, but:\n\n✅ Customers can browse and contact you\n✅ You can showcase your products\n⚠️ Payments will be handled manually through our support team\n\nWould you like to continue creating your shop?`
@@ -340,7 +340,8 @@ function CreateShopPage() {
         openingTime: sellerData.openingTime || '',
         closingTime: sellerData.closingTime || '',
         live: false, // Mark new stores as live by default
-        stripeConnectAccountId: stripeConnectAccountId, // Required for receiving payments (if available)
+        stripeConnectAccountId: stripeConnectAccountId || null, // Optional for receiving automatic payments
+        hasAutomaticPayments: !!stripeConnectAccountId, // Track if automatic payments are enabled
         // Payment provider information for country-specific handling
         paymentProviderInfo: {
           userCountry: userCountry,
@@ -350,7 +351,8 @@ function CreateShopPage() {
           canReceivePayments: paymentProvider?.canReceivePayments || false,
           hasConnectAccounts: paymentProvider?.hasConnectAccounts || false,
           region: paymentProvider?.region || 'Unknown',
-          requiresManualProcessing: !countrySupportsStripe
+          requiresManualProcessing: !countrySupportsStripe || !stripeConnectAccountId,
+          paymentSetupOptional: true // Flag to indicate payment setup was optional
         },
         // Add any other fields you want to persist for settings
       };
@@ -558,29 +560,29 @@ function CreateShopPage() {
             </div>
           )}
 
-          {/* Payment Setup Section - Dynamic based on country support */}
+          {/* Payment Setup Section - Optional Stripe Connect */}
           <div style={{ 
             width: '100%', 
             margin: '2rem 0',
             padding: '1.5rem',
-            background: stripeConnectAccountId ? '#f0f9ff' : (!countrySupportsStripe ? '#fef3c7' : '#fff3cd'),
-            border: stripeConnectAccountId ? '2px solid #0ea5e9' : (!countrySupportsStripe ? '2px solid #d97706' : '2px solid #ffc107'),
+            background: stripeConnectAccountId ? '#f0f9ff' : (!countrySupportsStripe ? '#fef3c7' : '#f8f9fa'),
+            border: stripeConnectAccountId ? '2px solid #0ea5e9' : (!countrySupportsStripe ? '2px solid #d97706' : '2px solid #6c757d'),
             borderRadius: '12px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
               <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>
-                {stripeConnectAccountId ? '✅' : (!countrySupportsStripe ? '🌍' : '🔗')}
+                {stripeConnectAccountId ? '✅' : (!countrySupportsStripe ? '🌍' : '�')}
               </span>
-              <h3 style={{ margin: 0, color: stripeConnectAccountId ? '#0ea5e9' : (!countrySupportsStripe ? '#d97706' : '#856404') }}>
-                {stripeConnectAccountId ? 'Payment Account Connected!' : 
-                 (!countrySupportsStripe ? 'Manual Payment Region Detected' : 'Payment Account Setup Required')}
+              <h3 style={{ margin: 0, color: stripeConnectAccountId ? '#0ea5e9' : (!countrySupportsStripe ? '#d97706' : '#6c757d') }}>
+                {stripeConnectAccountId ? 'Automatic Payments Connected!' : 
+                 (!countrySupportsStripe ? 'Manual Payment Region Detected' : 'Optional: Set Up Automatic Payments')}
               </h3>
             </div>
             
             {stripeConnectAccountId ? (
               <div>
                 <p style={{ margin: '0 0 10px 0', color: '#0ea5e9' }}>
-                  ✅ Your Stripe account is connected! Customers will pay directly into your account, and you can withdraw to your bank instantly.
+                  ✅ Your Stripe account is connected! Customers can pay with cards and you receive money instantly in your bank account.
                 </p>
                 <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
                   Account ID: {stripeConnectAccountId.substring(0, 20)}...
@@ -596,8 +598,8 @@ function CreateShopPage() {
                   <ul style={{ margin: 0, paddingLeft: '20px', color: '#666' }}>
                     <li>✅ You can create and showcase your products</li>
                     <li>✅ Customers can browse and contact you</li>
-                    <li>⚠️ Payments will be processed manually through our support team</li>
-                    <li>📧 You'll be contacted to set up payment collection when orders come in</li>
+                    <li>⚠️ Payments will be processed manually (cash, bank transfer, etc.)</li>
+                    <li>📧 You can coordinate payments directly with customers</li>
                   </ul>
                 </div>
                 <p style={{ margin: 0, fontSize: '0.9rem', color: '#d97706' }}>
@@ -606,21 +608,25 @@ function CreateShopPage() {
               </div>
             ) : (
               <div>
-                <p style={{ margin: '0 0 15px 0', color: '#856404', fontWeight: '500' }}>
-                  ⚠️ Set up your payment account to receive money directly from customers
+                <p style={{ margin: '0 0 15px 0', color: '#6c757d', fontWeight: '500' }}>
+                  💳 Optional: Set up automatic payments for a better customer experience
                 </p>
                 <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Why this is required:</h4>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Benefits of automatic payments:</h4>
                   <ul style={{ margin: 0, paddingLeft: '20px', color: '#666' }}>
-                    <li>💰 <strong>Get real money instantly</strong> - No waiting for platform payouts</li>
-                    <li>🏦 <strong>Withdraw to your bank</strong> - Direct access to your earnings</li>
-                    <li>📊 <strong>Professional reporting</strong> - Tax documents and analytics</li>
-                    <li>🛡️ <strong>Fraud protection</strong> - Enterprise-grade security</li>
+                    <li>💰 <strong>Instant payments</strong> - Customers pay with card/Google Pay</li>
+                    <li>🏦 <strong>Direct to your bank</strong> - Money goes straight to your account</li>
+                    <li>📊 <strong>Professional experience</strong> - Automated orders and receipts</li>
+                    <li>🛡️ <strong>Fraud protection</strong> - Secure payment processing</li>
                   </ul>
                 </div>
                 
-                {showStripeConnectStep && countrySupportsStripe ? (
-                  <div style={{ background: 'white', padding: '15px', borderRadius: '8px' }}>
+                <div style={{ background: '#e3f2fd', padding: '12px', borderRadius: '8px', marginBottom: '15px', fontSize: '0.9rem' }}>
+                  <strong>💡 No payment setup?</strong> You can still create your shop! Handle payments manually through cash, bank transfers, or other methods. You can always add automatic payments later in your store settings.
+                </div>
+                
+                {showStripeConnectStep ? (
+                  <div style={{ background: 'white', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
                     <PaymentProviderSelector
                       currentUser={currentUser}
                       onAccountCreated={handleStripeConnectAccountCreated}
@@ -628,7 +634,7 @@ function CreateShopPage() {
                       showAccountCreation={true}
                     />
                   </div>
-                ) : countrySupportsStripe ? (
+                ) : (
                   <button
                     type="button"
                     onClick={() => setShowStripeConnectStep(true)}
@@ -641,23 +647,17 @@ function CreateShopPage() {
                       borderRadius: '8px',
                       fontWeight: 'bold',
                       fontSize: '1rem',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      marginBottom: '10px'
                     }}
                   >
-                    🚀 Set Up Payment Account
+                    🚀 Set Up Automatic Payments (Optional)
                   </button>
-                ) : (
-                  <div style={{ 
-                    background: '#f59e0b', 
-                    color: 'white', 
-                    padding: '12px', 
-                    borderRadius: '8px', 
-                    textAlign: 'center',
-                    fontWeight: 'bold'
-                  }}>
-                    🌍 Manual Payment Region - No Setup Required
-                  </div>
                 )}
+                
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#888', textAlign: 'center' }}>
+                  You can skip this step and create your shop without automatic payments
+                </p>
               </div>
             )}
           </div>
@@ -666,7 +666,7 @@ function CreateShopPage() {
             type="submit" 
             style={{ 
               width: '100%', 
-              background: (stripeConnectAccountId || !countrySupportsStripe) ? '#D92D20' : '#666', 
+              background: loading ? '#666' : '#D92D20', 
               color: '#fff', 
               padding: '1rem', 
               border: 'none', 
@@ -676,13 +676,12 @@ function CreateShopPage() {
               letterSpacing: '0.5px', 
               marginTop: '0.5rem', 
               boxShadow: '0 2px 8px #B8B8B8', 
-              transition: 'background 0.2s' 
+              transition: 'background 0.2s',
+              cursor: loading ? 'not-allowed' : 'pointer'
             }} 
-            disabled={loading || (stripeConnectRequired && !stripeConnectAccountId)}
+            disabled={loading}
           >
-            {loading ? 'Creating...' : 
-             (stripeConnectRequired && !stripeConnectAccountId) ? 'Complete Payment Setup First' : 
-             'Create Shop'}
+            {loading ? 'Creating Shop...' : 'Create Shop'}
           </button>
         </form>
       </div>

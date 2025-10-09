@@ -230,6 +230,22 @@ function MessagesPage() {
     manualTransferOnly: false // false = accept all payments, true = manual transfer only
   });
 
+  // Dynamic fee settings that can be updated based on store configuration
+  const [useStoreFeeSettings, setUseStoreFeeSettings] = useState({
+    deliveryEnabled: false,
+    deliveryFee: 0,
+    freeDeliveryThreshold: 0,
+    serviceFeeEnabled: false,
+    serviceFeeType: 'percentage',
+    serviceFeeRate: 2.5,
+    serviceFeeAmount: 0,
+    serviceFeeMax: 0,
+    refundsEnabled: true,
+    cardPaymentsEnabled: true,
+    googlePayEnabled: true,
+    manualTransferOnly: false
+  });
+
   // Delivery states
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -268,6 +284,9 @@ function MessagesPage() {
   
   // Refund complaint states
   const [showComplaintModal, setShowComplaintModal] = useState(false);
+  
+  // Stripe Connect setup modal
+  const [showStripeConnectModal, setShowStripeConnectModal] = useState(false);
   
   // Orders marked as ready for collection
   const [ordersMarkedReady, setOrdersMarkedReady] = useState([]);
@@ -787,10 +806,10 @@ function MessagesPage() {
   // Payment methods by region/currency
   const getPaymentMethods = (currency, storeFeeSettings = null) => {
     // Check if this store has specific payment method restrictions
-    const useStoreFeeSettings = storeFeeSettings || feeSettings;
+    const effectiveSettings = storeFeeSettings || useStoreFeeSettings;
     
     // If manual transfer only is enabled, return only manual transfer options
-    if (useStoreFeeSettings.manualTransferOnly) {
+    if (effectiveSettings.manualTransferOnly) {
       const manualOnlyMethods = [];
       
       // Add appropriate manual transfer method based on currency
@@ -824,7 +843,7 @@ function MessagesPage() {
     const baseMethods = [];
     
     // Add card payments if enabled
-    if (useStoreFeeSettings.cardPaymentsEnabled !== false) {
+    if (effectiveSettings.cardPaymentsEnabled !== false) {
       baseMethods.push({ id: 'card', name: 'Credit/Debit Card', icon: '💳', description: 'Visa, Mastercard, American Express' });
     }
 
@@ -833,21 +852,21 @@ function MessagesPage() {
     switch (currency) {
       case 'USD':
         // Add Google Pay if enabled
-        if (useStoreFeeSettings.googlePayEnabled !== false) {
+        if (effectiveSettings.googlePayEnabled !== false) {
           additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
         }
         additionalMethods.push({ id: 'venmo', name: 'Venmo', icon: '📱', description: 'Split with friends' });
         break;
       case 'GBP':
         // Add Google Pay if enabled
-        if (useStoreFeeSettings.googlePayEnabled !== false) {
+        if (effectiveSettings.googlePayEnabled !== false) {
           additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
         }
         additionalMethods.push({ id: 'bank_transfer', name: 'Bank Transfer', icon: '🏦', description: 'Direct bank transfer' });
         break;
       case 'EUR':
         // Add Google Pay if enabled
-        if (useStoreFeeSettings.googlePayEnabled !== false) {
+        if (effectiveSettings.googlePayEnabled !== false) {
           additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
         }
         additionalMethods.push({ id: 'sepa', name: 'SEPA Transfer', icon: '🏦', description: 'European bank transfer' });
@@ -899,7 +918,7 @@ function MessagesPage() {
         break;
       case 'JPY':
         // Add Google Pay if enabled
-        if (useStoreFeeSettings.googlePayEnabled !== false) {
+        if (effectiveSettings.googlePayEnabled !== false) {
           additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
         }
         additionalMethods.push(
@@ -909,7 +928,7 @@ function MessagesPage() {
         break;
       default:
         // Add Google Pay if enabled
-        if (useStoreFeeSettings.googlePayEnabled !== false) {
+        if (effectiveSettings.googlePayEnabled !== false) {
           additionalMethods.push({ id: 'google_pay', name: 'Google Pay', icon: '🌐', description: 'Pay with Google' });
         }
         break;
@@ -1079,6 +1098,11 @@ function MessagesPage() {
     }));
   };
 
+  // Sync useStoreFeeSettings with feeSettings changes
+  useEffect(() => {
+    setUseStoreFeeSettings(feeSettings);
+  }, [feeSettings]);
+
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1087,7 +1111,31 @@ function MessagesPage() {
         try {
           const storeDocRef = doc(db, 'stores', user.uid);
           const storeDocSnap = await getDoc(storeDocRef);
-          setIsSeller(storeDocSnap.exists());
+          const isSellerStore = storeDocSnap.exists();
+          setIsSeller(isSellerStore);
+          
+          // Auto-configure payment settings based on Stripe Connect status
+          if (isSellerStore) {
+            const storeData = storeDocSnap.data();
+            const hasStripeConnect = !!(storeData.stripeConnectAccountId || storeData.hasAutomaticPayments);
+            
+            // Automatically set manual transfer only if no Stripe Connect
+            setFeeSettings(prevSettings => ({
+              ...prevSettings,
+              manualTransferOnly: !hasStripeConnect,
+              // If no Stripe Connect, also disable card and Google Pay
+              cardPaymentsEnabled: hasStripeConnect,
+              googlePayEnabled: hasStripeConnect
+            }));
+            
+            console.log('💳 Payment settings auto-configured:', {
+              hasStripeConnect,
+              manualTransferOnly: !hasStripeConnect,
+              stripeConnectAccountId: storeData.stripeConnectAccountId,
+              hasAutomaticPayments: storeData.hasAutomaticPayments,
+              storeDataKeys: Object.keys(storeData)
+            });
+          }
           
           // Check for persisted order state
           const orderStateDocRef = doc(db, 'orderStates', user.uid);
@@ -1569,7 +1617,9 @@ function MessagesPage() {
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         const userData = userDoc.data();
         
-        if (userData?.stripeConnectAccountId) {
+        const hasStripeConnect = !!userData?.stripeConnectAccountId;
+        
+        if (hasStripeConnect) {
           setSellerConnectAccount({
             accountId: userData.stripeConnectAccountId,
             email: userData.email || currentUser.email
@@ -1578,6 +1628,22 @@ function MessagesPage() {
           // Sync Stripe balance with wallet
           await syncStripeBalance(userData.stripeConnectAccountId);
         }
+
+        // Update payment settings based on current Stripe Connect status
+        setFeeSettings(prevSettings => ({
+          ...prevSettings,
+          manualTransferOnly: !hasStripeConnect,
+          // If no Stripe Connect, also disable card and Google Pay
+          cardPaymentsEnabled: hasStripeConnect,
+          googlePayEnabled: hasStripeConnect
+        }));
+
+        console.log('💳 Payment settings updated based on Stripe Connect status:', {
+          hasStripeConnect,
+          manualTransferOnly: !hasStripeConnect,
+          userData: userData ? Object.keys(userData) : 'no userData'
+        });
+        
       } catch (error) {
         console.error('Error checking Connect account:', error);
       }
@@ -13147,6 +13213,18 @@ I hereby confirm this is a formal report and all information provided is accurat
                       checked={feeSettings.manualTransferOnly}
                       onChange={(e) => {
                         const isManualOnly = e.target.checked;
+                        
+                        // If user is trying to uncheck manual transfer (enable card/Google Pay)
+                        if (!isManualOnly) {
+                          const hasStripeConnect = !!(sellerStoreData?.stripeConnectAccountId || sellerStoreData?.hasAutomaticPayments);
+                          
+                          if (!hasStripeConnect) {
+                            // Prevent unchecking and show Stripe Connect setup prompt
+                            setShowStripeConnectModal(true);
+                            return; // Don't change the checkbox state
+                          }
+                        }
+                        
                         setFeeSettings(prev => ({
                           ...prev,
                           manualTransferOnly: isManualOnly,
@@ -13154,14 +13232,26 @@ I hereby confirm this is a formal report and all information provided is accurat
                           cardPaymentsEnabled: !isManualOnly,
                           googlePayEnabled: !isManualOnly
                         }));
+                        
+                        console.log('💳 Manual transfer setting changed:', {
+                          manualTransferOnly: isManualOnly,
+                          hasStripeConnect: !!(sellerStoreData?.stripeConnectAccountId || sellerStoreData?.hasAutomaticPayments)
+                        });
                       }}
                     />
                     Manual transfer payments only
                   </label>
                   <p className="fee-setting-description">
                     {feeSettings.manualTransferOnly 
-                      ? "⚠️ Only manual bank transfers will be accepted. Card and Google Pay will be disabled." 
-                      : "Customers can pay using cards, Google Pay, or manual transfers."}
+                      ? (
+                        <span>
+                          ⚠️ Only manual bank transfers will be accepted. Card and Google Pay are disabled.
+                          {!(sellerStoreData?.stripeConnectAccountId || sellerStoreData?.hasAutomaticPayments) && (
+                            <><br />💡 <strong>To enable card payments:</strong> Set up Stripe Connect in your Store Profile first.</>
+                          )}
+                        </span>
+                      )
+                      : "✅ Customers can pay using cards, Google Pay, or manual transfers."}
                   </p>
 
                   {!feeSettings.manualTransferOnly && (
@@ -17372,6 +17462,72 @@ I hereby confirm this is a formal report and all information provided is accurat
                     }}
                   >
                     Process Refund
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stripe Connect Setup Modal */}
+      {showStripeConnectModal && (
+        <div className="payment-modal-overlay" onClick={() => setShowStripeConnectModal(false)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-header">
+              <h2>🏦 Stripe Connect Required</h2>
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowStripeConnectModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-content">
+              <div style={{ textAlign: 'center', padding: '1rem' }}>
+                <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>💳</div>
+                <h3 style={{ color: '#333', marginBottom: '1rem' }}>Card Payments Need Stripe Connect</h3>
+                <p style={{ color: '#666', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+                  To accept <strong>card and Google Pay payments</strong>, you need to set up a Stripe Connect account first.
+                  <br /><br />
+                  This allows you to securely receive payments directly to your bank account.
+                </p>
+                
+                <div style={{ 
+                  background: '#f8f9fa', 
+                  border: '1px solid #e9ecef', 
+                  borderRadius: '8px', 
+                  padding: '1rem', 
+                  marginBottom: '1.5rem',
+                  textAlign: 'left'
+                }}>
+                  <h4 style={{ color: '#495057', marginBottom: '0.5rem' }}>📋 Next Steps:</h4>
+                  <ol style={{ color: '#6c757d', paddingLeft: '1.2rem' }}>
+                    <li>Go to your <strong>Store Profile</strong> page</li>
+                    <li>Complete the <strong>Stripe Connect setup</strong></li>
+                    <li>Return here to enable card payments</li>
+                  </ol>
+                </div>
+
+                <div className="modal-actions" style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                  <button 
+                    className="cancel-btn"
+                    onClick={() => setShowStripeConnectModal(false)}
+                    style={{ flex: '1', maxWidth: '120px' }}
+                  >
+                    Maybe Later
+                  </button>
+                  <button 
+                    className="pay-btn"
+                    onClick={() => {
+                      setShowStripeConnectModal(false);
+                      // Navigate to store profile page
+                      window.open('/store-profile', '_blank');
+                    }}
+                    style={{ flex: '1', maxWidth: '150px' }}
+                  >
+                    Set Up Stripe Connect
                   </button>
                 </div>
               </div>
