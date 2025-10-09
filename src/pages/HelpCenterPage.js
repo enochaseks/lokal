@@ -923,7 +923,7 @@ function HelpCenterPage() {
                 <div style={topicStyles.steps.counter}>1</div>
                 <div>
                   <h3 style={{ fontSize: '1.15rem', marginBottom: '8px' }}>Create Your Shop</h3>
-                  <p>When you try to create a shop, you'll be prompted to set up your Stripe Connect account first. This is mandatory - you cannot create a shop without it.</p>
+                  <p>When you try to create a shop, you'll be prompted to set up your Stripe Connect account first. This is optional - you can create a shop without it, however, you can only make manual transfer payments.</p>
                 </div>
               </div>
               
