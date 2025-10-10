@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
+import NotificationPreferences from '../components/NotificationPreferences';
 import { getAuth, onAuthStateChanged, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, collection, addDoc, onSnapshot, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
@@ -1935,7 +1936,7 @@ function SettingsPage() {
     return (
       <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
         <Navbar />
-        <div style={{ maxWidth: 700, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
+        <div style={{ maxWidth: 800, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #B8B8B8', padding: '2.5rem 2rem' }}>
           <button onClick={() => setView('main')} style={{ marginBottom: 18, background: 'none', border: 'none', color: '#007B7F', fontWeight: 600, fontSize: '1.1rem', cursor: 'pointer' }}>{'< Back'}</button>
           <h2 style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18 }}>Communication Preferences</h2>
           
@@ -1943,6 +1944,12 @@ function SettingsPage() {
             <p>Manage how Lokal communicates with you. You can update your preferences at any time.</p>
           </div>
           
+          {/* Email Notifications Section */}
+          <div style={{ marginBottom: '30px' }}>
+            <NotificationPreferences />
+          </div>
+          
+          {/* Marketing Communications Section */}
           <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
             <h3 style={{ fontWeight: 600, fontSize: '1.2rem', marginBottom: 16 }}>Marketing Communications</h3>
             

@@ -35,6 +35,7 @@ exports.helloWorld = onRequest((request, response) => {
 // Import the boost store functions
 const boostStoreFunctions = require('./boost-store-function');
 const stripeReceiptFunctions = require('./stripe-receipt-function');
+const emailNotificationFunctions = require('./email-notification-function');
 
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
@@ -45,3 +46,15 @@ exports.createPaymentIntentWithReceipt = stripeReceiptFunctions.createPaymentInt
 exports.sendStripeReceipt = stripeReceiptFunctions.sendStripeReceipt;
 exports.sendCustomReceipt = stripeReceiptFunctions.sendCustomReceipt;
 exports.handleStripeWebhook = stripeReceiptFunctions.handleStripeWebhook;
+
+// Export email notification HTTP functions
+exports.testEmailNotification = emailNotificationFunctions.testEmailNotification;
+exports.batchSendEmailNotifications = emailNotificationFunctions.batchSendEmailNotifications;
+
+// Message email trigger
+const messageEmailTrigger = require('./message-email-trigger');
+exports.onMessageCreated = messageEmailTrigger.onMessageCreated;
+
+// Test function
+const testEmailFunction = require('./test-email-function');
+exports.testEmailSystem = testEmailFunction.testEmailSystem;

@@ -7,17 +7,26 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "gmail:setup": "node gmail-setup.js setup",
+    "gmail:test": "node gmail-setup.js test-connection",
+    "gmail:send-test": "node gmail-setup.js send-test",
+    "email:test": "node email-management.js test",
+    "email:resend": "node email-management.js resend",
+    "email:stats": "node email-management.js stats",
+    "email:cleanup": "node email-management.js cleanup"
   },
   "engines": {
     "node": "22"
   },
   "main": "index.js",
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.4.0",
+    "nodemailer": "^7.0.9",
     "stripe": "^18.5.0"
   },
   "devDependencies": {
