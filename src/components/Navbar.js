@@ -1428,6 +1428,8 @@ function Navbar() {
                 Help Center
               </a>
 
+
+
               {!user ? (
                 <>
                   <a 
@@ -1609,9 +1611,9 @@ function Navbar() {
                 paddingTop: '1.5rem', 
                 borderTop: '1px solid #E5E7EB' 
               }}>
-                {/* WhatsApp Community */}
+                {/* WhatsApp Community & Support */}
                 <a 
-                  href="https://chat.whatsapp.com/GZlpWSCpjHRAMCBLETlF3G" 
+                  href="https://wa.me/447377834081?text=Hi! I'd like to join the Lokal community and get support." 
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setSidebarOpen(false)}
@@ -1643,7 +1645,7 @@ function Navbar() {
                   }}
                 >
                   <span style={{ fontSize: '1.2rem' }}>💬</span>
-                  Join Community
+                  WhatsApp Community
                 </a>
                 
                 {/* Social Media Icons Row */}

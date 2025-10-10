@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import { db } from '../firebase';
-import { doc, collection, onSnapshot, updateDoc, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { doc, collection, onSnapshot, updateDoc, addDoc, serverTimestamp, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
 import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import Select from 'react-select';
@@ -32,6 +32,8 @@ function StoreReviewsPage() {
   const [categories, setCategories] = useState([]);
   const [selectedStoreId, setSelectedStoreId] = useState('');
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [cleanupInProgress, setCleanupInProgress] = useState(false);
+  const [cleanupStats, setCleanupStats] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,22 +58,65 @@ function StoreReviewsPage() {
   }, []);
 
   useEffect(() => {
-    // Fetch all stores and their reviews
+    // Fetch all stores and their reviews (cleaned up to exclude deleted stores)
     const fetchAllReviews = async () => {
       setLoading(true);
-      const storesSnap = await getDocs(collection(db, 'stores'));
-      const stores = storesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Collect unique categories
-      const uniqueCategories = Array.from(new Set(stores.map(s => s.category).filter(Boolean)));
-      setCategories(uniqueCategories);
-      const reviewsByStore = [];
-      for (const store of stores) {
-        const reviewsSnap = await getDocs(collection(db, 'stores', store.id, 'reviews'));
-        const reviews = reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        reviewsByStore.push({ storeId: store.id, storeName: store.storeName, reviews, category: store.category });
+      try {
+        const storesSnap = await getDocs(collection(db, 'stores'));
+        const stores = storesSnap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(store => {
+            // Only include stores that have essential data and are not marked as deleted
+            return store.storeName && 
+                   store.id && 
+                   !store.deleted && 
+                   !store.isDeleted &&
+                   store.storeName.trim() !== '';
+          });
+        
+        console.log(`Found ${stores.length} active stores out of ${storesSnap.docs.length} total store documents`);
+        
+        // Collect unique categories from active stores only
+        const uniqueCategories = Array.from(new Set(stores.map(s => s.category).filter(Boolean)));
+        setCategories(uniqueCategories);
+        
+        const reviewsByStore = [];
+        for (const store of stores) {
+          try {
+            const reviewsSnap = await getDocs(collection(db, 'stores', store.id, 'reviews'));
+            const reviews = reviewsSnap.docs
+              .map(doc => ({ id: doc.id, ...doc.data() }))
+              .filter(review => {
+                // Filter out invalid reviews
+                return review.text && 
+                       review.rating && 
+                       review.text.trim() !== '';
+              });
+            
+            // Only add stores that have reviews or are active
+            if (reviews.length > 0) {
+              reviewsByStore.push({ 
+                storeId: store.id, 
+                storeName: store.storeName, 
+                reviews, 
+                category: store.category,
+                storeStatus: store.status || 'active'
+              });
+            }
+          } catch (error) {
+            console.warn(`Error fetching reviews for store ${store.id}:`, error);
+            // Continue with other stores even if one fails
+          }
+        }
+        
+        console.log(`Loaded reviews for ${reviewsByStore.length} stores`);
+        setAllReviews(reviewsByStore);
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        setAllReviews([]);
+      } finally {
+        setLoading(false);
       }
-      setAllReviews(reviewsByStore);
-      setLoading(false);
     };
     fetchAllReviews();
   }, []);
@@ -85,6 +130,82 @@ function StoreReviewsPage() {
     const reviewRef = doc(db, 'stores', storeId, 'reviews', reviewId);
     await updateDoc(reviewRef, { reply: replyTexts[`${storeId}_${reviewId}`] });
     setReplyTexts(prev => ({ ...prev, [`${storeId}_${reviewId}`]: '' }));
+  };
+
+  // Cleanup function to remove reviews from deleted stores
+  const cleanupOrphanedReviews = async () => {
+    if (cleanupInProgress) return;
+    
+    setCleanupInProgress(true);
+    setCleanupStats(null);
+    
+    try {
+      console.log('Starting cleanup of orphaned reviews...');
+      
+      // Get all store documents
+      const storesSnap = await getDocs(collection(db, 'stores'));
+      const allStoreIds = storesSnap.docs.map(doc => doc.id);
+      
+      // Get stores that should be considered active
+      const activeStores = storesSnap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(store => 
+          store.storeName && 
+          !store.deleted && 
+          !store.isDeleted &&
+          store.storeName.trim() !== ''
+        );
+      
+      const activeStoreIds = activeStores.map(store => store.id);
+      const deletedStoreIds = allStoreIds.filter(id => !activeStoreIds.includes(id));
+      
+      console.log(`Found ${activeStoreIds.length} active stores and ${deletedStoreIds.length} deleted stores`);
+      
+      let reviewsRemoved = 0;
+      let storesProcessed = 0;
+      
+      // Process deleted stores and remove their reviews
+      for (const storeId of deletedStoreIds) {
+        try {
+          const reviewsSnap = await getDocs(collection(db, 'stores', storeId, 'reviews'));
+          const reviewCount = reviewsSnap.docs.length;
+          
+          if (reviewCount > 0) {
+            console.log(`Removing ${reviewCount} reviews from deleted store: ${storeId}`);
+            
+            // Delete all reviews for this store
+            for (const reviewDoc of reviewsSnap.docs) {
+              await deleteDoc(doc(db, 'stores', storeId, 'reviews', reviewDoc.id));
+              reviewsRemoved++;
+            }
+          }
+          
+          storesProcessed++;
+        } catch (error) {
+          console.warn(`Error cleaning up reviews for store ${storeId}:`, error);
+        }
+      }
+      
+      const stats = {
+        totalStoresChecked: allStoreIds.length,
+        activeStores: activeStoreIds.length,
+        deletedStores: deletedStoreIds.length,
+        storesProcessed,
+        reviewsRemoved
+      };
+      
+      setCleanupStats(stats);
+      console.log('Cleanup completed:', stats);
+      
+      // Refresh the reviews list
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      setCleanupStats({ error: error.message });
+    } finally {
+      setCleanupInProgress(false);
+    }
   };
 
   // Filter stores by search term and category (case-insensitive)
@@ -270,6 +391,61 @@ function StoreReviewsPage() {
                 Please <a href="/login">log in</a> or <a href="/register">register</a> to leave a review.
               </div>
             )}
+
+            {/* Cleanup Section - Only show for admin/development */}
+            {(user && (user.email === 'admin@lokalshops.co.uk' || process.env.NODE_ENV === 'development')) && (
+              <div style={{
+                marginBottom: 24,
+                padding: '16px',
+                backgroundColor: '#fff3e0',
+                border: '1px solid #ff9800',
+                borderRadius: '8px'
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#f57c00', fontSize: '1rem' }}>
+                  🧹 Database Cleanup
+                </h4>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#666' }}>
+                  Remove reviews from stores that have been deleted
+                </p>
+                <button
+                  onClick={cleanupOrphanedReviews}
+                  disabled={cleanupInProgress}
+                  style={{
+                    backgroundColor: cleanupInProgress ? '#ccc' : '#ff9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 16px',
+                    cursor: cleanupInProgress ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    marginRight: '12px'
+                  }}
+                >
+                  {cleanupInProgress ? '🔄 Cleaning...' : '🧹 Clean Reviews'}
+                </button>
+                
+                {cleanupStats && (
+                  <div style={{ 
+                    marginTop: '12px', 
+                    padding: '8px', 
+                    backgroundColor: cleanupStats.error ? '#ffebee' : '#e8f5e8',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem'
+                  }}>
+                    {cleanupStats.error ? (
+                      <span style={{ color: '#c62828' }}>Error: {cleanupStats.error}</span>
+                    ) : (
+                      <span style={{ color: '#2e7d32' }}>
+                        ✅ Cleanup completed: Checked {cleanupStats.totalStoresChecked} stores, 
+                        found {cleanupStats.activeStores} active and {cleanupStats.deletedStores} deleted. 
+                        Removed {cleanupStats.reviewsRemoved} orphaned reviews.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ 
               display: 'flex', 
               gap: 16, 

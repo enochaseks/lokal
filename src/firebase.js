@@ -8,6 +8,12 @@ import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// 
+// ⚠️  IMPORTANT: DO NOT EDIT OR CHANGE THESE CONFIGURATION VALUES! ⚠️
+// These are the correct production Firebase settings for the lokal-b4b28 project
+// Changing these values will break authentication, database, and email verification
+// If you need to modify, verify with the original Firebase console settings first
+//
 const firebaseConfig = {
   apiKey: "AIzaSyAGEHLV7k8nAVaoqDmdbidi4j9Wm-zwOr8",
   authDomain: "lokal-b4b28.firebaseapp.com",
