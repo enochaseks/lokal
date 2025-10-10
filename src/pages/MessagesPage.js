@@ -2169,6 +2169,7 @@ function MessagesPage() {
         senderEmail: currentUser.email,
         receiverId: selectedConversation.otherUserId,
         receiverName: selectedConversation.otherUserName,
+        receiverEmail: selectedConversation.otherUserEmail,
         message: newMessage.trim(),
         timestamp: serverTimestamp(),
         isRead: false,
