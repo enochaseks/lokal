@@ -12,6 +12,9 @@ function EmailVerificationPage() {
   const [user, setUser] = useState(null);
   const [checkingVerification, setCheckingVerification] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  const [lastEmailSent, setLastEmailSent] = useState(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [rateLimitCount, setRateLimitCount] = useState(0);
   const navigate = useNavigate();
 
   const handleVerifiedUser = async () => {
@@ -53,6 +56,62 @@ function EmailVerificationPage() {
       }, 1500);
     }
   };
+
+  // Initialize rate limiting from localStorage
+  useEffect(() => {
+    const now = Date.now();
+    
+    // Check for existing rate limit
+    const rateLimitUntil = localStorage.getItem('rateLimitUntil');
+    if (rateLimitUntil) {
+      const rateLimitEnd = parseInt(rateLimitUntil);
+      if (now < rateLimitEnd) {
+        setCooldownRemaining(Math.ceil((rateLimitEnd - now) / 1000));
+        setLastEmailSent(now - 60000); // Set to trigger rate limit check
+        return;
+      } else {
+        localStorage.removeItem('rateLimitUntil');
+      }
+    }
+    
+    // Check for regular cooldown
+    const storedLastEmailSent = localStorage.getItem('lastEmailSent');
+    if (storedLastEmailSent) {
+      const lastSent = parseInt(storedLastEmailSent);
+      const timeSinceLastEmail = now - lastSent;
+      const COOLDOWN_PERIOD = 60000; // 60 seconds
+      
+      if (timeSinceLastEmail < COOLDOWN_PERIOD) {
+        setLastEmailSent(lastSent);
+        setCooldownRemaining(Math.ceil((COOLDOWN_PERIOD - timeSinceLastEmail) / 1000));
+      } else {
+        // Clear expired timestamp
+        localStorage.removeItem('lastEmailSent');
+      }
+    }
+  }, []);
+
+  // Cooldown timer effect
+  useEffect(() => {
+    let cooldownInterval;
+    if (cooldownRemaining > 0) {
+      cooldownInterval = setInterval(() => {
+        setCooldownRemaining(prev => {
+          if (prev <= 1) {
+            localStorage.removeItem('lastEmailSent');
+            localStorage.removeItem('rateLimitUntil');
+            setLastEmailSent(null);
+            setRateLimitCount(0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (cooldownInterval) clearInterval(cooldownInterval);
+    };
+  }, [cooldownRemaining]);
 
   useEffect(() => {
     const auth = getAuth();
@@ -105,6 +164,17 @@ function EmailVerificationPage() {
   }, [navigate]);
 
   const handleResendVerification = async () => {
+    // Check rate limiting - prevent requests within 60 seconds
+    const now = Date.now();
+    const COOLDOWN_PERIOD = 60000; // 60 seconds
+    
+    if (lastEmailSent && (now - lastEmailSent) < COOLDOWN_PERIOD) {
+      const remainingTime = Math.ceil((COOLDOWN_PERIOD - (now - lastEmailSent)) / 1000);
+      setError(`Please wait ${remainingTime} seconds before requesting another verification email.`);
+      setCooldownRemaining(remainingTime);
+      return;
+    }
+
     const currentAuth = getAuth();
     const currentUser = currentAuth.currentUser;
     
@@ -120,17 +190,19 @@ function EmailVerificationPage() {
     
     const userToUse = currentUser || user;
     
-      console.log('Resend verification: Starting for user:', userToUse.email);
-      console.log('Resend verification: User object:', {
-        uid: userToUse.uid,
-        email: userToUse.email,
-        emailVerified: userToUse.emailVerified,
-        providerData: userToUse.providerData
-      });
-      
-      setLoading(true);
-      setError('');
-      setMessage('');    try {
+    console.log('Resend verification: Starting for user:', userToUse.email);
+    console.log('Resend verification: User object:', {
+      uid: userToUse.uid,
+      email: userToUse.email,
+      emailVerified: userToUse.emailVerified,
+      providerData: userToUse.providerData
+    });
+    
+    setLoading(true);
+    setError('');
+    setMessage('');
+    
+    try {
       // Check if user is already verified before sending
       await userToUse.reload();
       if (userToUse.emailVerified) {
@@ -142,6 +214,10 @@ function EmailVerificationPage() {
       console.log('Resend verification: Sending email to:', userToUse.email);
       console.log('Resend verification: Auth domain:', getAuth().app.options.authDomain);
       console.log('Resend verification: Project ID:', getAuth().app.options.projectId);
+      
+      // Set the timestamp before attempting to send
+      setLastEmailSent(now);
+      localStorage.setItem('lastEmailSent', now.toString());
       
       const actionCodeSettings = {
         url: `${window.location.origin}/verify-email`,
@@ -162,18 +238,36 @@ function EmailVerificationPage() {
       }
       
       setMessage('Verification email sent! Please check your email inbox AND your spam/junk folder. Note: It may take a few minutes to arrive.');
+      setCooldownRemaining(60); // Start cooldown timer
       
     } catch (err) {
       console.error('Resend verification error:', err);
       console.error('Error code:', err.code);
       console.error('Error message:', err.message);
       
+      // Reset timestamp on error so user can try again after a short wait
+      setLastEmailSent(null);
+      localStorage.removeItem('lastEmailSent');
+      
       if (err.code === 'auth/too-many-requests') {
-        setError('Too many verification emails sent. Please wait a few minutes before trying again.');
+        const newRateLimitCount = rateLimitCount + 1;
+        setRateLimitCount(newRateLimitCount);
+        
+        // Exponential backoff: 5 minutes for first offense, 15 for second, 30 for third+
+        const backoffMinutes = newRateLimitCount === 1 ? 5 : newRateLimitCount === 2 ? 15 : 30;
+        const backoffSeconds = backoffMinutes * 60;
+        
+        setError(`Too many verification emails sent recently. Please wait ${backoffMinutes} minutes before trying again. Check your spam folder in the meantime.`);
+        setCooldownRemaining(backoffSeconds);
+        
+        // Store the rate limit timestamp
+        localStorage.setItem('rateLimitUntil', (Date.now() + (backoffSeconds * 1000)).toString());
       } else if (err.code === 'auth/user-not-found') {
         setError('User not found. Please try registering again.');
       } else if (err.code === 'auth/invalid-email') {
         setError('Invalid email address. Please contact support.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setError('Network error. Please check your internet connection and try again.');
       } else {
         setError(`Failed to send verification email: ${err.message}`);
       }
@@ -277,6 +371,23 @@ function EmailVerificationPage() {
           </p>
         </div>
 
+        {cooldownRemaining > 0 && (
+          <div style={{ 
+            background: '#FFF3E0', 
+            border: '1px solid #FF9800', 
+            borderRadius: '8px', 
+            padding: '1rem', 
+            marginBottom: '2rem',
+            textAlign: 'left'
+          }}>
+            <h3 style={{ color: '#F57C00', marginBottom: '0.5rem', fontSize: '1rem' }}>⏱️ Rate Limit Active</h3>
+            <p style={{ color: '#666', fontSize: '0.9rem', margin: 0 }}>
+              Please wait {cooldownRemaining} seconds before requesting another verification email. 
+              This helps prevent spam and ensures reliable email delivery.
+            </p>
+          </div>
+        )}
+
         {message && (
           <div style={{ 
             background: '#E8F5E8', 
@@ -324,20 +435,25 @@ function EmailVerificationPage() {
 
           <button
             onClick={handleResendVerification}
-            disabled={loading}
+            disabled={loading || cooldownRemaining > 0}
             style={{
               background: 'transparent',
-              color: '#007B7F',
+              color: cooldownRemaining > 0 ? '#999' : '#007B7F',
               padding: '0.75rem',
-              border: '2px solid #007B7F',
+              border: `2px solid ${cooldownRemaining > 0 ? '#999' : '#007B7F'}`,
               borderRadius: '8px',
               fontWeight: 'bold',
               fontSize: '0.9rem',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.7 : 1
+              cursor: (loading || cooldownRemaining > 0) ? 'not-allowed' : 'pointer',
+              opacity: (loading || cooldownRemaining > 0) ? 0.7 : 1
             }}
           >
-            {loading ? 'Sending...' : 'Resend Verification Email'}
+            {loading 
+              ? 'Sending...' 
+              : cooldownRemaining > 0 
+                ? `Wait ${cooldownRemaining}s` 
+                : 'Resend Verification Email'
+            }
           </button>
 
           <button
@@ -359,11 +475,23 @@ function EmailVerificationPage() {
         <div style={{ marginTop: '2rem', padding: '1rem', background: '#F5F5F5', borderRadius: '8px' }}>
           <h4 style={{ color: '#1C1C1C', margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Still having trouble?</h4>
           <ul style={{ color: '#666', fontSize: '0.8rem', textAlign: 'left', margin: 0, paddingLeft: '1.2rem' }}>
-            <li>Check your spam/junk folder</li>
-            <li>Add noreply@lokal.com to your contacts</li>
+            <li><strong>Check your spam/junk folder</strong> - This is the most common issue!</li>
+            <li>Add <strong>noreply@lokal.com</strong> to your contacts</li>
             <li>Wait a few minutes for the email to arrive</li>
-            <li>Try resending the verification email</li>
+            <li>Make sure your email address is correct: <strong>{user?.email}</strong></li>
+            {cooldownRemaining > 0 ? (
+              <li style={{ color: '#F57C00' }}>Wait for the cooldown to end before requesting another email</li>
+            ) : (
+              <li>Try resending the verification email if needed</li>
+            )}
           </ul>
+          {cooldownRemaining > 60 && (
+            <div style={{ marginTop: '10px', padding: '8px', background: '#FFF3E0', borderRadius: '4px', border: '1px solid #FF9800' }}>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#E65100' }}>
+                <strong>Extended cooldown active:</strong> While waiting, double-check your spam folder and ensure your email address is correct.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
