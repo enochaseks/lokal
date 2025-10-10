@@ -167,18 +167,54 @@ function RegisterPage() {
 
       await setDoc(doc(db, 'users', user.uid), userDoc);
       
-      // Send email verification
+      // Send email verification with Firebase default settings
       console.log('Registration: Sending verification email to:', user.email);
+      console.log('Registration: Auth domain:', getAuth().app.options.authDomain);
+      console.log('Registration: Project ID:', getAuth().app.options.projectId);
+      console.log('Registration: Using Firebase default email settings to avoid domain authorization issues...');
+      
+      let emailSent = false;
+      let lastError = null;
+      
       try {
-        await sendEmailVerification(user, {
-          url: `${window.location.origin}/verify-email`,
-          handleCodeInApp: false
-        });
-        console.log('Registration: Verification email sent successfully');
-      } catch (emailError) {
-        console.warn('Registration: Custom email settings failed, trying default:', emailError);
         await sendEmailVerification(user);
-        console.log('Registration: Verification email sent with default settings');
+        console.log('Registration: Verification email sent successfully with default settings');
+        emailSent = true;
+      } catch (emailError) {
+        console.error('Registration: Email verification failed:', emailError);
+        lastError = emailError;
+      }
+      
+      if (!emailSent) {
+        console.error('Registration: Failed to send verification email after all attempts');
+        if (lastError) {
+          console.error('Registration: Last error details:', {
+            code: lastError.code,
+            message: lastError.message,
+            stack: lastError.stack
+          });
+          
+          // Provide specific error messages
+          let errorMsg = 'Account created, but there was an issue sending the verification email. ';
+          
+          if (lastError.code === 'auth/unauthorized-domain') {
+            errorMsg += 'This appears to be a domain configuration issue. ';
+            console.error('CRITICAL: Unauthorized domain error. Add current domain to Firebase Console');
+          } else if (lastError.code === 'auth/operation-not-allowed') {
+            errorMsg += 'Email verification is not enabled. ';
+            console.error('CRITICAL: Email verification not enabled in Firebase Console');
+          } else if (lastError.code === 'auth/quota-exceeded') {
+            errorMsg += 'Email quota exceeded. ';
+          } else if (lastError.code === 'auth/invalid-continue-uri') {
+            errorMsg += 'Configuration error with verification URL. ';
+            console.error('CRITICAL: Invalid continue URL configuration');
+          }
+          
+          errorMsg += 'You can request a new verification email from the verification page.';
+          setError(errorMsg);
+        } else {
+          setError('Account created, but there was an issue sending the verification email. You can request a new verification email from the verification page.');
+        }
       }
       
       // Add to HubSpot in background (non-blocking)

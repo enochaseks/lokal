@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { debugEmailVerificationStatus, checkAndSyncEmailVerification } from '../utils/emailVerification';
+import { getAuth, sendEmailVerification } from 'firebase/auth';
+import { diagnoseEmailConfiguration } from '../utils/emailDiagnostics';
 
 function EmailVerificationDebug() {
   const [debugInfo, setDebugInfo] = useState(null);

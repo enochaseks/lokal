@@ -11,6 +11,7 @@ import { getStorage } from "firebase/storage";
 const firebaseConfig = {
   apiKey: "AIzaSyAGEHLV7k8nAVaoqDmdbidi4j9Wm-zwOr8",
   authDomain: "lokal-b4b28.firebaseapp.com",
+  databaseURL: "https://lokal-b4b28-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "lokal-b4b28",
   storageBucket: "lokal-b4b28.firebasestorage.app",
   messagingSenderId: "469061847946",

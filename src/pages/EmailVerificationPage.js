@@ -214,28 +214,21 @@ function EmailVerificationPage() {
       console.log('Resend verification: Sending email to:', userToUse.email);
       console.log('Resend verification: Auth domain:', getAuth().app.options.authDomain);
       console.log('Resend verification: Project ID:', getAuth().app.options.projectId);
+      console.log('Resend verification: Current URL origin:', window.location.origin);
+      console.log('Resend verification: User metadata:', {
+        creationTime: userToUse.metadata.creationTime,
+        lastSignInTime: userToUse.metadata.lastSignInTime
+      });
       
       // Set the timestamp before attempting to send
       setLastEmailSent(now);
       localStorage.setItem('lastEmailSent', now.toString());
       
-      const actionCodeSettings = {
-        url: `${window.location.origin}/verify-email`,
-        handleCodeInApp: false
-      };
+      // Use Firebase default email verification to avoid unauthorized-continue-uri error
+      console.log('Resend verification: Using Firebase default email settings (no custom URL)...');
       
-      console.log('Resend verification: Action code settings:', actionCodeSettings);
-      
-      try {
-        // Try with custom settings first
-        await sendEmailVerification(userToUse, actionCodeSettings);
-        console.log('Resend verification: Email sent successfully with custom settings');
-      } catch (customError) {
-        console.warn('Custom settings failed, trying default:', customError);
-        // Fallback to default settings
-        await sendEmailVerification(userToUse);
-        console.log('Resend verification: Email sent successfully with default settings');
-      }
+      await sendEmailVerification(userToUse);
+      console.log('Resend verification: Email sent successfully with default settings');
       
       setMessage('Verification email sent! Please check your email inbox AND your spam/junk folder. Note: It may take a few minutes to arrive.');
       setCooldownRemaining(60); // Start cooldown timer
@@ -268,8 +261,25 @@ function EmailVerificationPage() {
         setError('Invalid email address. Please contact support.');
       } else if (err.code === 'auth/network-request-failed') {
         setError('Network error. Please check your internet connection and try again.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('Domain authorization error. This appears to be a configuration issue. Please contact support.');
+        console.error('CRITICAL: Unauthorized domain error. Add current domain to Firebase Console > Authentication > Settings > Authorized domains');
+        console.error('Domain to authorize:', window.location.hostname);
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Email verification is not enabled. Please contact support.');
+        console.error('CRITICAL: Email verification not enabled in Firebase Console');
+      } else if (err.code === 'auth/quota-exceeded') {
+        setError('Email quota exceeded. Please try again later or contact support.');
+      } else if (err.code === 'auth/invalid-continue-uri') {
+        setError('Configuration error with verification URL. Please contact support.');
+        console.error('CRITICAL: Invalid continue URL. Check Firebase Console > Authentication > Templates');
       } else {
-        setError(`Failed to send verification email: ${err.message}`);
+        setError(`Failed to send verification email: ${err.message} (Code: ${err.code})`);
+        console.error('Unhandled email verification error:', {
+          code: err.code,
+          message: err.message,
+          stack: err.stack
+        });
       }
     }
     setLoading(false);
