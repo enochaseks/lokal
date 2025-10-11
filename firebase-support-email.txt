@@ -1,0 +1,73 @@
+Subject: Custom Domain Authentication DNS Validation Issue - CNAME Records Not Being Recognized
+
+Dear Firebase Support Team,
+
+I hope this email finds you well. I am writing to request assistance with a custom domain authentication setup issue for my Firebase project.
+
+**Project Details:**
+- Project ID: lokal-b4b28
+- Custom Domain: lokalshops.co.uk
+- Issue: Custom domain authentication DNS validation failing despite proper CNAME records
+
+**Problem Description:**
+I am attempting to set up custom domain authentication for my Firebase project to use custom email templates with my domain (lokalshops.co.uk). According to your documentation, I need to add specific CNAME records for DNS validation. However, Firebase continues to report that the domain validation is failing.
+
+**Technical Details:**
+- Domain: lokalshops.co.uk
+- Required CNAME records (as provided by Firebase):
+  - firebase1._domainkey.lokalshops.co.uk → mail-lokalshops-co-uk.dkim1._domainkey.firebasemail.com
+  - firebase2._domainkey.lokalshops.co.uk → mail-lokalshops-co-uk.dkim2._domainkey.firebasemail.com
+
+**Domain Provider Communication:**
+I have contacted my domain provider regarding this issue, and they have confirmed:
+1. The CNAME records have been properly added to my DNS configuration on their end
+2. Their DNS management system shows the records as active and properly configured
+3. They have verified that there are no issues with their DNS propagation
+4. They believe this is a Firebase-side validation issue rather than a DNS configuration problem
+
+**DNS Testing Results:**
+I have performed DNS lookups using multiple DNS servers (including Google's 8.8.8.8) and continue to receive "Non-existent domain" responses for both required CNAME records:
+- firebase1._domainkey.lokalshops.co.uk
+- firebase2._domainkey.lokalshops.co.uk
+
+**Troubleshooting Steps Taken:**
+1. Confirmed CNAME records are correctly configured with domain provider
+2. Waited over 48 hours for DNS propagation
+3. Tested DNS resolution using multiple DNS servers
+4. Verified domain ownership and Firebase project configuration
+5. Double-checked CNAME record syntax and targets
+
+**Request for Assistance:**
+Given that my domain provider has confirmed the CNAME records are properly configured on their end, I suspect there may be an issue with:
+1. Firebase's DNS validation process
+2. The specific CNAME record targets provided by Firebase
+3. A potential delay or issue in Firebase's domain verification system
+
+Could you please:
+1. Verify the correct CNAME record targets for my domain (lokalshops.co.uk)
+2. Check if there are any known issues with the domain validation system
+3. Manually trigger a re-validation of my domain's DNS records
+4. Investigate if there are any specific requirements or restrictions for .co.uk domains
+
+**Additional Information:**
+- I am willing to provide screenshots of my domain provider's DNS configuration if needed
+- The domain is active and properly resolving for other records
+- This is for a production application with active users waiting for email authentication features
+
+I would greatly appreciate your assistance in resolving this issue. Please let me know if you need any additional information or if there are any other troubleshooting steps I should take.
+
+Thank you for your time and support.
+
+Best regards,
+[Your Name]
+[Your Company/Project Name]
+Project ID: lokal-b4b28
+Email: [Your Contact Email]
+
+---
+
+Technical Details for Reference:
+- Timestamp of issue: October 11, 2025
+- DNS queries performed using: nslookup and Google DNS (8.8.8.8)
+- Domain provider: [Your Domain Provider Name]
+- Firebase Console: Authentication > Settings > Authorized domains

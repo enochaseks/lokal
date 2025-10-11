@@ -133,6 +133,8 @@ function StoreProfilePage() {
 
   useEffect(() => {
     const auth = getAuth();
+    let unsubscribeFollowers = null;
+    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setError('Not logged in');
@@ -207,7 +209,7 @@ function StoreProfilePage() {
         setStoreItems(itemsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         // Fetch followers
         const followersCol = collection(db, 'stores', user.uid, 'followers');
-        onSnapshot(followersCol, async (snapshot) => {
+        unsubscribeFollowers = onSnapshot(followersCol, async (snapshot) => {
           console.log('Followers snapshot received, processing...', snapshot.docs.length, 'documents');
           
           // Get both document IDs and data for each follower
@@ -355,7 +357,12 @@ function StoreProfilePage() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeFollowers) {
+        unsubscribeFollowers();
+      }
+    };
   }, []);
 
   // Add a helper to check if the store can go live - comprehensive requirements
@@ -375,7 +382,7 @@ function StoreProfilePage() {
   // Monitor requirements and automatically take store offline if requirements become incomplete
   useEffect(() => {
     const checkRequirementsAndUpdate = async () => {
-      if (!profile || !currentUser) return;
+      if (!profile || !currentUser || loading) return;
       
       // Check if store is currently live but requirements are no longer met
       if (profile.live && !canGoLive) {
@@ -400,7 +407,7 @@ function StoreProfilePage() {
     };
 
     checkRequirementsAndUpdate();
-  }, [profile, canGoLive, currentUser, storeItems.length]);
+  }, [profile, canGoLive, currentUser, storeItems.length, loading]);
 
   // Handle query parameters for direct item editing and adding
   useEffect(() => {
