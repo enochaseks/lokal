@@ -4,13 +4,14 @@ const { onRequest, onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
-// Load environment variables if .env file exists (for local development)
-if (process.env.NODE_ENV !== 'production') {
-  try {
+// Load environment variables if .env file exists (for local development only)
+// Skip in production to prevent deployment timeouts
+try {
+  if (process.env.NODE_ENV !== 'production' && typeof require !== 'undefined') {
     require('dotenv').config();
-  } catch (error) {
-    console.log('dotenv not available, using Firebase config or system env vars');
   }
+} catch (error) {
+  // Silently ignore dotenv errors during deployment
 }
 
 // Initialize Firebase Admin if not already initialized
@@ -18,11 +19,22 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Gmail configuration using environment variables
+// Gmail configuration using environment variables or Firebase config
 const createGmailTransporter = () => {
-  // Firebase Functions v2 only supports environment variables
-  const gmailEmail = process.env.GMAIL_EMAIL;
-  const gmailPassword = process.env.GMAIL_PASSWORD;
+  // Try environment variables first, then Firebase config
+  let gmailEmail = process.env.GMAIL_EMAIL;
+  let gmailPassword = process.env.GMAIL_PASSWORD;
+  
+  // Fallback to Firebase config if env vars not available
+  if (!gmailEmail || !gmailPassword) {
+    try {
+      const config = functions.config();
+      gmailEmail = config.gmail?.email;
+      gmailPassword = config.gmail?.password;
+    } catch (error) {
+      console.log('Firebase config not available, using env vars only');
+    }
+  }
   
   if (!gmailEmail || !gmailPassword) {
     throw new Error('Gmail credentials not configured. Please set GMAIL_EMAIL and GMAIL_PASSWORD environment variables or use Firebase config.');

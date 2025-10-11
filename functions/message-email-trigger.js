@@ -1,6 +1,14 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
-require('dotenv').config();
+
+// Load dotenv only in development to prevent deployment timeouts
+try {
+  if (process.env.NODE_ENV !== 'production' && typeof require !== 'undefined') {
+    require('dotenv').config();
+  }
+} catch (error) {
+  // Silently ignore dotenv errors during deployment
+}
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {

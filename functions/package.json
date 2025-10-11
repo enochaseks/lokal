@@ -25,7 +25,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.4.0",
+    "firebase-functions": "^6.5.0",
     "nodemailer": "^7.0.9",
     "stripe": "^18.5.0"
   },
