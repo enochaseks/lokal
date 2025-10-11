@@ -97,67 +97,261 @@ const generateEmailTemplate = (message, isForSeller = false) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Lokal - ${messageTypeDesc}</title>
         <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff; }
-            .header { background: #4F46E5; color: #ffffff; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
-            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-            .message-box { background: #ffffff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4F46E5; border: 1px solid #e5e7eb; }
-            .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; }
-            .button { background: #4F46E5; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 10px 0; font-weight: bold; }
-            .order-details { background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 15px 0; border: 1px solid #e5e7eb; }
-            .meta-info { background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 14px; margin: 10px 0; }
-            a { color: #4F46E5; }
-            table { width: 100%; border-collapse: collapse; }
+            body { 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+                line-height: 1.6; 
+                color: #333333; 
+                margin: 0; 
+                padding: 0; 
+                background: linear-gradient(135deg, #F9F5EE 0%, #F0F8FF 100%);
+            }
+            .email-wrapper {
+                background: linear-gradient(135deg, #F9F5EE 0%, #F0F8FF 100%);
+                min-height: 100vh;
+                padding: 20px 0;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background-color: #ffffff;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0, 123, 127, 0.1);
+                overflow: hidden;
+            }
+            .header { 
+                background: linear-gradient(135deg, #007B7F 0%, #00A8AC 50%, #FFD700 100%);
+                color: #ffffff; 
+                padding: 30px 20px; 
+                text-align: center; 
+                position: relative;
+            }
+            .logo-container {
+                margin-bottom: 15px;
+            }
+            .logo {
+                max-width: 80px;
+                height: auto;
+                margin-bottom: 10px;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+            }
+            .brand-name {
+                font-size: 2rem;
+                font-weight: 800;
+                margin: 0;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .subtitle {
+                font-size: 1.1rem;
+                font-weight: 400;
+                margin: 8px 0 0 0;
+                opacity: 0.95;
+            }
+            .content { 
+                background: #ffffff;
+                padding: 40px 30px;
+            }
+            .greeting {
+                font-size: 1.1rem;
+                color: #007B7F;
+                font-weight: 600;
+                margin-bottom: 20px;
+            }
+            .message-box { 
+                background: linear-gradient(135deg, #f8fdff 0%, #f0f9ff 100%);
+                padding: 25px; 
+                border-radius: 12px; 
+                margin: 25px 0; 
+                border-left: 5px solid #007B7F;
+                border: 1px solid #e0f2f1;
+                box-shadow: 0 2px 8px rgba(0, 123, 127, 0.05);
+            }
+            .meta-info { 
+                background: rgba(0, 123, 127, 0.08);
+                padding: 15px; 
+                border-radius: 8px; 
+                font-size: 14px; 
+                margin-bottom: 20px;
+                border: 1px solid rgba(0, 123, 127, 0.1);
+            }
+            .message-content {
+                font-size: 1.05rem;
+                line-height: 1.7;
+                color: #2d3748;
+                background: #ffffff;
+                padding: 20px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+            }
+            .button { 
+                background: linear-gradient(135deg, #007B7F 0%, #00A8AC 100%);
+                color: #ffffff; 
+                padding: 16px 32px; 
+                text-decoration: none; 
+                border-radius: 25px; 
+                display: inline-block; 
+                margin: 25px 0; 
+                font-weight: 700;
+                font-size: 1.05rem;
+                box-shadow: 0 4px 15px rgba(0, 123, 127, 0.3);
+                transition: all 0.3s ease;
+            }
+            .button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 123, 127, 0.4);
+            }
+            .order-details { 
+                background: linear-gradient(135deg, #fff8e6 0%, #fffbf0 100%);
+                padding: 20px; 
+                border-radius: 12px; 
+                margin: 20px 0;
+                border: 1px solid #fed7aa;
+                border-left: 5px solid #FFD700;
+            }
+            .order-details h3 {
+                color: #d97706;
+                margin-top: 0;
+                font-size: 1.1rem;
+            }
+            .quick-actions {
+                background: #f8fafc;
+                padding: 20px;
+                border-radius: 12px;
+                margin: 25px 0;
+                border: 1px solid #e2e8f0;
+            }
+            .quick-actions h4 {
+                color: #007B7F;
+                margin-top: 0;
+                font-size: 1.05rem;
+            }
+            .quick-actions ul {
+                margin: 10px 0;
+                padding-left: 20px;
+            }
+            .quick-actions li {
+                margin: 8px 0;
+                color: #4a5568;
+            }
+            .footer { 
+                text-align: center; 
+                padding: 30px 20px;
+                background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+                color: #718096; 
+                font-size: 14px; 
+            }
+            .footer-logo {
+                font-size: 1.2rem;
+                font-weight: 700;
+                color: #007B7F;
+                margin-bottom: 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 5px;
+            }
+            .footer a {
+                color: #007B7F;
+                text-decoration: none;
+                font-weight: 600;
+            }
+            .footer a:hover {
+                text-decoration: underline;
+            }
+            .divider {
+                height: 1px;
+                background: linear-gradient(90deg, transparent, #007B7F, transparent);
+                margin: 25px 0;
+            }
+            
+            /* Mobile responsiveness */
+            @media only screen and (max-width: 600px) {
+                .container { margin: 10px; }
+                .content { padding: 25px 20px; }
+                .header { padding: 25px 15px; }
+                .brand-name { font-size: 1.6rem; }
+                .button { padding: 14px 24px; font-size: 1rem; }
+            }
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="header">
-                <h1>📱 Lokal</h1>
-                <h2>${messageTypeDesc}</h2>
-            </div>
-            <div class="content">
-                <p><strong>Hello ${message.receiverName || 'there'},</strong></p>
-                <p>You have received a new message on Lokal:</p>
+        <div class="email-wrapper">
+            <div class="container">
+                <div class="header">
+                    <div class="logo-container">
+                        <img src="https://lokalshops.co.uk/images/logo png.png" alt="Lokal Logo" style="width: 80px; height: auto; margin-bottom: 10px;" />
+                    </div>
+                    <h1 class="brand-name">Lokal</h1>
+                    <p class="subtitle">${messageTypeDesc}</p>
+                </div>
+                <div class="content">
+                    <div class="greeting">Hello ${message.receiverName || 'there'}! 👋</div>
+                    <p style="font-size: 1.05rem; color: #4a5568; margin-bottom: 25px;">
+                        You have received a new message on your local shopping platform:
+                    </p>
+                    
+                    <div class="message-box">
+                        <div class="meta-info">
+                            <strong>📤 From:</strong> ${message.senderName}<br>
+                            <strong>📋 Type:</strong> ${messageTypeDesc}<br>
+                            <strong>🕒 Time:</strong> ${new Date().toLocaleString('en-GB', { 
+                                weekday: 'long', 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}
+                        </div>
+                        <div class="message-content">
+                            ${formattedMessage}
+                        </div>
+                    </div>
+
+                    ${message.orderData ? `
+                    <div class="order-details">
+                        <h3>📦 Order Information</h3>
+                        ${message.orderData.orderId ? `<p><strong>Order ID:</strong> <code style="background: #fff; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${message.orderData.orderId}</code></p>` : ''}
+                        ${message.orderData.totalAmount ? `<p><strong>Total Amount:</strong> <span style="font-size: 1.1rem; font-weight: 600; color: #d97706;">${message.orderData.currency || '£'}${message.orderData.totalAmount}</span></p>` : ''}
+                        ${message.orderData.pickupCode ? `<p><strong>Pickup Code:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #007B7F;">${message.orderData.pickupCode}</code></p>` : ''}
+                    </div>
+                    ` : ''}
+
+                    <div class="divider"></div>
+
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="https://lokalshops.co.uk/" class="button">🚀 Open Lokal App</a>
+                    </div>
+
+                    <div class="quick-actions">
+                        <h4>⚡ What you can do:</h4>
+                        <ul>
+                            <li>💬 Reply to this message instantly</li>
+                            <li>📦 Check your order status and tracking</li>
+                            <li>🛍️ Browse local shops and deals</li>
+                            <li>🔔 Manage your notification preferences</li>
+                            <li>❓ Contact support if you need help</li>
+                        </ul>
+                    </div>
+                </div>
                 
-                <div class="message-box">
-                    <div class="meta-info">
-                        <strong>From:</strong> ${message.senderName}<br>
-                        <strong>Message Type:</strong> ${messageTypeDesc}<br>
-                        <strong>Time:</strong> ${new Date().toLocaleString()}
+                <div class="footer">
+                    <div class="footer-logo">
+                        <img src="https://lokalshops.co.uk/images/logo png.png" alt="Lokal" style="width: 40px; height: auto; margin-bottom: 5px;" />
+                        <div>Lokal</div>
                     </div>
-                    <div style="margin-top: 15px;">
-                        ${formattedMessage}
-                    </div>
+                    <p><strong>Your First Stop for Local African and Caribbean Shopping</strong></p>
+                    <p>Connecting you with local businesses in your community</p>
+                    <p style="margin: 15px 0;">
+                        <a href="https://lokalshops.co.uk">Visit lokalshops.co.uk</a> • 
+                        <a href="https://lokalshops.co.uk/settings">Notification Settings</a>
+                    </p>
+                    <p style="font-size: 12px; color: #a0aec0; margin-top: 20px;">
+                        This email was sent because you have an active account on Lokal.<br>
+                        To manage your email preferences, visit your account settings.
+                    </p>
                 </div>
-
-                ${message.orderData ? `
-                <div class="order-details">
-                    <h3>📦 Order Details</h3>
-                    ${message.orderData.orderId ? `<p><strong>Order ID:</strong> ${message.orderData.orderId}</p>` : ''}
-                    ${message.orderData.totalAmount ? `<p><strong>Total Amount:</strong> ${message.orderData.currency || '£'}${message.orderData.totalAmount}</p>` : ''}
-                    ${message.orderData.pickupCode ? `<p><strong>Pickup Code:</strong> ${message.orderData.pickupCode}</p>` : ''}
-                </div>
-                ` : ''}
-
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="https://lokalshops.co.uk/" class="button">View on Lokal</a>
-                </div>
-
-                <p><strong>Quick Actions:</strong></p>
-                <ul>
-                    <li>Reply to this message on Lokal</li>
-                    <li>Check your order status</li>
-                    <li>Contact support if needed</li>
-                </ul>
             </div>
-            <div class="footer">
-                <p>This email was sent by Lokal - Your Local Shopping Platform</p>
-                <p>Visit us at <a href="https://lokalshops.co.uk">lokalshops.co.uk</a></p>
-                <p style="font-size: 12px; color: #9ca3af;">
-                    To manage your notification preferences, visit your Lokal account settings.
-                </p>
-            </div>
+        </div>
         </div>
     </body>
     </html>
