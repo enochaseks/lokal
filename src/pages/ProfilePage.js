@@ -5,6 +5,55 @@ import { db } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs, collectionGroup, onSnapshot, updateDoc } from 'firebase/firestore';
 import Navbar from '../components/Navbar';
 
+// Preference options constants
+const DIETARY_OPTIONS = [
+  'Halal',
+  'Vegetarian', 
+  'Vegan',
+  'Gluten-Free',
+  'Dairy-Free',
+  'Diabetic-Friendly',
+  'No dietary restrictions'
+];
+
+const CULTURAL_PREFERENCES = [
+  'West African products (Nigerian, Ghanaian, Senegalese)',
+  'East African products (Ethiopian, Kenyan, Somali)',
+  'Central African products (Cameroon, Congo)',
+  'Caribbean products (Jamaican, Trinidadian, Barbadian)',
+  'South African products',
+  'North African products (Moroccan, Egyptian)',
+  'Mixed African & Caribbean',
+  'No specific regional preference'
+];
+
+const BUDGET_RANGES = [
+  'Budget-conscious (Under £20 per shop)',
+  'Moderate spending (£20-50 per shop)', 
+  'Regular shopper (£50-100 per shop)',
+  'Premium buyer (£100+ per shop)',
+  'Special occasions only',
+  'No budget preference'
+];
+
+const SHOPPING_HABITS = [
+  'Weekly grocery essentials',
+  'Monthly bulk buying (rice, oil, spices)',
+  'Special occasion shopping (parties, celebrations)',
+  'Beauty & hair care products',
+  'Traditional medicine & herbs',
+  'Fabrics & cultural items',
+  'Wholesale for reselling',
+  'Seasonal festival shopping'
+];
+
+const DELIVERY_PREFERENCES = [
+  'Pickup only',
+  'Delivery only', 
+  'Both pickup and delivery',
+  'No preference'
+];
+
 function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +87,20 @@ function ProfilePage() {
 
   // Add new state for active tab
   const [activeTab, setActiveTab] = useState('following');
+
+  // Preferences state
+  const [preferences, setPreferences] = useState(null);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  
+  // Edit preferences state
+  const [editPreferences, setEditPreferences] = useState({
+    dietary: [],
+    cultural: [],
+    budget: '',
+    delivery: '',
+    shoppingHabits: []
+  });
 
   const navigate = useNavigate();
 
@@ -265,6 +328,49 @@ function ProfilePage() {
       setEditError('Error updating profile: ' + err.message);
     }
     setEditLoading(false);
+  };
+
+  // Preferences handling functions
+  const handleEditPreferences = () => {
+    // Initialize edit preferences with current values
+    if (profile?.preferences) {
+      setEditPreferences({
+        dietary: profile.preferences.dietary || [],
+        cultural: profile.preferences.cultural || [],
+        budget: profile.preferences.budget || '',
+        delivery: profile.preferences.delivery || '',
+        shoppingHabits: profile.preferences.shoppingHabits || []
+      });
+    } else {
+      setEditPreferences({
+        dietary: [],
+        cultural: [],
+        budget: '',
+        delivery: '',
+        shoppingHabits: []
+      });
+    }
+    setShowPreferencesModal(true);
+  };
+
+  const handleSavePreferences = async () => {
+    setPreferencesLoading(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Not logged in');
+      
+      await updateDoc(doc(db, 'users', user.uid), {
+        preferences: editPreferences
+      });
+      
+      // Update local profile state
+      setProfile(prev => ({ ...prev, preferences: editPreferences }));
+      setShowPreferencesModal(false);
+    } catch (err) {
+      alert('Error updating preferences: ' + err.message);
+    }
+    setPreferencesLoading(false);
   };
 
   // New useEffect to load viewed stores from localStorage
@@ -629,7 +735,8 @@ function ProfilePage() {
           {[
             { key: 'following', label: 'Following' },
             { key: 'viewed', label: 'Recently Viewed' },
-            { key: 'orders', label: 'Orders' }
+            { key: 'orders', label: 'Orders' },
+            { key: 'preferences', label: 'Preferences' }
           ].map(tab => (
             <button
               key={tab.key}
@@ -924,6 +1031,171 @@ function ProfilePage() {
             </div>
           )}
 
+          {activeTab === 'preferences' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ color: '#007B7F', margin: 0 }}>Your Preferences</h3>
+                <button
+                  onClick={handleEditPreferences}
+                  style={{
+                    background: '#007B7F',
+                    color: '#fff',
+                    padding: '0.5rem 1rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  Edit Preferences
+                </button>
+              </div>
+
+              {profile?.preferences ? (
+                <div style={{ display: 'grid', gap: '1.5rem' }}>
+                  {/* Shopping Preferences */}
+                  {profile.shoppingPreferences && profile.shoppingPreferences.length > 0 && (
+                    <div style={{ background: '#F9F5EE', padding: '1rem', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#1C1C1C' }}>Shopping Interests</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {profile.shoppingPreferences.map((pref, index) => (
+                          <span key={index} style={{
+                            background: '#007B7F',
+                            color: '#fff',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem'
+                          }}>
+                            {pref}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dietary Preferences */}
+                  {profile.preferences.dietary && profile.preferences.dietary.length > 0 && (
+                    <div style={{ background: '#F0FDF4', padding: '1rem', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#1C1C1C' }}>Dietary Preferences</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {profile.preferences.dietary.map((pref, index) => (
+                          <span key={index} style={{
+                            background: '#22C55E',
+                            color: '#fff',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem'
+                          }}>
+                            {pref}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cultural Preferences */}
+                  {profile.preferences.cultural && profile.preferences.cultural.length > 0 && (
+                    <div style={{ background: '#FEF3C7', padding: '1rem', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#1C1C1C' }}>Regional Products</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {profile.preferences.cultural.map((pref, index) => (
+                          <span key={index} style={{
+                            background: '#F59E0B',
+                            color: '#fff',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem'
+                          }}>
+                            {pref}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Budget & Shopping Habits */}
+                  <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
+                    {profile.preferences.budget && (
+                      <div style={{ background: '#EDE9FE', padding: '1rem', borderRadius: '8px' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0', color: '#1C1C1C' }}>Budget Range</h4>
+                        <p style={{ margin: 0, color: '#6B46C1', fontWeight: '500' }}>
+                          {profile.preferences.budget}
+                        </p>
+                      </div>
+                    )}
+
+                    {profile.preferences.delivery && (
+                      <div style={{ background: '#DBEAFE', padding: '1rem', borderRadius: '8px' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0', color: '#1C1C1C' }}>Delivery Preference</h4>
+                        <p style={{ margin: 0, color: '#2563EB', fontWeight: '500' }}>
+                          {profile.preferences.delivery}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Shopping Habits */}
+                  {profile.preferences.shoppingHabits && profile.preferences.shoppingHabits.length > 0 && (
+                    <div style={{ background: '#F3E8FF', padding: '1rem', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 0.75rem 0', color: '#1C1C1C' }}>Shopping Habits</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {profile.preferences.shoppingHabits.map((habit, index) => (
+                          <span key={index} style={{
+                            background: '#8B5CF6',
+                            color: '#fff',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem'
+                          }}>
+                            {habit}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Age Range */}
+                  {profile.preferences.ageRange && (
+                    <div style={{ background: '#F1F5F9', padding: '1rem', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0', color: '#1C1C1C' }}>Age Range</h4>
+                      <p style={{ margin: 0, color: '#475569', fontWeight: '500' }}>
+                        {profile.preferences.ageRange}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '2rem',
+                  background: '#F9FAFB',
+                  borderRadius: '8px',
+                  border: '2px dashed #D1D5DB'
+                }}>
+                  <p style={{ color: '#6B7280', margin: '0 0 1rem 0' }}>
+                    No preferences set yet. Let us know what you're interested in!
+                  </p>
+                  <button
+                    onClick={handleEditPreferences}
+                    style={{
+                      background: '#007B7F',
+                      color: '#fff',
+                      padding: '0.75rem 1.5rem',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Set Your Preferences
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
 
         </div>
       </div>
@@ -1154,6 +1426,306 @@ function ProfilePage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Preferences Edit Modal */}
+      {showPreferencesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '1rem'
+        }}>
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 12, 
+            padding: '1.5rem', 
+            maxWidth: '700px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 2px 16px #0008'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, color: '#1C1C1C' }}>Edit Your Preferences</h3>
+              <button
+                onClick={() => setShowPreferencesModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '0.25rem',
+                  borderRadius: '4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: '1.5rem' }}>
+              {/* Dietary Preferences */}
+              <div>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#007B7F', fontSize: '1rem' }}>🥗 Dietary Preferences</h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                  gap: '0.5rem' 
+                }}>
+                  {DIETARY_OPTIONS.map((option) => (
+                    <label 
+                      key={option}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        backgroundColor: editPreferences.dietary.includes(option) ? '#E8F5E8' : '#fff',
+                        borderColor: editPreferences.dietary.includes(option) ? '#007B7F' : '#ddd'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editPreferences.dietary.includes(option)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              dietary: [...prev.dietary, option]
+                            }));
+                          } else {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              dietary: prev.dietary.filter(item => item !== option)
+                            }));
+                          }
+                        }}
+                        style={{ marginRight: '0.5rem' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cultural/Regional Preferences */}
+              <div>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#007B7F', fontSize: '1rem' }}>🌍 Regional Products</h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                  gap: '0.5rem' 
+                }}>
+                  {CULTURAL_PREFERENCES.map((option) => (
+                    <label 
+                      key={option}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        backgroundColor: editPreferences.cultural.includes(option) ? '#FEF3C7' : '#fff',
+                        borderColor: editPreferences.cultural.includes(option) ? '#F59E0B' : '#ddd'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editPreferences.cultural.includes(option)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              cultural: [...prev.cultural, option]
+                            }));
+                          } else {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              cultural: prev.cultural.filter(item => item !== option)
+                            }));
+                          }
+                        }}
+                        style={{ marginRight: '0.5rem' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Budget Range */}
+              <div>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#007B7F', fontSize: '1rem' }}>💰 Budget Range</h4>
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  {BUDGET_RANGES.map((option) => (
+                    <label 
+                      key={option}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        backgroundColor: editPreferences.budget === option ? '#EDE9FE' : '#fff',
+                        borderColor: editPreferences.budget === option ? '#8B5CF6' : '#ddd'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="budget"
+                        checked={editPreferences.budget === option}
+                        onChange={() => {
+                          setEditPreferences(prev => ({
+                            ...prev,
+                            budget: option
+                          }));
+                        }}
+                        style={{ marginRight: '0.5rem' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Delivery Preference */}
+              <div>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#007B7F', fontSize: '1rem' }}>🚚 Delivery Preference</h4>
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  {DELIVERY_PREFERENCES.map((option) => (
+                    <label 
+                      key={option}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        backgroundColor: editPreferences.delivery === option ? '#DBEAFE' : '#fff',
+                        borderColor: editPreferences.delivery === option ? '#2563EB' : '#ddd'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="delivery"
+                        checked={editPreferences.delivery === option}
+                        onChange={() => {
+                          setEditPreferences(prev => ({
+                            ...prev,
+                            delivery: option
+                          }));
+                        }}
+                        style={{ marginRight: '0.5rem' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Shopping Habits */}
+              <div>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#007B7F', fontSize: '1rem' }}>🛒 Shopping Habits</h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                  gap: '0.5rem' 
+                }}>
+                  {SHOPPING_HABITS.map((option) => (
+                    <label 
+                      key={option}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        backgroundColor: editPreferences.shoppingHabits.includes(option) ? '#F3E8FF' : '#fff',
+                        borderColor: editPreferences.shoppingHabits.includes(option) ? '#8B5CF6' : '#ddd'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editPreferences.shoppingHabits.includes(option)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              shoppingHabits: [...prev.shoppingHabits, option]
+                            }));
+                          } else {
+                            setEditPreferences(prev => ({
+                              ...prev,
+                              shoppingHabits: prev.shoppingHabits.filter(item => item !== option)
+                            }));
+                          }
+                        }}
+                        style={{ marginRight: '0.5rem' }}
+                      />
+                      <span style={{ fontSize: '0.9rem' }}>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '1rem', 
+              justifyContent: 'flex-end', 
+              marginTop: '2rem',
+              paddingTop: '1rem',
+              borderTop: '1px solid #E5E7EB'
+            }}>
+              <button
+                onClick={() => setShowPreferencesModal(false)}
+                style={{
+                  background: '#F3F4F6',
+                  color: '#374151',
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePreferences}
+                disabled={preferencesLoading}
+                style={{
+                  background: preferencesLoading ? '#9CA3AF' : '#007B7F',
+                  color: '#fff',
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: preferencesLoading ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500'
+                }}
+              >
+                {preferencesLoading ? 'Saving...' : 'Save Preferences'}
+              </button>
+            </div>
           </div>
         </div>
       )}

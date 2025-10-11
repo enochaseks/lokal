@@ -1064,7 +1064,10 @@ function ExplorePage() {
   const [sortBy, setSortBy] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchRadius, setSearchRadius] = useState(30);
+  const [personalizedShops, setPersonalizedShops] = useState([]);
+  const [regularShops, setRegularShops] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [userPreferences, setUserPreferences] = useState(null);
   const navigate = useNavigate();
   const [selectedCity, setSelectedCity] = useState('');
   const [userCountry, setUserCountry] = useState('');
@@ -1185,9 +1188,11 @@ function ExplorePage() {
             // Check if user exists in the 'users' collection (buyer)
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (userDoc.exists()) {
-              setProfile(userDoc.data());
+              const userData = userDoc.data();
+              setProfile(userData);
+              setUserPreferences(userData.preferences || null);
               setUserType('buyer');
-              console.log("User is a buyer");
+              console.log("User is a buyer with preferences:", userData.preferences);
             } else {
               // Fallback - treat as buyer if we can't determine
               setUserType('buyer');
@@ -2027,10 +2032,125 @@ function ExplorePage() {
         );
       }
       
-      setShops(filteredShops);
+      // Personalize shop order based on user preferences
+      if (userPreferences && (
+        (userPreferences.cultural && userPreferences.cultural.length > 0) || 
+        userPreferences.delivery
+      )) {
+        console.log('Personalizing shops based on user preferences:', {
+          cultural: userPreferences.cultural,
+          delivery: userPreferences.delivery
+        });
+        
+        // Create a scoring system for shops based on user preferences
+        filteredShops = filteredShops.map(shop => {
+          let personalizedScore = 0;
+          
+          // Cultural preferences scoring
+          if (userPreferences.cultural && userPreferences.cultural.length > 0) {
+            // Check if shop origin matches user's cultural preferences
+            if (shop.origin && userPreferences.cultural.includes(shop.origin)) {
+              personalizedScore += 100; // High priority for matching origin
+            }
+            
+            // Check if shop category/description matches cultural preferences
+            const shopText = `${shop.category || ''} ${shop.storeDescription || ''} ${shop.businessType || ''}`.toLowerCase();
+            userPreferences.cultural.forEach(preference => {
+              if (shopText.includes(preference.toLowerCase())) {
+                personalizedScore += 50; // Medium priority for text matches
+              }
+            });
+            
+            // Check for specific cultural product keywords
+            const culturalKeywords = {
+              'West African products': ['african', 'nigerian', 'ghanaian', 'senegalese', 'malian', 'burkina', 'ivory coast', 'liberian', 'sierra leone'],
+              'Caribbean products': ['caribbean', 'jamaican', 'trinidadian', 'barbadian', 'guyanese', 'grenadian', 'dominican', 'haitian'],
+              'East African products': ['ethiopian', 'kenyan', 'tanzanian', 'ugandan', 'rwandan', 'burundian', 'somali', 'eritrean'],
+              'Central African products': ['cameroon', 'congolese', 'gabonese', 'central african', 'chadian'],
+              'North African products': ['moroccan', 'egyptian', 'tunisian', 'algerian', 'libyan', 'sudanese']
+            };
+            
+            userPreferences.cultural.forEach(preference => {
+              if (culturalKeywords[preference]) {
+                culturalKeywords[preference].forEach(keyword => {
+                  if (shopText.includes(keyword)) {
+                    personalizedScore += 75; // High-medium priority for specific cultural keywords
+                  }
+                });
+              }
+            });
+          }
+          
+          // Delivery preferences scoring and filtering
+          if (userPreferences.delivery && userPreferences.delivery !== 'No preference') {
+            const shopDeliveryType = shop.deliveryType || '';
+            
+            // Map user preferences to shop delivery types
+            const preferenceMatches = {
+              'Pickup only': ['Collection', 'Pickup'],
+              'Delivery only': ['Delivery'],
+              'Both pickup and delivery': ['Collection', 'Pickup', 'Delivery', 'Both']
+            };
+            
+            const userDeliveryPref = userPreferences.delivery;
+            const matchingTypes = preferenceMatches[userDeliveryPref] || [];
+            
+            if (matchingTypes.some(type => shopDeliveryType.includes(type))) {
+              personalizedScore += 80; // High priority for delivery preference match
+            } else if (userDeliveryPref === 'Both pickup and delivery') {
+              // If user wants both options, give partial credit to shops with either option
+              if (shopDeliveryType.includes('Collection') || shopDeliveryType.includes('Pickup') || shopDeliveryType.includes('Delivery')) {
+                personalizedScore += 40; // Partial credit for having at least one preferred option
+              }
+            }
+            
+            // Penalize shops that don't match specific delivery preferences
+            if (userDeliveryPref === 'Pickup only' && shopDeliveryType.includes('Delivery') && !shopDeliveryType.includes('Collection') && !shopDeliveryType.includes('Pickup')) {
+              personalizedScore -= 20; // Slight penalty for delivery-only shops when user wants pickup only
+            } else if (userDeliveryPref === 'Delivery only' && (shopDeliveryType.includes('Collection') || shopDeliveryType.includes('Pickup')) && !shopDeliveryType.includes('Delivery')) {
+              personalizedScore -= 20; // Slight penalty for pickup-only shops when user wants delivery only
+            }
+          }
+          
+          return { ...shop, personalizedScore };
+        });
+        
+        // Separate personalized and regular shops
+        const personalizedShopsArray = filteredShops.filter(shop => shop.personalizedScore > 0);
+        const regularShopsArray = filteredShops.filter(shop => shop.personalizedScore === 0);
+        
+        // Sort personalized shops by score (highest first), then by created date
+        personalizedShopsArray.sort((a, b) => {
+          if (a.personalizedScore !== b.personalizedScore) {
+            return b.personalizedScore - a.personalizedScore;
+          }
+          const aDate = a.createdAt?.toDate?.() || new Date(0);
+          const bDate = b.createdAt?.toDate?.() || new Date(0);
+          return bDate - aDate;
+        });
+        
+        // Sort regular shops by creation date (newest first)
+        regularShopsArray.sort((a, b) => {
+          const aDate = a.createdAt?.toDate?.() || new Date(0);
+          const bDate = b.createdAt?.toDate?.() || new Date(0);
+          return bDate - aDate;
+        });
+        
+        setPersonalizedShops(personalizedShopsArray);
+        setRegularShops(regularShopsArray);
+        setShops([...personalizedShopsArray, ...regularShopsArray]); // Keep the combined array for existing functionality
+        
+        console.log('Personalized shops:', personalizedShopsArray.length, 'Regular shops:', regularShopsArray.length);
+        console.log('Top personalized shops:', personalizedShopsArray.slice(0, 3).map(s => ({ name: s.storeName, score: s.personalizedScore, origin: s.origin })));
+      } else {
+        // No preferences, treat all as regular shops
+        setPersonalizedShops([]);
+        setRegularShops(filteredShops);
+        setShops(filteredShops);
+      }
     });
     return () => unsubscribe();
-  }, [selectedCategory, selectedOrigin]);
+  }, [selectedCategory, selectedOrigin, userPreferences]);
 
   useEffect(() => {
     // Fetch ratings for all shops
@@ -4661,6 +4781,69 @@ function ExplorePage() {
                       e.target.src = 'https://via.placeholder.com/300x150?text=Store';
                     }}
                   />
+                  
+                  {/* Dietary Options Banner for Boosted Cards */}
+                  {shop.dietaryOptions && shop.dietaryOptions.length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      left: 8,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '4px',
+                      maxWidth: 'calc(100% - 16px)',
+                      zIndex: 2
+                    }}>
+                      {shop.dietaryOptions.slice(0, 3).map((option, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            background: 'rgba(5, 150, 105, 0.95)',
+                            backdropFilter: 'blur(8px)',
+                            borderRadius: 10,
+                            padding: '3px 6px',
+                            fontWeight: 600,
+                            color: 'white',
+                            fontSize: '0.7rem',
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                            border: '1px solid rgba(5, 150, 105, 0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.6rem' }}>
+                            {option === 'Halal' ? '🥘' :
+                             option === 'Vegetarian' ? '🥬' :
+                             option === 'Vegan' ? '🌱' :
+                             option === 'Kosher' ? '✡️' :
+                             option === 'Gluten-free' ? '🌾' :
+                             option === 'Organic' ? '🌿' :
+                             option === 'No specific dietary options' ? '🍽️' : '🥗'}
+                          </span>
+                          <span style={{ fontSize: '0.65rem' }}>
+                            {option === 'No specific dietary options' ? 'All' : option}
+                          </span>
+                        </div>
+                      ))}
+                      {shop.dietaryOptions.length > 3 && (
+                        <div style={{
+                          background: 'rgba(107, 114, 128, 0.95)',
+                          backdropFilter: 'blur(8px)',
+                          borderRadius: 10,
+                          padding: '3px 6px',
+                          fontWeight: 600,
+                          color: 'white',
+                          fontSize: '0.65rem',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                          border: '1px solid rgba(107, 114, 128, 0.3)'
+                        }}>
+                          +{shop.dietaryOptions.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   {!open && (
                     <div style={{
                       position: 'absolute',
@@ -4743,6 +4926,48 @@ function ExplorePage() {
                       {shop.storeLocation || shop.storeAddress || 'Location not set'}
                     </span>
                   </div>
+
+                  {/* Delivery Information */}
+                  {shop.deliveryType && (
+                    <div style={{
+                      color: '#6b7280',
+                      fontSize: '0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      marginBottom: '6px'
+                    }}>
+                      <span style={{ color: '#059669', fontSize: '0.8rem' }}>🚚</span>
+                      <span style={{ fontWeight: '500' }}>
+                        {shop.deliveryType}
+                      </span>
+                      {/* Highlight if it matches user's delivery preference */}
+                      {userPreferences?.delivery && userPreferences.delivery !== 'No preference' && (
+                        (() => {
+                          const userPref = userPreferences.delivery;
+                          const shopDelivery = shop.deliveryType;
+                          const isMatch = (
+                            (userPref === 'Pickup only' && (shopDelivery.includes('Collection') || shopDelivery.includes('Pickup'))) ||
+                            (userPref === 'Delivery only' && shopDelivery.includes('Delivery')) ||
+                            (userPref === 'Both pickup and delivery' && (shopDelivery.includes('Collection') || shopDelivery.includes('Pickup') || shopDelivery.includes('Delivery')))
+                          );
+                          return isMatch ? (
+                            <span style={{
+                              background: '#dcfce7',
+                              color: '#059669',
+                              padding: '1px 4px',
+                              borderRadius: '3px',
+                              fontSize: '0.65rem',
+                              fontWeight: '600',
+                              marginLeft: '4px'
+                            }}>
+                              ✓ Match
+                            </span>
+                          ) : null;
+                        })()
+                      )}
+                    </div>
+                  )}
                   
                   <div style={{ 
                     fontSize: '0.8rem',
@@ -7952,6 +8177,310 @@ function ExplorePage() {
         </>
       )}
 
+      {/* Personalized Recommendations Section - Only visible when user has preferences */}
+      {currentUser && userType === 'buyer' && personalizedShops.length > 0 && (
+        <>
+          <h2 style={{ 
+            margin: '3rem 0 1rem 1rem', 
+            color: '#6366f1', 
+            fontWeight: '800', 
+            fontSize: '1.8rem', 
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
+            ✨ Recommended For You
+            <span style={{ 
+              background: '#f0f0ff', 
+              color: '#6366f1', 
+              borderRadius: '12px', 
+              padding: '2px 8px', 
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              border: '1px solid #6366f1'
+            }}>
+              {personalizedShops.length}
+            </span>
+            <span style={{ 
+              background: '#fef3c7', 
+              color: '#d97706', 
+              borderRadius: '8px', 
+              padding: '2px 6px', 
+              fontSize: '0.7rem',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>
+              Based on your preferences
+            </span>
+          </h2>
+          
+          <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '0 1rem 2rem', scrollbarWidth: 'thin' }}>
+            {personalizedShops.slice(0, 10).filter(shop => !blockedStores.has(shop.id)).map(shop => {
+              // Use the same store card logic from other sections
+              const today = daysOfWeek[new Date().getDay()];
+              const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
+              const todayOpening = shop.openingTimes && shop.openingTimes[today];
+              const todayClosing = shop.closingTimes && shop.closingTimes[today];
+              
+              function isStoreOpenForToday(shop) {
+                if (!shop) return false;
+                
+                const today = daysOfWeek[new Date().getDay()];
+                
+                // Check if store is closed today
+                if (shop.closedDays && shop.closedDays.includes(today)) {
+                  return false;
+                }
+                
+                // Get today's opening and closing times
+                const todayOpening = shop.openingTimes && shop.openingTimes[today];
+                const todayClosing = shop.closingTimes && shop.closingTimes[today];
+                
+                // If no specific times set for today, fall back to general opening/closing times
+                const opening = todayOpening || shop.openingTime;
+                const closing = todayClosing || shop.closingTime;
+                
+                if (!opening || !closing) return false;
+                
+                const now = new Date();
+                const [openH, openM] = opening.split(':').map(Number);
+                const [closeH, closeM] = closing.split(':').map(Number);
+                
+                const openDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openH, openM);
+                const closeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeH, closeM);
+                
+                // Handle overnight hours (e.g., 10 PM to 6 AM)
+                if (closeH < openH || (closeH === openH && closeM < openM)) {
+                  const nextDayClose = new Date(closeDate);
+                  nextDayClose.setDate(nextDayClose.getDate() + 1);
+                  return now >= openDate || now <= nextDayClose;
+                }
+                
+                return now >= openDate && now <= closeDate;
+              }
+              
+              const open = isStoreOpenForToday(shop);
+              const storeRating = ratings[shop.id];
+              
+              return (
+                <div
+                  key={shop.id}
+                  onClick={() => navigate(`/store-preview/${shop.id}`)}
+                  style={{
+                    minWidth: 200,
+                    backgroundColor: '#fff',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    border: '2px solid #e0e7ff',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.1)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(99, 102, 241, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0px)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.1)';
+                  }}
+                >
+                  {/* Personalization indicator */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                    color: 'white',
+                    borderRadius: '6px',
+                    padding: '2px 6px',
+                    fontSize: '0.7rem',
+                    fontWeight: '600',
+                    zIndex: 2,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    ✨ Match
+                  </div>
+                  
+                  <div style={{ height: '120px', overflow: 'hidden', borderRadius: '12px 12px 0 0', position: 'relative' }}>
+                    <img
+                      src={shop.storeImageURL || '/images/logo png.png'}
+                      alt={shop.storeName}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                    
+                    {/* Dietary Options Banner for Personalized Cards */}
+                    {shop.dietaryOptions && shop.dietaryOptions.length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        left: 6,
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '3px',
+                        maxWidth: 'calc(100% - 12px)',
+                      }}>
+                        {shop.dietaryOptions.slice(0, 2).map((option, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              background: 'rgba(5, 150, 105, 0.95)',
+                              backdropFilter: 'blur(8px)',
+                              borderRadius: 8,
+                              padding: '1px 4px',
+                              fontWeight: 600,
+                              color: 'white',
+                              fontSize: '0.6rem',
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                              border: '1px solid rgba(5, 150, 105, 0.3)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                          >
+                            <span style={{ fontSize: '0.5rem' }}>
+                              {option === 'Halal' ? '🥘' :
+                               option === 'Vegetarian' ? '🥬' :
+                               option === 'Vegan' ? '🌱' :
+                               option === 'Kosher' ? '✡️' :
+                               option === 'Gluten-free' ? '🌾' :
+                               option === 'Organic' ? '🌿' :
+                               option === 'No specific dietary options' ? '🍽️' : '🥗'}
+                            </span>
+                            <span>
+                              {option === 'No specific dietary options' ? 'All' : 
+                               option.length > 8 ? option.substring(0, 6) + '...' : option}
+                            </span>
+                          </div>
+                        ))}
+                        {shop.dietaryOptions.length > 2 && (
+                          <div style={{
+                            background: 'rgba(107, 114, 128, 0.95)',
+                            backdropFilter: 'blur(8px)',
+                            borderRadius: 8,
+                            padding: '1px 4px',
+                            fontWeight: 600,
+                            color: 'white',
+                            fontSize: '0.6rem',
+                            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                            border: '1px solid rgba(107, 114, 128, 0.3)'
+                          }}>
+                            +{shop.dietaryOptions.length - 2}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '12px' }}>
+                    <h3 style={{ 
+                      margin: '0 0 8px 0', 
+                      fontSize: '1rem', 
+                      fontWeight: '700',
+                      color: '#1f2937',
+                      lineHeight: '1.3'
+                    }}>
+                      {shop.storeName}
+                    </h3>
+                    {shop.origin && (
+                      <p style={{ 
+                        margin: '0 0 8px 0', 
+                        fontSize: '0.8rem', 
+                        color: '#6366f1',
+                        fontWeight: '600'
+                      }}>
+                        🌍 {shop.origin}
+                      </p>
+                    )}
+                    
+                    {/* Delivery Information */}
+                    {shop.deliveryType && (
+                      <div style={{
+                        margin: '0 0 8px 0',
+                        fontSize: '0.75rem',
+                        color: '#6b7280',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <span style={{ color: '#059669', fontSize: '0.8rem' }}>🚚</span>
+                        <span style={{ fontWeight: '500' }}>
+                          {shop.deliveryType}
+                        </span>
+                        {/* Highlight if it matches user's delivery preference */}
+                        {userPreferences?.delivery && userPreferences.delivery !== 'No preference' && (
+                          (() => {
+                            const userPref = userPreferences.delivery;
+                            const shopDelivery = shop.deliveryType;
+                            const isMatch = (
+                              (userPref === 'Pickup only' && (shopDelivery.includes('Collection') || shopDelivery.includes('Pickup'))) ||
+                              (userPref === 'Delivery only' && shopDelivery.includes('Delivery')) ||
+                              (userPref === 'Both pickup and delivery' && (shopDelivery.includes('Collection') || shopDelivery.includes('Pickup') || shopDelivery.includes('Delivery')))
+                            );
+                            return isMatch ? (
+                              <span style={{
+                                background: '#dcfce7',
+                                color: '#059669',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                fontSize: '0.6rem',
+                                fontWeight: '600',
+                                marginLeft: '4px'
+                              }}>
+                                ✓ Match
+                              </span>
+                            ) : null;
+                          })()
+                        )}
+                      </div>
+                    )}
+                    
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '4px'
+                    }}>
+                      <span style={{ 
+                        color: open ? '#059669' : '#dc2626', 
+                        fontSize: '0.7rem', 
+                        fontWeight: '600',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: open ? '#d1fae5' : '#fee2e2'
+                      }}>
+                        {open ? '🟢 OPEN NOW' : '🔴 CLOSED'}
+                      </span>
+                      {shop.category && (
+                        <span style={{ 
+                          background: '#f0f0ff',
+                          color: '#6366f1',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: '600'
+                        }}>
+                          {shop.category}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {/* Shops Near You Section - Only visible to buyers and unauthenticated users */}
       {(userType === 'buyer' || !currentUser) && (
         <>
@@ -7966,7 +8495,7 @@ function ExplorePage() {
             gap: '8px',
             textShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)'
           }}>
-            📍 Shops Near You
+            📍 {personalizedShops.length > 0 ? 'More Shops Near You' : 'Shops Near You'}
             <span style={{ 
               background: '#f0f9f9', 
               color: '#007B7F', 
@@ -7975,11 +8504,11 @@ function ExplorePage() {
               fontSize: '0.9rem',
               fontWeight: '500'
             }}>
-              {filteredShops.length}
+              {personalizedShops.length > 0 ? regularShops.length : filteredShops.length}
             </span>
           </h2>
       
-      {filteredShops.length === 0 ? (
+      {(personalizedShops.length > 0 ? regularShops.length : filteredShops.length) === 0 ? (
           <div style={{
             display: 'flex',
             justifyContent: 'center',
@@ -8006,7 +8535,7 @@ function ExplorePage() {
         </div>
       ) : (
         <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', padding: '0 1rem 1rem' }}>
-        {filteredShops.map(shop => {
+        {(personalizedShops.length > 0 ? regularShops : filteredShops).map(shop => {
           // New logic for open/closed status
           const today = daysOfWeek[new Date().getDay()];
           const isClosedToday = shop.closedDays && shop.closedDays.includes(today);
@@ -8151,6 +8680,67 @@ function ExplorePage() {
                   {isClosedToday ? 'Closed Today' : (open ? 'Open' : 'Closed')}
                 </div>
                 
+                {/* Dietary Options Banner */}
+                {shop.dietaryOptions && shop.dietaryOptions.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    left: 12,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '4px',
+                    maxWidth: 'calc(100% - 100px)', // Leave space for distance badge
+                  }}>
+                    {shop.dietaryOptions.slice(0, 3).map((option, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          background: 'rgba(5, 150, 105, 0.95)',
+                          backdropFilter: 'blur(8px)',
+                          borderRadius: 12,
+                          padding: '2px 6px',
+                          fontWeight: 600,
+                          color: 'white',
+                          fontSize: '0.7rem',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                          border: '1px solid rgba(5, 150, 105, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}
+                      >
+                        <span>
+                          {option === 'Halal' ? '🥘' :
+                           option === 'Vegetarian' ? '🥬' :
+                           option === 'Vegan' ? '🌱' :
+                           option === 'Kosher' ? '✡️' :
+                           option === 'Gluten-free' ? '🌾' :
+                           option === 'Organic' ? '🌿' :
+                           option === 'No specific dietary options' ? '🍽️' : '🥗'}
+                        </span>
+                        <span style={{ fontSize: '0.65rem' }}>
+                          {option === 'No specific dietary options' ? 'All' : option}
+                        </span>
+                      </div>
+                    ))}
+                    {shop.dietaryOptions.length > 3 && (
+                      <div style={{
+                        background: 'rgba(107, 114, 128, 0.95)',
+                        backdropFilter: 'blur(8px)',
+                        borderRadius: 12,
+                        padding: '2px 6px',
+                        fontWeight: 600,
+                        color: 'white',
+                        fontSize: '0.65rem',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                        border: '1px solid rgba(107, 114, 128, 0.3)'
+                      }}>
+                        +{shop.dietaryOptions.length - 3}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {distance !== null && (
                   <div style={{
                     position: 'absolute',
@@ -8708,6 +9298,68 @@ function ExplorePage() {
                               ⭐ {storeRating.avg}
                             </div>
                           )}
+                          {/* Dietary Options Banner for Category Cards */}
+                          {shop.dietaryOptions && shop.dietaryOptions.length > 0 && (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: 6,
+                              left: 8,
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '2px',
+                              maxWidth: distance ? 'calc(100% - 80px)' : 'calc(100% - 16px)', // Leave space for distance badge if present
+                            }}>
+                              {shop.dietaryOptions.slice(0, 2).map((option, index) => (
+                                <div
+                                  key={index}
+                                  style={{
+                                    background: 'rgba(5, 150, 105, 0.95)',
+                                    backdropFilter: 'blur(8px)',
+                                    borderRadius: 6,
+                                    padding: '1px 4px',
+                                    fontWeight: 600,
+                                    color: 'white',
+                                    fontSize: '0.6rem',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(5, 150, 105, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1px'
+                                  }}
+                                >
+                                  <span style={{ fontSize: '0.5rem' }}>
+                                    {option === 'Halal' ? '🥘' :
+                                     option === 'Vegetarian' ? '🥬' :
+                                     option === 'Vegan' ? '🌱' :
+                                     option === 'Kosher' ? '✡️' :
+                                     option === 'Gluten-free' ? '🌾' :
+                                     option === 'Organic' ? '🌿' :
+                                     option === 'No specific dietary options' ? '🍽️' : '🥗'}
+                                  </span>
+                                  <span>
+                                    {option === 'No specific dietary options' ? 'All' : 
+                                     option.length > 6 ? option.substring(0, 4) + '..' : option}
+                                  </span>
+                                </div>
+                              ))}
+                              {shop.dietaryOptions.length > 2 && (
+                                <div style={{
+                                  background: 'rgba(107, 114, 128, 0.95)',
+                                  backdropFilter: 'blur(8px)',
+                                  borderRadius: 6,
+                                  padding: '1px 4px',
+                                  fontWeight: 600,
+                                  color: 'white',
+                                  fontSize: '0.6rem',
+                                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                                  border: '1px solid rgba(107, 114, 128, 0.3)'
+                                }}>
+                                  +{shop.dietaryOptions.length - 2}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {distance && (
                             <div style={{ 
                               position: 'absolute', 

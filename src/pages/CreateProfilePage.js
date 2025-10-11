@@ -68,8 +68,15 @@ function CreateProfilePage() {
           }
         }
       } catch {}
-      // Save profile to Firestore
-      await setDoc(doc(db, 'users', user.uid), {
+      // Get existing user data to preserve preferences and shopping data
+      const { getDoc } = await import('firebase/firestore');
+      const userRef = doc(db, 'users', user.uid);
+      const existingData = await getDoc(userRef);
+      const userData = existingData.exists() ? existingData.data() : {};
+      
+      // Save complete profile to Firestore (preserving existing data)
+      await setDoc(userRef, {
+        ...userData, // Preserve existing data (preferences, shoppingPreferences, etc.)
         name,
         location: fullAddress,
         latitude: lat,
@@ -77,10 +84,15 @@ function CreateProfilePage() {
         photoURL,
         uid: user.uid,
         email: user.email || '',
-        createdAt: new Date().toISOString(),
+        createdAt: userData.createdAt || new Date().toISOString(),
+        profileCompletedAt: new Date().toISOString(),
+        userType: 'buyer', // Explicitly maintain buyer type
+        onboardingStep: 'complete'
       });
-      // Mark onboarding as complete
-      await updateDoc(doc(db, 'users', user.uid), { onboardingStep: 'complete' });
+      
+      // Clear user type cache to force fresh detection
+      const cacheKey = `userType_${user.uid}`;
+      localStorage.removeItem(cacheKey);
       setLoading(false);
       navigate('/profile');
     } catch (err) {

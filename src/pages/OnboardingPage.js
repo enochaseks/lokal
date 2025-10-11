@@ -18,9 +18,18 @@ function OnboardingPage() {
           email: user.email,
           createdAt: new Date().toISOString(),
           onboardingStep: 'onboarding-sell-category',
+          userType: 'seller', // Explicitly set user type
+        });
+      } else {
+        await updateDoc(userRef, { 
+          onboardingStep: 'onboarding-sell-category',
+          userType: 'seller' // Ensure user type is set
         });
       }
-      await updateDoc(userRef, { onboardingStep: 'onboarding-sell-category' });
+      
+      // Clear user type cache to force fresh detection
+      const cacheKey = `userType_${user.uid}`;
+      localStorage.removeItem(cacheKey);
     }
     navigate('/onboarding-sell-category');
   };
@@ -39,9 +48,18 @@ function OnboardingPage() {
           email: user.email,
           createdAt: new Date().toISOString(),
           onboardingStep: 'onboarding-shop-type',
+          userType: 'buyer', // Explicitly set user type
+        });
+      } else {
+        await updateDoc(userRef, { 
+          onboardingStep: 'onboarding-shop-type',
+          userType: 'buyer' // Ensure user type is set
         });
       }
-      await updateDoc(userRef, { onboardingStep: 'onboarding-shop-type' });
+      
+      // Clear user type cache to force fresh detection
+      const cacheKey = `userType_${user.uid}`;
+      localStorage.removeItem(cacheKey);
     }
     navigate('/onboarding-shop-type');
   };

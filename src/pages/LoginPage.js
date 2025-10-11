@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { app } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { checkAndSyncEmailVerification } from '../utils/emailVerification';
 
@@ -78,15 +78,29 @@ function LoginPage() {
       const auth = getAuth(app);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      
+      // Clear any cached user type to force fresh detection
+      const cacheKey = `userType_${user.uid}`;
+      localStorage.removeItem(cacheKey);
+      
       // Check if user is deactivated or deleted in Firestore
-      let userDocSnap = await getDoc(doc(db, 'users', user.uid));
-      if (!userDocSnap.exists()) {
-        // Try as seller
-        userDocSnap = await getDoc(doc(db, 'stores', user.uid));
+      let userDocSnap, storeDocSnap;
+      try {
+        [userDocSnap, storeDocSnap] = await Promise.all([
+          getDoc(doc(db, 'users', user.uid)),
+          getDoc(doc(db, 'stores', user.uid))
+        ]);
+      } catch (dbError) {
+        console.error('Error checking user documents:', dbError);
+        // Continue with login but log the error
+        setError('Warning: Could not verify account status. Please contact support if you experience issues.');
       }
       
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
+      // Determine which document to use for status checks
+      let primaryDoc = userDocSnap?.exists() ? userDocSnap : storeDocSnap;
+      
+      if (primaryDoc?.exists()) {
+        const userData = primaryDoc.data();
         
         // Check if account was deleted by admin
         if (userData.deleted || userData.accountStatus === 'deleted') {
@@ -104,12 +118,33 @@ function LoginPage() {
           return;
         }
         
-        // Onboarding progress check
-        const onboardingStep = userData.onboardingStep;
+        // Onboarding progress check (prioritize user document)
+        const onboardingStep = userDocSnap?.exists() ? 
+          userDocSnap.data().onboardingStep : 
+          storeDocSnap?.exists() ? storeDocSnap.data().onboardingStep : null;
+          
         if (onboardingStep && onboardingStep !== 'complete') {
           navigate('/' + onboardingStep);
           setLoading(false);
           return;
+        }
+      } else if (!userDocSnap?.exists() && !storeDocSnap?.exists()) {
+        // No documents found - this shouldn't happen for existing users
+        console.warn('No user or store document found for logged in user:', user.uid);
+        // Create a basic user document to prevent future issues
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            email: user.email,
+            createdAt: new Date().toISOString(),
+            onboardingStep: 'onboarding',
+            userType: 'buyer',
+            uid: user.uid
+          });
+          navigate('/onboarding');
+          setLoading(false);
+          return;
+        } catch (createError) {
+          console.error('Error creating missing user document:', createError);
         }
       }
       navigate('/explore');

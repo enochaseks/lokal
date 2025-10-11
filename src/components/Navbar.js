@@ -43,22 +43,29 @@ function Navbar() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Check if user is a seller (has a store doc)
-        const storeDoc = await getDoc(doc(db, 'stores', u.uid));
-        if (storeDoc.exists()) {
-          setUserType('seller');
-          console.log('👤 User type set to: seller');
-        } else {
-          setUserType('buyer');
-          console.log('👤 User type set to: buyer');
-        }
-        // Onboarding guard - only redirect if email is verified
-        if (u.emailVerified) {
-          const userDoc = await getDoc(doc(db, 'users', u.uid));
-          const onboardingStepValue = userDoc.exists() ? userDoc.data().onboardingStep : null;
-          setOnboardingStep(onboardingStepValue);
-          if (onboardingStepValue && onboardingStepValue !== 'complete') {
-            navigate('/' + onboardingStepValue);
+        try {
+          // More robust user type detection
+          await determineUserType(u.uid);
+          
+          // Onboarding guard - only redirect if email is verified
+          if (u.emailVerified) {
+            const userDoc = await getDoc(doc(db, 'users', u.uid));
+            const onboardingStepValue = userDoc.exists() ? userDoc.data().onboardingStep : null;
+            setOnboardingStep(onboardingStepValue);
+            if (onboardingStepValue && onboardingStepValue !== 'complete') {
+              navigate('/' + onboardingStepValue);
+            }
+          }
+        } catch (error) {
+          console.error('Error during user authentication setup:', error);
+          // Fallback: try simple detection
+          try {
+            const storeDoc = await getDoc(doc(db, 'stores', u.uid));
+            setUserType(storeDoc.exists() ? 'seller' : 'buyer');
+            console.log('👤 Fallback user type detection used');
+          } catch (fallbackError) {
+            console.error('Fallback user type detection failed:', fallbackError);
+            setUserType('buyer'); // Default to buyer if all else fails
           }
         }
       } else {
@@ -72,6 +79,81 @@ function Navbar() {
     });
     return () => unsubscribe();
   }, [navigate]);
+
+  // Enhanced user type determination function
+  const determineUserType = async (uid) => {
+    // CRITICAL: Clear old cache to fix buyer/seller detection bug
+    // This ensures all users get the corrected logic
+    const cacheKey = `userType_${uid}`;
+    const fixVersion = localStorage.getItem('userTypeFix_v2');
+    if (!fixVersion) {
+      localStorage.removeItem(cacheKey);
+      localStorage.setItem('userTypeFix_v2', 'applied');
+      console.log('👤 Cleared old user type cache for bug fix');
+    }
+    
+    // Check cache first (stored in localStorage with timestamp)
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const { userType: cachedType, timestamp } = JSON.parse(cached);
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        if (timestamp > fiveMinutesAgo) {
+          setUserType(cachedType);
+          console.log('👤 User type loaded from cache:', cachedType);
+          return;
+        }
+      } catch (e) {
+        // Invalid cache, continue with fresh detection
+        localStorage.removeItem(cacheKey);
+      }
+    }
+
+    // Parallel fetching for better performance
+    const [userDocSnap, storeDocSnap] = await Promise.all([
+      getDoc(doc(db, 'users', uid)),
+      getDoc(doc(db, 'stores', uid))
+    ]);
+
+    let detectedType = 'buyer'; // Safe default
+
+    // CRITICAL FIX: User type should ONLY be determined by store existence
+    // Having onboarding data (category, storeName, etc.) doesn't make someone a seller
+    // Only actually creating a store makes them a seller
+    
+    if (storeDocSnap.exists()) {
+      detectedType = 'seller';
+      console.log('👤 User type: SELLER (has active store)');
+    }
+    else if (userDocSnap.exists()) {
+      const userData = userDocSnap.data();
+      
+      // Only check explicit userType field, ignore onboarding data
+      if (userData.userType === 'seller') {
+        // Double-check: if explicitly marked as seller but no store, they're actually a buyer
+        detectedType = 'buyer';
+        console.log('👤 User type: BUYER (marked as seller but no store exists)');
+      } else {
+        // Default to buyer - this covers all cases including incomplete onboarding
+        detectedType = 'buyer';
+        console.log('👤 User type: BUYER (no store document)');
+      }
+    }
+    else {
+      // No user document found - default to buyer
+      detectedType = 'buyer';
+      console.log('👤 User type: BUYER (no user document found)');
+    }
+
+    // Cache the result
+    localStorage.setItem(cacheKey, JSON.stringify({
+      userType: detectedType,
+      timestamp: Date.now()
+    }));
+
+    setUserType(detectedType);
+    console.log('👤 Final user type set to:', detectedType);
+  };
 
   // Track feed notifications for buyers
   useEffect(() => {
@@ -613,6 +695,15 @@ function Navbar() {
     } else {
       // Show error message for incorrect code
       setAdminCodeError('Invalid access code. Please try again.');
+    }
+  };
+
+  // Utility function to clear user type cache (can be called when user type changes)
+  const clearUserTypeCache = (uid) => {
+    if (uid) {
+      const cacheKey = `userType_${uid}`;
+      localStorage.removeItem(cacheKey);
+      console.log('👤 User type cache cleared for:', uid);
     }
   };
 

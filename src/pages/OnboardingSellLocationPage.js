@@ -32,8 +32,10 @@ function OnboardingSellLocationPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const category = location.state?.category || '';
+  const handlesFoodPreparation = location.state?.handlesFoodPreparation || '';
   const sellsPerishableFood = location.state?.sellsPerishableFood || '';
   const categoryFoodHygieneProof = location.state?.foodHygieneProof || null;
+  const categoryCouncilRegistrationForm = location.state?.councilRegistrationForm || null;
   const [showStoreForm, setShowStoreForm] = useState(false);
   const [showMarketForm, setShowMarketForm] = useState(false);
   const [showOnlineForm, setShowOnlineForm] = useState(false);
@@ -235,8 +237,10 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               } else {
                 await updateDoc(userRef, {
@@ -250,13 +254,15 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               }
             }
             console.log('STORE FORM SUBMIT', { storeName, fullAddress, origin, category, deliveryType, lat, lon, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof });
-            navigate('/create-shop', { state: { storeName, storeLocation: fullAddress, businessId, certificate, origin, category, deliveryType, latitude: lat, longitude: lon, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, sellsAlcohol, alcoholLicense } });
+            navigate('/create-shop', { state: { storeName, storeLocation: fullAddress, businessId, certificate, origin, category, deliveryType, latitude: lat, longitude: lon, handlesFoodPreparation, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, councilRegistrationForm: categoryCouncilRegistrationForm, sellsAlcohol, alcoholLicense } });
           }}>
             <div style={{ marginBottom: '1rem', position: 'relative' }}>
               <label style={{ color: '#1C1C1C', display: 'block', marginBottom: 4 }}>Store Name</label>
@@ -387,7 +393,7 @@ function OnboardingSellLocationPage() {
                   const userRef = doc(db, 'users', user.uid);
                   await updateDoc(userRef, { onboardingStep: 'create-shop' });
                 }
-                navigate('/create-shop', { state: { storeName, storeLocation: storeFullAddress, businessId, certificate, origin, category, deliveryType, latitude: lat, longitude: lon, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, sellsAlcohol, alcoholLicense } });
+                navigate('/create-shop', { state: { storeName, storeLocation: storeFullAddress, businessId, certificate, origin, category, deliveryType, latitude: lat, longitude: lon, handlesFoodPreparation, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, councilRegistrationForm: categoryCouncilRegistrationForm, sellsAlcohol, alcoholLicense } });
               }}
               disabled={!locationVerified}
               type="button"
@@ -435,8 +441,10 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               } else {
                 await updateDoc(userRef, {
@@ -450,8 +458,10 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               }
             }
@@ -466,8 +476,10 @@ function OnboardingSellLocationPage() {
               longitude: lon,
               foodHygiene,
               marketStallLicence,
+              handlesFoodPreparation,
               sellsPerishableFood,
               foodHygieneProof: categoryFoodHygieneProof,
+              councilRegistrationForm: categoryCouncilRegistrationForm,
               sellsAlcohol,
               alcoholLicense
             } });
@@ -604,8 +616,10 @@ function OnboardingSellLocationPage() {
                   longitude: lon,
                   foodHygiene,
                   marketStallLicence,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                   sellsAlcohol,
                   alcoholLicense
                 } });
@@ -659,8 +673,10 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               } else {
                 await updateDoc(userRef, {
@@ -677,8 +693,10 @@ function OnboardingSellLocationPage() {
                   deliveryType,
                   latitude: lat,
                   longitude: lon,
+                  handlesFoodPreparation,
                   sellsPerishableFood,
                   foodHygieneProof: categoryFoodHygieneProof,
+                  councilRegistrationForm: categoryCouncilRegistrationForm,
                 });
               }
             }
@@ -696,8 +714,10 @@ function OnboardingSellLocationPage() {
               hasWebsite,
               websiteLink,
               onlineLicence,
+              handlesFoodPreparation,
               sellsPerishableFood,
               foodHygieneProof: categoryFoodHygieneProof,
+              councilRegistrationForm: categoryCouncilRegistrationForm,
               sellsAlcohol,
               alcoholLicense
             } });
@@ -820,7 +840,7 @@ function OnboardingSellLocationPage() {
                   const userRef = doc(db, 'users', user.uid);
                   await updateDoc(userRef, { onboardingStep: 'create-shop' });
                 }
-                navigate('/create-shop', { state: { storeName: onlineName, storeLocation: onlineFullAddress, origin, category, deliveryType, latitude: lat, longitude: lon, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, sellsAlcohol, alcoholLicense } });
+                navigate('/create-shop', { state: { storeName: onlineName, storeLocation: onlineFullAddress, origin, category, deliveryType, latitude: lat, longitude: lon, handlesFoodPreparation, sellsPerishableFood, foodHygieneProof: categoryFoodHygieneProof, councilRegistrationForm: categoryCouncilRegistrationForm, sellsAlcohol, alcoholLicense } });
               }}
               disabled={!locationVerified}
               type="button"

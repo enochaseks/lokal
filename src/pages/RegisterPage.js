@@ -162,6 +162,7 @@ function RegisterPage() {
         marketingConsent: marketingConsent,
         emailVerified: false,
         uid: user.uid,
+        userType: 'buyer', // All new users start as buyers until they choose to sell
 
       };
 

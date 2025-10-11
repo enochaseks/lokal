@@ -16,6 +16,17 @@ const caribbeanIslands = [
   'Jamaica', 'Trinidad and Tobago', 'Barbados', 'Bahamas', 'Saint Lucia', 'Grenada', 'Saint Vincent and the Grenadines', 'Antigua and Barbuda', 'Dominica', 'Saint Kitts and Nevis', 'Cuba', 'Haiti', 'Dominican Republic', 'Puerto Rico', 'Aruba', 'Curacao', 'Saint Martin', 'Saint Barthelemy', 'Anguilla', 'Montserrat', 'British Virgin Islands', 'US Virgin Islands', 'Cayman Islands', 'Turks and Caicos', 'Guadeloupe', 'Martinique', 'Saint Pierre and Miquelon',
 ];
 
+// Dietary options that stores can offer
+const DIETARY_OPTIONS = [
+  'Halal',
+  'Vegetarian', 
+  'Vegan',
+  'Kosher',
+  'Gluten-free',
+  'Organic',
+  'No specific dietary options'
+];
+
 function StoreProfilePage() {
   const location = useLocation();
   const [profile, setProfile] = useState(null);
@@ -86,8 +97,10 @@ function StoreProfilePage() {
   const [editAlcoholLicense, setEditAlcoholLicense] = useState(null);
   const [editSellsPerishableFood, setEditSellsPerishableFood] = useState('');
   const [editFoodHygieneProof, setEditFoodHygieneProof] = useState(null);
+  const [editCouncilRegistrationForm, setEditCouncilRegistrationForm] = useState(null);
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
   const [editPhoneType, setEditPhoneType] = useState('work');
+  const [editDietaryOptions, setEditDietaryOptions] = useState([]);
   
   // Social media and website fields - now as arrays for multiple links
   const [editSocialLinks, setEditSocialLinks] = useState([]);
@@ -149,8 +162,10 @@ function StoreProfilePage() {
           setEditAlcoholLicense(data.alcoholLicense || null);
           setEditSellsPerishableFood(data.sellsPerishableFood || '');
           setEditFoodHygieneProof(data.foodHygieneProof || data.foodHygiene || null);
+          setEditCouncilRegistrationForm(data.councilRegistrationForm || null);
           setEditPhoneNumber(data.phoneNumber || '');
           setEditPhoneType(data.phoneType || 'work');
+          setEditDietaryOptions(data.dietaryOptions || []);
           
           // Initialize social media and website arrays - convert from old format if needed
           const socialLinks = data.socialLinks || [];
@@ -697,9 +712,22 @@ function StoreProfilePage() {
       return;
     }
     
+    // Check food hygiene requirements
     if (editSellsPerishableFood === 'yes' && editFoodHygieneProof === null && !profile.foodHygieneProof && !profile.foodHygiene) {
       alert('You must upload food hygiene certificate/proof to sell perishable food items.');
       return;
+    }
+    
+    // If user indicates they handle food preparation but don't have the required documents from onboarding
+    if (profile.handlesFoodPreparation === 'yes') {
+      if (!profile.foodHygieneProof && !profile.foodHygiene && editFoodHygieneProof === null) {
+        alert('Food hygiene certificate is required for food preparation activities.');
+        return;
+      }
+      if (!profile.councilRegistrationForm && editCouncilRegistrationForm === null) {
+        alert('Council registration form is required for food preparation activities.');
+        return;
+      }
     }
     
     await executeSave();
@@ -731,6 +759,20 @@ function StoreProfilePage() {
       } else if (typeof editFoodHygieneProof === 'string') {
         // Keep existing URL if it's already a string
         foodHygieneProofUrl = editFoodHygieneProof;
+      }
+
+      // Upload council registration form if it's a new file
+      let councilRegistrationFormUrl = profile.councilRegistrationForm || '';
+      if (editCouncilRegistrationForm === null) {
+        // User explicitly removed the file
+        councilRegistrationFormUrl = '';
+      } else if (editCouncilRegistrationForm && typeof editCouncilRegistrationForm !== 'string') {
+        const councilRef = ref(storage, `councilRegistrations/${user.uid}_${editCouncilRegistrationForm.name}`);
+        await uploadBytes(councilRef, editCouncilRegistrationForm);
+        councilRegistrationFormUrl = await getDownloadURL(councilRef);
+      } else if (typeof editCouncilRegistrationForm === 'string') {
+        // Keep existing URL if it's already a string
+        councilRegistrationFormUrl = editCouncilRegistrationForm;
       }
 
       // Upload alcohol license if it's a new file
@@ -802,10 +844,12 @@ function StoreProfilePage() {
         alcoholLicense: alcoholLicenseUrl,
         sellsPerishableFood: editSellsPerishableFood,
         foodHygieneProof: foodHygieneProofUrl,
+        councilRegistrationForm: councilRegistrationFormUrl,
         // Also store as foodHygiene for backward compatibility with hasLicenses check
         foodHygiene: foodHygieneProofUrl,
         phoneNumber: editPhoneNumber,
         phoneType: editPhoneType,
+        dietaryOptions: editDietaryOptions,
         // Social media and website arrays
         socialLinks: editSocialLinks,
         websiteLinks: editWebsiteLinks,
@@ -2694,6 +2738,45 @@ function StoreProfilePage() {
                   </div>
                 )}
                 
+                {/* Council Registration Form Section - only show if user handles food preparation */}
+                {profile.handlesFoodPreparation === 'yes' && (
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>
+                      Council Registration Form {profile.councilRegistrationForm ? '(optional - already uploaded)' : '(Required for food preparation)'}
+                    </label>
+                    <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                      Council registration form is required for food preparation activities.
+                    </p>
+                    {profile.councilRegistrationForm && editCouncilRegistrationForm !== null && (
+                      <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f0f9f0', borderRadius: 4, border: '1px solid #d4edda' }}>
+                        <span style={{ color: '#155724', fontSize: '0.9rem' }}>✓ Council registration form already uploaded</span>
+                        <a href={profile.councilRegistrationForm} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#007B7F' }}>View current file</a>
+                        <button 
+                          type="button" 
+                          onClick={() => setEditCouncilRegistrationForm(null)} 
+                          style={{ 
+                            marginLeft: 8, 
+                            color: '#dc3545', 
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            fontSize: '0.85rem',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          Remove file
+                        </button>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*,application/pdf" onChange={e => setEditCouncilRegistrationForm(e.target.files[0])} style={{ width: '100%' }} {...(!profile.councilRegistrationForm && { required: true })} />
+                    {profile.councilRegistrationForm && (
+                      <p style={{ color: '#666', fontSize: '0.85rem', marginTop: 4, marginBottom: 0 }}>
+                        Leave empty to keep current file, or select a new file to replace it
+                      </p>
+                    )}
+                  </div>
+                )}
+                
                 {/* Phone Number Section */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Phone Number (optional)</label>
@@ -3096,6 +3179,59 @@ function StoreProfilePage() {
                     )}
                   </div>
                 ))}
+
+                {/* Dietary Preferences Section */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontWeight: 500, marginBottom: 8, display: 'block', color: '#495057' }}>
+                    🥗 Dietary Options Available
+                  </label>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                    gap: '8px',
+                    marginBottom: 8
+                  }}>
+                    {DIETARY_OPTIONS.map((option) => (
+                      <label 
+                        key={option}
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          cursor: 'pointer',
+                          padding: '8px 12px',
+                          border: '1px solid #ddd',
+                          borderRadius: '8px',
+                          backgroundColor: editDietaryOptions.includes(option) ? '#E8F5E8' : '#fff',
+                          borderColor: editDietaryOptions.includes(option) ? '#007B7F' : '#ddd',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editDietaryOptions.includes(option)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditDietaryOptions([...editDietaryOptions, option]);
+                            } else {
+                              setEditDietaryOptions(editDietaryOptions.filter(item => item !== option));
+                            }
+                          }}
+                          style={{ marginRight: '8px' }}
+                        />
+                        <span style={{ 
+                          fontSize: '0.9rem',
+                          color: editDietaryOptions.includes(option) ? '#007B7F' : '#495057'
+                        }}>
+                          {option}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>
+                    Select all dietary options that your store accommodates
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontWeight: 500, marginBottom: 4, display: 'block' }}>Thumbnail</label>
                   

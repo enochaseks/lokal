@@ -17,6 +17,7 @@ import FeedPage from './pages/FeedPage';
 import SettingsPage from './pages/SettingsPage';
 import AboutPage from './pages/AboutPage';
 import OnboardingShopTypePage from './pages/OnboardingShopTypePage';
+import OnboardingPreferencesPage from './pages/OnboardingPreferencesPage';
 import CreateProfilePage from './pages/CreateProfilePage';
 import ProfilePage from './pages/ProfilePage';
 import StoreReviewPreviewPage from './pages/StoreReviewPreviewPage';
@@ -248,6 +249,7 @@ function App() {
                 <Route path="/help-center" element={<PublicRoute element={<HelpCenterPage />} />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/onboarding-shop-type" element={<OnboardingShopTypePage />} />
+                <Route path="/onboarding-preferences" element={<OnboardingPreferencesPage />} />
                 <Route path="/create-profile" element={<CreateProfilePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/store-review-preview/:storeId" element={<StoreReviewPreviewPage />} />

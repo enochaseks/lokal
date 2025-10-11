@@ -19,17 +19,30 @@ function maskValue(value) {
 function CreateShopPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  let sellerData = location.state || {};
+  
+  // Initialize sellerData as state variable
+  const [sellerData, setSellerData] = useState(() => {
+    let data = location.state || {};
+    
+    // Fallback: Load from localStorage if location.state is empty
+    if (Object.keys(data).length === 0) {
+      try {
+        const saved = localStorage.getItem('sellerData');
+        if (saved) data = JSON.parse(saved);
+      } catch {}
+    }
+    
+    return data;
+  });
 
-  // Fallback: Load from localStorage if location.state is empty
-  if (Object.keys(sellerData).length === 0) {
-    try {
-      const saved = localStorage.getItem('sellerData');
-      if (saved) sellerData = JSON.parse(saved);
-    } catch {}
-  }
+  // Update sellerData when location.state changes
+  useEffect(() => {
+    if (location.state && Object.keys(location.state).length > 0) {
+      setSellerData(location.state);
+    }
+  }, [location.state]);
 
-  // Always save sellerData to localStorage on mount
+  // Always save sellerData to localStorage when it changes
   useEffect(() => {
     if (sellerData && Object.keys(sellerData).length > 0) {
       localStorage.setItem('sellerData', JSON.stringify(sellerData));
@@ -47,7 +60,7 @@ function CreateShopPage() {
 
   const [backgroundImg, setBackgroundImg] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [deliveryType, setDeliveryType] = useState('Collection');
+  const [deliveryType, setDeliveryType] = useState(sellerData.deliveryType || 'Collection');
   const [hasOwnDelivery, setHasOwnDelivery] = useState('');
   const [showDeliveryMsg, setShowDeliveryMsg] = useState(false);
   const [paymentType, setPaymentType] = useState('');
@@ -223,9 +236,17 @@ function CreateShopPage() {
       }
       let foodHygieneProofUrl = '';
       if (sellerData.foodHygieneProof) {
-        const foodProofRef = ref(storage, `foodHygieneProofs/${user.uid}_${sellerData.foodHygieneProof.name}`);
+        const fileName = sellerData.foodHygieneProof.name || `food_hygiene_proof_${Date.now()}`;
+        const foodProofRef = ref(storage, `foodHygieneProofs/${user.uid}_${fileName}`);
         await uploadBytes(foodProofRef, sellerData.foodHygieneProof);
         foodHygieneProofUrl = await getDownloadURL(foodProofRef);
+      }
+      let councilRegistrationFormUrl = '';
+      if (sellerData.councilRegistrationForm) {
+        const fileName = sellerData.councilRegistrationForm.name || `council_registration_${Date.now()}`;
+        const councilRef = ref(storage, `councilRegistrations/${user.uid}_${fileName}`);
+        await uploadBytes(councilRef, sellerData.councilRegistrationForm);
+        councilRegistrationFormUrl = await getDownloadURL(councilRef);
       }
       let marketStallLicenceUrl = '';
       if (sellerData.marketStallLicence) {
@@ -241,7 +262,8 @@ function CreateShopPage() {
       }
       let alcoholLicenseUrl = '';
       if (sellerData.alcoholLicense) {
-        const alcRef = ref(storage, `alcoholLicenses/${user.uid}_${sellerData.alcoholLicense.name}`);
+        const fileName = sellerData.alcoholLicense.name || `alcohol_license_${Date.now()}`;
+        const alcRef = ref(storage, `alcoholLicenses/${user.uid}_${fileName}`);
         await uploadBytes(alcRef, sellerData.alcoholLicense);
         alcoholLicenseUrl = await getDownloadURL(alcRef);
       }
@@ -301,13 +323,16 @@ function CreateShopPage() {
         storeName: sellerData.storeName || sellerData.marketName || sellerData.onlineName || '',
         storeLocation: sellerData.storeLocation || sellerData.marketLocation || sellerData.onlineLocation || '',
         origin: sellerData.origin || '',
-        deliveryType: sellerData.deliveryType || '',
+        deliveryType: deliveryType,
         businessId: sellerData.businessId || '',
         certificate: certificateUrl,
         foodHygiene: foodHygieneUrl,
         foodHygieneProof: foodHygieneProofUrl,
+        councilRegistrationForm: councilRegistrationFormUrl,
         marketStallLicence: marketStallLicenceUrl,
+        handlesFoodPreparation: sellerData.handlesFoodPreparation || '',
         sellsPerishableFood: sellerData.sellsPerishableFood || '',
+        dietaryOptions: sellerData.dietaryOptions || [],
         // Legacy format for backward compatibility
         platform: sellerData.platform || '',
         socialHandle: sellerData.socialHandle || '',
@@ -357,7 +382,15 @@ function CreateShopPage() {
         // Add any other fields you want to persist for settings
       };
       await setDoc(doc(db, 'stores', user.uid), storeProfile);
-      await updateDoc(doc(db, 'users', user.uid), { ...storeProfile, onboardingStep: 'complete' });
+      await updateDoc(doc(db, 'users', user.uid), { 
+        ...storeProfile, 
+        onboardingStep: 'complete',
+        userType: 'seller' // Explicitly mark as seller
+      });
+      
+      // Clear user type cache to force fresh detection
+      const cacheKey = `userType_${user.uid}`;
+      localStorage.removeItem(cacheKey);
       
       // Show success modal with QR code
       setCreatedStoreId(user.uid);

@@ -207,11 +207,11 @@ function StorePreviewPage() {
         // Use non-blocking approach for user type detection
         setTimeout(async () => {
           try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            setUserType(userDoc.exists() ? 'buyer' : 'seller');
+            const storeDoc = await getDoc(doc(db, 'stores', user.uid));
+            setUserType(storeDoc.exists() ? 'seller' : 'buyer');
             
             // Add to viewed stores for buyers only (non-blocking)
-            if (userDoc.exists() && id) {
+            if (!storeDoc.exists() && id) {
               const viewedKey = `viewedStores_${user.uid}`;
               const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
               const filteredViewed = existingViewed.filter(storeId => storeId !== id);
@@ -978,15 +978,15 @@ function StorePreviewPage() {
       setAuthUser(user || null);
       if (user) {
         // Check if user is a buyer or seller
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserType('buyer');
-        } else {
+        const storeDoc = await getDoc(doc(db, 'stores', user.uid));
+        if (storeDoc.exists()) {
           setUserType('seller');
+        } else {
+          setUserType('buyer');
         }
         
-        // Add this store to viewed stores for buyers
-        if (userDoc.exists() && id) {
+        // Add this store to viewed stores for buyers only
+        if (!storeDoc.exists() && id) {
           const viewedKey = `viewedStores_${user.uid}`;
           const existingViewed = JSON.parse(localStorage.getItem(viewedKey) || '[]');
           
@@ -1930,6 +1930,27 @@ function StorePreviewPage() {
                 <span className="detail-label">Delivery Type:</span>
                 <span className="detail-value delivery-value">{store.deliveryType}</span>
               </div>
+              
+              {/* Dietary Options Display */}
+              {store.dietaryOptions && store.dietaryOptions.length > 0 && (
+                <div className="detail-item dietary">
+                  <span className="detail-label">Dietary Options:</span>
+                  <div className="dietary-options-display">
+                    {store.dietaryOptions.map((option, index) => (
+                      <span key={index} className="dietary-badge">
+                        {option === 'Halal' ? '🥘' :
+                         option === 'Vegetarian' ? '🥬' :
+                         option === 'Vegan' ? '🌱' :
+                         option === 'Kosher' ? '✡️' :
+                         option === 'Gluten-free' ? '🌾' :
+                         option === 'Organic' ? '🌿' :
+                         option === 'No specific dietary options' ? '🍽️' : '🥗'}
+                        {option}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Compact Social Media and Website Icons */}
@@ -2202,6 +2223,27 @@ function StorePreviewPage() {
               
               .fee-bullet {
                 color: #007B7F;
+              }
+              
+              .dietary-options-display {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 4px;
+              }
+              
+              .dietary-badge {
+                background: linear-gradient(135deg, #e8f5e8 0%, #d1fae5 100%);
+                color: #059669;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                border: 1px solid #86efac;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                box-shadow: 0 1px 3px rgba(5, 150, 105, 0.1);
               }
               
               .free-delivery-note {
