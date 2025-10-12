@@ -10,6 +10,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/StripePaymentForm';
 
+
 // Load Stripe outside of component render
 // Using the REACT_APP_STRIPE_PUBLIC_KEY from .env file
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
@@ -177,6 +178,7 @@ function StorePreviewPage() {
   // Social sharing states
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const [sharedPlatform, setSharedPlatform] = useState('');
   
   const [storeFeeSettings, setStoreFeeSettings] = useState({
     deliveryEnabled: false,
@@ -527,76 +529,57 @@ function StorePreviewPage() {
     return isStoreOpenForToday(store);
   };
 
-  // Social sharing functions
+  // Enhanced social sharing functions with detailed store information
   const generateShareableStoreCard = (store) => {
-    const storeUrl = `${window.location.origin}/store-preview/${store.id}`;
+    const storeUrl = `${window.location.origin}/store-preview/${id}`;
+    const storeName = store.storeName || store.businessName || 'Local Store';
+    const storeLocation = store.storeLocation || 'Local Area';
+    const storeCategory = store.category || 'Local Business';
+    
+    // Get today's opening hours
+    const today = daysOfWeek[new Date().getDay()];
+    const todayOpening = store.openingTimes && store.openingTimes[today];
+    const todayClosing = store.closingTimes && store.closingTimes[today];
+    const generalOpening = store.openingTime;
+    const generalClosing = store.closingTime;
+    
+    // Determine opening hours for display
+    let hoursInfo = '';
+    if (store.closedDays && store.closedDays.includes(today)) {
+      hoursInfo = 'Closed today';
+    } else {
+      const opening = todayOpening || generalOpening;
+      const closing = todayClosing || generalClosing;
+      if (opening && closing) {
+        hoursInfo = `${opening} - ${closing} today`;
+      } else {
+        hoursInfo = 'Hours available in store';
+      }
+    }
+    
+    const isCurrentlyOpen = isStoreOpen();
+    const statusText = isCurrentlyOpen ? 'Open now!' : (hoursInfo.includes('Closed') ? 'Closed today' : 'Currently closed');
+    
     return {
-      title: `Check out ${store.storeName || store.businessName} on Lokal!`,
-      description: `Discover amazing local ${store.category || 'products'} in ${store.storeLocation}. ${isStoreOpen() ? 'Open now!' : 'Visit when they reopen!'}`,
-      image: store.backgroundImg || store.logoImg,
+      title: `${storeName} | ${storeCategory} on Lokal`,
+      description: `${storeName} in ${storeLocation}. ${storeCategory} store. ${hoursInfo}. ${statusText} Find authentic local businesses on Lokal.`,
+      image: store.backgroundImg || store.logoImg || 'https://lokalshops.co.uk/logo512.jpg',
       url: storeUrl,
-      hashtags: ['#LokalUK', '#LocalBusiness', '#SupportLocal', `#${(store.category || '').replace(/\s+/g, '')}`]
+      hashtags: ['#LokalUK', '#SupportLocal'],
+      // Additional metadata for social cards
+      siteName: 'Lokal',
+      type: 'business.business',
+      locale: 'en_GB',
+      storeName,
+      storeCategory,
+      storeLocation,
+      hoursInfo,
+      isOpen: isCurrentlyOpen,
+      statusText
     };
   };
 
-  const handleShareToInstagram = () => {
-    const shareData = generateShareableStoreCard(store);
-    
-    // Instagram Stories sharing
-    const instagramText = `${shareData.title}\n\n${shareData.description}\n\n${shareData.hashtags.join(' ')}\n\n${shareData.url}`;
-    
-    // Copy to clipboard for Instagram
-    navigator.clipboard.writeText(instagramText).then(() => {
-      // Open Instagram
-      window.open('https://instagram.com/stories/camera/', '_blank');
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
-    });
-  };
 
-  const handleShareToFacebook = () => {
-    const shareData = generateShareableStoreCard(store);
-    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareData.url)}&quote=${encodeURIComponent(shareData.title + ' - ' + shareData.description)}`;
-    window.open(facebookUrl, '_blank', 'width=600,height=400');
-    setShareSuccess(true);
-    setTimeout(() => setShareSuccess(false), 3000);
-  };
-
-  const handleShareToSnapchat = () => {
-    const shareData = generateShareableStoreCard(store);
-    const snapchatText = `${shareData.title}\n${shareData.description}\n${shareData.url}`;
-    
-    // Copy to clipboard for Snapchat
-    navigator.clipboard.writeText(snapchatText).then(() => {
-      // Try to open Snapchat web or mobile app
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (isMobile) {
-        window.location.href = 'snapchat://';
-      } else {
-        window.open('https://web.snapchat.com/', '_blank');
-      }
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
-    });
-  };
-
-  const handleShareToTikTok = () => {
-    const shareData = generateShareableStoreCard(store);
-    const tiktokText = `${shareData.title}\n${shareData.description}\n${shareData.hashtags.join(' ')}\n${shareData.url}`;
-    
-    // Copy to clipboard for TikTok
-    navigator.clipboard.writeText(tiktokText).then(() => {
-      // Try to open TikTok
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (isMobile) {
-        window.location.href = 'tiktok://';
-      } else {
-        window.open('https://www.tiktok.com/', '_blank');
-      }
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
-    });
-  };
 
   const handleNativeShare = async () => {
     if (navigator.share) {
@@ -1002,7 +985,7 @@ function StorePreviewPage() {
           // Save back to localStorage
           localStorage.setItem(viewedKey, JSON.stringify(limitedViewed));
           
-          console.log('Saved viewed store from StorePreviewPage:', id, 'for user:', user.uid); // Debug log
+
         }
       } else {
         setUserType('');
@@ -1384,8 +1367,12 @@ function StorePreviewPage() {
     );
   }
 
+
+
   return (
     <div className="page-container">
+
+      
       <Navbar />
       {showAdded && (
         <div className="add-to-cart-notification">
@@ -1970,7 +1957,7 @@ function StorePreviewPage() {
                           link.platform === 'Facebook' ? `https://facebook.com/${link.handle.replace('@', '')}` :
                           link.platform === 'Twitter' ? `https://twitter.com/${link.handle.replace('@', '')}` :
                           link.platform === 'TikTok' ? `https://tiktok.com/@${link.handle.replace('@', '')}` :
-                          link.platform === 'LinkedIn' ? `https://linkedin.com/in/${link.handle.replace('@', '')}` :
+                          link.platform === 'Instagram' ? `https://Instagram.com/in/${link.handle.replace('@', '')}` :
                           link.platform === 'YouTube' ? `https://youtube.com/@${link.handle.replace('@', '')}` :
                           link.platform === 'WhatsApp' ? `https://wa.me/${link.handle.replace(/[^0-9]/g, '')}` :
                           link.handle.startsWith('http') ? link.handle : `https://${link.handle}`
@@ -1985,7 +1972,7 @@ function StorePreviewPage() {
                            link.platform === 'Facebook' ? 'f' :
                            link.platform === 'Twitter' ? '𝕏' :
                            link.platform === 'TikTok' ? '♪' :
-                           link.platform === 'LinkedIn' ? 'in' :
+                           link.platform === 'Instagram' ? 'in' :
                            link.platform === 'YouTube' ? '▶' :
                            link.platform === 'WhatsApp' ? 'W' :
                            '🔗'}
@@ -2060,7 +2047,7 @@ function StorePreviewPage() {
             )}
             
             {/* Display fee information */}
-            {console.log('Current storeFeeSettings:', storeFeeSettings, 'deliveryEnabled:', storeFeeSettings.deliveryEnabled, 'serviceFeeEnabled:', storeFeeSettings.serviceFeeEnabled)}
+
             {/* Hide delivery fee for ALL Collection orders (both Pay at Store and Card Payment) */}
             {(() => {
               const isCollectionStore = store.deliveryType === 'Collection';
@@ -2326,8 +2313,8 @@ function StorePreviewPage() {
                 font-size: 1.1rem !important;
               }
               
-              /* LinkedIn brand colors */
-              .linkedin-icon {
+              /* Instagram brand colors */
+              .Instagram-icon {
                 background: linear-gradient(135deg, #0A66C2, #084A94) !important;
                 box-shadow: 0 2px 6px rgba(10,102,194,0.4) !important;
                 font-size: 0.7rem !important;
@@ -2400,7 +2387,7 @@ function StorePreviewPage() {
                 box-shadow: 0 4px 12px rgba(255,0,80,0.5) !important;
               }
               
-              .social-icon-link:hover .linkedin-icon {
+              .social-icon-link:hover .Instagram-icon {
                 box-shadow: 0 4px 12px rgba(10,102,194,0.5) !important;
               }
               
@@ -2662,7 +2649,7 @@ function StorePreviewPage() {
               
               {/* Share button - shown to all users */}
               <button 
-                onClick={handleNativeShare}
+                onClick={() => setShowShareModal(true)}
                 className="action-button share-button"
                 title="Share this store"
               >
@@ -4487,10 +4474,22 @@ function StorePreviewPage() {
               gap: '1rem',
               marginBottom: '1.5rem'
             }}>
+              {/* Twitter Share */}
               <button
-                onClick={handleShareToInstagram}
+                onClick={() => {
+                  const shareData = generateShareableStoreCard(store);
+                  const twitterText = `${shareData.storeName}\n\nCheck out my store! ${shareData.hoursInfo}\n\n${shareData.hashtags.join(' ')}`;
+                  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(twitterText)}&url=${encodeURIComponent(shareData.url)}`;
+                  window.open(twitterUrl, '_blank', 'width=600,height=400');
+                  setSharedPlatform('Twitter');
+                  setShareSuccess(true);
+                  setTimeout(() => {
+                    setShareSuccess(false);
+                    setSharedPlatform('');
+                  }, 3000);
+                }}
                 style={{
-                  background: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
+                  background: '#000000',
                   border: 'none',
                   borderRadius: 15,
                   padding: '1rem',
@@ -4507,13 +4506,25 @@ function StorePreviewPage() {
                 onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
                 onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
               >
-                📸 Instagram
+                𝕏 Twitter
               </button>
 
+              {/* WhatsApp Share */}
               <button
-                onClick={handleShareToFacebook}
+                onClick={() => {
+                  const shareData = generateShareableStoreCard(store);
+                  const whatsappText = `${shareData.title}\n\n${shareData.description}\n\n${shareData.url}`;
+                  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`;
+                  window.open(whatsappUrl, '_blank');
+                  setSharedPlatform('WhatsApp');
+                  setShareSuccess(true);
+                  setTimeout(() => {
+                    setShareSuccess(false);
+                    setSharedPlatform('');
+                  }, 3000);
+                }}
                 style={{
-                  background: '#1877F2',
+                  background: '#25D366',
                   border: 'none',
                   borderRadius: 15,
                   padding: '1rem',
@@ -4530,54 +4541,60 @@ function StorePreviewPage() {
                 onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
                 onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
               >
-                👥 Facebook
+                💬 WhatsApp
               </button>
+            </div>
 
-              <button
-                onClick={handleShareToSnapchat}
-                style={{
-                  background: '#FFFC00',
-                  border: 'none',
-                  borderRadius: 15,
-                  padding: '1rem',
-                  color: '#000',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'transform 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-              >
-                👻 Snapchat
-              </button>
-
-              <button
-                onClick={handleShareToTikTok}
-                style={{
-                  background: 'linear-gradient(45deg, #ff0050, #ff0050 50%, #000 50%, #000)',
-                  border: 'none',
-                  borderRadius: 15,
-                  padding: '1rem',
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'transform 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-              >
-                🎵 TikTok
-              </button>
+            {/* Copy Link Section */}
+            <div style={{
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: 12,
+              padding: '1rem',
+              marginBottom: '1rem',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>📋 Copy Link</h4>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={generateShareableStoreCard(store)?.url || ''}
+                  readOnly
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'rgba(255,255,255,0.9)',
+                    color: '#333',
+                    fontSize: '0.9rem'
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const shareData = generateShareableStoreCard(store);
+                    navigator.clipboard.writeText(shareData.url).then(() => {
+                      setSharedPlatform('Copy');
+                      setShareSuccess(true);
+                      setTimeout(() => {
+                        setShareSuccess(false);
+                        setSharedPlatform('');
+                      }, 3000);
+                    });
+                  }}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.5rem 1rem',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '600'
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
             </div>
 
             <div style={{
@@ -4593,7 +4610,7 @@ function StorePreviewPage() {
                 opacity: 0.8,
                 lineHeight: 1.4
               }}>
-                💡 Tip: Text will be copied to your clipboard for easy sharing on Instagram and Snapchat Stories!
+                💡 Share this store on social media to help support local businesses! The link will show a preview with store details, hours, and location.
               </p>
             </div>
           </div>
@@ -4604,25 +4621,53 @@ function StorePreviewPage() {
       {shareSuccess && (
         <div style={{
           position: 'fixed',
-          top: 20,
-          right: 20,
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           background: 'linear-gradient(135deg, #10B981, #059669)',
           color: 'white',
-          padding: '1rem 1.5rem',
-          borderRadius: 12,
+          padding: '1.5rem 2rem',
+          borderRadius: 16,
           zIndex: 1001,
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)',
-          animation: 'slideInRight 0.3s ease-out'
+          gap: '12px',
+          boxShadow: '0 20px 40px rgba(16, 185, 129, 0.4)',
+          animation: 'fadeInScale 0.3s ease-out',
+          minWidth: '300px',
+          justifyContent: 'center'
         }}>
-          <span style={{ fontSize: '1.2rem' }}>✅</span>
-          <span style={{ fontWeight: '600' }}>Ready to share! Link copied to clipboard</span>
+          <span style={{ fontSize: '1.5rem' }}>
+            {sharedPlatform === 'Instagram Stories' ? '📸' : 
+             sharedPlatform === 'Instagram' ? '📸' : 
+             sharedPlatform === 'Facebook' ? '📘' : 
+             sharedPlatform === 'Twitter' ? '🐦' : 
+             sharedPlatform === 'WhatsApp' ? '💬' : '✅'}
+          </span>
+          <span style={{ fontWeight: '600', fontSize: '1.1rem' }}>
+            {sharedPlatform === 'Instagram Stories' ? 'Opening Instagram Stories!' :
+             sharedPlatform === 'Instagram' ? 'Opening Instagram! Store info copied' :
+             sharedPlatform === 'Facebook' ? 'Opening Facebook!' :
+             sharedPlatform === 'Twitter' ? 'Opening Twitter!' :
+             sharedPlatform === 'WhatsApp' ? 'Opening WhatsApp!' :
+             sharedPlatform === 'Copy' ? 'Link copied to clipboard!' :
+             'Ready to share!'}
+          </span>
         </div>
       )}
 
       <style>{`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
+        
         @keyframes slideInRight {
           from {
             transform: translateX(100%);

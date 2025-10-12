@@ -23,6 +23,7 @@
     "querystring-es3": "^0.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-helmet": "^6.1.0",
     "react-router-dom": "^6.22.3",
     "react-scripts": "5.0.1",
     "react-select": "^5.10.1",
@@ -34,8 +35,12 @@
   },
   "scripts": {
     "start": "react-app-rewired start",
-    "build": "react-app-rewired build",
+    "start:server": "node social-server.js",
+    "build": "react-app-rewired build && node generate-store-pages.js",
+    "build:react": "react-app-rewired build",
+    "generate-store-pages": "node generate-store-pages.js",
     "test": "react-app-rewired test",
+    "test:sharing": "node test-sharing.js",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

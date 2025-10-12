@@ -42,10 +42,95 @@ function QRCodeDisplay({ storeId, storeName, size = 200, showDownload = true, st
   const downloadQRCode = () => {
     if (!qrCodeDataURL) return;
     
-    const link = document.createElement('a');
-    link.download = `${storeName || 'store'}-qr-code.png`;
-    link.href = qrCodeDataURL;
-    link.click();
+    // Create a canvas to draw the full page
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size (A4-like ratio but smaller for practical use)
+    canvas.width = 800;
+    canvas.height = 1000;
+    
+    // Fill white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Load the Lokal logo
+    const logoImage = new Image();
+    logoImage.onload = () => {
+      // Draw logo at the top (centered)
+      const logoHeight = 120;
+      const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
+      const logoX = (canvas.width - logoWidth) / 2;
+      ctx.drawImage(logoImage, logoX, 40, logoWidth, logoHeight);
+      
+      // Add tagline below logo
+      ctx.fillStyle = '#666666';
+      ctx.font = '18px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Find African & Caribbean Stores Near You', canvas.width / 2, 190);
+      
+      // Add store name
+      ctx.fillStyle = '#333333';
+      ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      const storeName_display = storeName || 'Store';
+      ctx.fillText(storeName_display, canvas.width / 2, 250);
+      
+      // Add instruction text
+      ctx.fillStyle = '#666666';
+      ctx.font = '24px Arial, sans-serif';
+      ctx.fillText(`Scan here to check out`, canvas.width / 2, 300);
+      ctx.fillText(`${storeName_display} on Lokal`, canvas.width / 2, 330);
+      
+      // Create QR code image and draw it on canvas
+      const qrImage = new Image();
+      qrImage.onload = () => {
+        // Draw QR code centered
+        const qrSize = 400;
+        const qrX = (canvas.width - qrSize) / 2;
+        const qrY = 380;
+        
+        // Draw white background for QR code
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(qrX - 20, qrY - 20, qrSize + 40, qrSize + 40);
+        
+        // Add border
+        ctx.strokeStyle = '#E0E0E0';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(qrX - 20, qrY - 20, qrSize + 40, qrSize + 40);
+        
+        // Draw QR code
+        ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+        
+        // Add footer instructions
+        ctx.fillStyle = '#666666';
+        ctx.font = '18px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('1. Open your phone camera', canvas.width / 2, 850);
+        ctx.fillText('2. Point at the QR code above', canvas.width / 2, 880);
+        ctx.fillText('3. Tap the link that appears', canvas.width / 2, 910);
+        
+        // Add website URL
+        ctx.fillStyle = '#007B7F';
+        ctx.font = 'bold 20px Arial, sans-serif';
+        ctx.fillText('lokalshops.co.uk', canvas.width / 2, 960);
+        
+        // Convert canvas to blob and download
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = `${storeName || 'store'}-lokal-qr-page.png`;
+          link.href = url;
+          link.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      };
+      
+      qrImage.src = qrCodeDataURL;
+    };
+    
+    // Load the logo from the public directory
+    logoImage.src = '/images/logo png.png';
   };
 
   const copyStoreLink = async () => {
@@ -152,7 +237,7 @@ function QRCodeDisplay({ storeId, storeName, size = 200, showDownload = true, st
               onMouseOver={(e) => e.target.style.backgroundColor = '#45a049'}
               onMouseOut={(e) => e.target.style.backgroundColor = '#4CAF50'}
             >
-              Download QR
+              Download QR Page
             </button>
           )}
           

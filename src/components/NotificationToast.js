@@ -69,14 +69,14 @@ const NotificationToast = ({
   return (
     <div style={{
       position: 'fixed',
-      top: '20px',
-      right: '20px',
+      top: '50%',
+      left: '50%',
+      transform: isShowing ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.8)',
       zIndex: 3000,
-      transform: isShowing ? 'translateX(0)' : 'translateX(100%)',
       opacity: isShowing ? 1 : 0,
       transition: 'all 0.3s ease-in-out',
       maxWidth: '400px',
-      width: '100%'
+      width: '90%'
     }}>
       <div style={{
         background: typeStyles.background,

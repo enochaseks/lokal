@@ -526,8 +526,9 @@ function ReportsPage() {
       loadingNotification.innerHTML = `⏳ Fetching additional order information...`;
       loadingNotification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         background: #3B82F6;
         color: white;
         padding: 1rem;
@@ -1496,8 +1497,9 @@ For any questions regarding this order, please contact the seller.`,
       `;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;

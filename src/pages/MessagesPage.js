@@ -2657,8 +2657,7 @@ function MessagesPage() {
       notification.innerHTML = `✅ Order request sent! You'll pay at the store when collecting.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -3245,8 +3244,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
       notification.innerHTML = `✅ Collection scheduled successfully!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -3325,8 +3323,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
       notification.innerHTML = paymentData.isReschedule ? `🔄 Delivery rescheduled successfully!` : `📋 Delivery scheduled successfully!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -3763,8 +3760,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
       notification.innerHTML = `✅ Fee settings saved successfully!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -3813,8 +3809,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
     notification.innerHTML = `✅ "${item.name}" added to cart!`;
     notification.style.cssText = `
       position: fixed;
-      top: 20px;
-      right: 20px;
+      top: 50%;        left: 50%;        transform: translate(-50%, -50%);
       background: #22C55E;
       color: white;
       padding: 1rem;
@@ -3876,8 +3871,7 @@ Please arrive at your scheduled time and bring this code for verification.`;
       notification.innerHTML = `🛒 Ready for new order!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #3B82F6;
         color: white;
         padding: 1rem;
@@ -3979,8 +3973,7 @@ Please confirm this order and provide delivery details.`;
       notification.innerHTML = `✅ Order sent successfully!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -4245,8 +4238,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       notification.innerHTML = `✅ Order finalized! Cart locked. Waiting for seller to prepare items.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -4463,8 +4455,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       notification.innerHTML = `✅ Order finalized! Waiting for seller to prepare items.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -4708,8 +4699,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       notification.innerHTML = `✅ Refund transfer confirmed and customer notified!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -4816,8 +4806,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       notification.innerHTML = `✅ Refund approved! Seller has been notified.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -4883,8 +4872,7 @@ Customer is done adding items. Please prepare and bag these items.`;
         notification.innerHTML = `✅ Complaint cancelled. You can now approve or file a new complaint.`;
         notification.style.cssText = `
           position: fixed;
-          top: 20px;
-          right: 20px;
+          top: 50%;        left: 50%;        transform: translate(-50%, -50%);
           background: #10B981;
           color: white;
           padding: 1rem;
@@ -5175,8 +5163,7 @@ Customer is done adding items. Please prepare and bag these items.`;
       notification.innerHTML = `📧 Complaint submitted to admin. You will receive an email response within 24-48 hours.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #F59E0B;
         color: white;
         padding: 1rem;
@@ -5525,8 +5512,7 @@ Customer is done adding items. Please prepare and bag these items.`;
         : `🚚 Delivery started! Customer has been notified.<br>Order: ${deliveryOrderDetails}`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -5709,8 +5695,7 @@ Customer is done adding items. Please prepare and bag these items.`;
         notification.innerHTML = isReschedule ? `🔄 Delivery rescheduled successfully!` : `📋 Delivery scheduled successfully!`;
         notification.style.cssText = `
           position: fixed;
-          top: 20px;
-          right: 20px;
+          top: 50%;        left: 50%;        transform: translate(-50%, -50%);
           background: #22C55E;
           color: white;
           padding: 1rem;
@@ -5845,8 +5830,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Pay At Store collection scheduled!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -5911,8 +5895,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Order marked as ready for collection!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -6023,8 +6006,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Collection completed and quantities updated!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -6165,8 +6147,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Pay At Store order confirmed! Pickup code sent to customer.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -6228,8 +6209,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Customer notified order is ready for collection and payment!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -6298,8 +6278,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Pay At Store transaction completed!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -6515,8 +6494,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `✅ Delivery completed and quantities updated!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -6598,8 +6576,7 @@ Please arrive at your scheduled time with this code and payment method.`;
       notification.innerHTML = `❌ Delivery cancelled. Opening reschedule options...`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #F59E0B;
         color: white;
         padding: 1rem;
@@ -7152,8 +7129,7 @@ Bring your pickup code when you collect.`,
         : `✅ Order cancelled and seller notified to process manual refund!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #10B981;
         color: white;
         padding: 1rem;
@@ -7290,8 +7266,7 @@ Bring your pickup code when you collect.`,
       notification.innerHTML = `✅ Refund approved and ${isStripePayment ? 'processed automatically via Stripe' : 'awaiting your manual bank transfer'}. Customer has been notified.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -7360,8 +7335,7 @@ Bring your pickup code when you collect.`,
       notification.innerHTML = `❌ Refund request denied. Customer notified with appeal options.`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #EF4444;
         color: white;
         padding: 1rem;
@@ -7628,8 +7602,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
       notification.innerHTML = `✅ Customer notified that items are ready for payment!`;
       notification.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 50%;        left: 50%;        transform: translate(-50%, -50%);
         background: #22C55E;
         color: white;
         padding: 1rem;
@@ -7687,8 +7660,7 @@ ${isPayAtStoreOrder ? 'Your items are ready for collection. Please come to the s
     notification.innerHTML = `✅ "${item.name}" added to order! Click "Done Adding Items" when ready.`;
     notification.style.cssText = `
       position: fixed;
-      top: 20px;
-      right: 20px;
+      top: 50%;        left: 50%;        transform: translate(-50%, -50%);
       background: #22C55E;
       color: white;
       padding: 1rem;
@@ -9525,8 +9497,7 @@ Your pickup code is: ${pickupCode}
                                           notification.innerHTML = `✅ Seller notified! Your pickup code: ${pickupCode}<br>Please bring this code to the store to pay and collect your order.`;
                                           notification.style.cssText = `
                                             position: fixed;
-                                            top: 20px;
-                                            right: 20px;
+                                            top: 50%;        left: 50%;        transform: translate(-50%, -50%);
                                             background: #10B981;
                                             color: white;
                                             padding: 1rem;
