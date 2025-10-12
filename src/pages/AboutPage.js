@@ -1,7 +1,61 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import Navbar from '../components/Navbar';
 
 function AboutPage() {
+  // SEO optimization for about page
+  useEffect(() => {
+    document.title = "About Lokal - Find African & Caribbean Stores Near You | Lokal Shops";
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 
+        'Learn about Lokal - Find African & Caribbean Stores Near You. Connecting communities with authentic local stores, restaurants, and services across the UK.'
+      );
+    }
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', 'https://lokalshops.co.uk/about');
+    }
+
+    // Update keywords for about page
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 
+        'about lokal shops, african caribbean stores, company history, mission, community marketplace, local business support'
+      );
+    }
+
+    // Add structured data for about page
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      "name": "About Lokal Shops",
+      "description": "Learn about Lokal - Find African & Caribbean Stores Near You",
+      "url": "https://lokalshops.co.uk/about",
+      "mainEntity": {
+        "@type": "Organization",
+        "name": "Lokal Shops",
+        "url": "https://lokalshops.co.uk",
+        "description": "Find African & Caribbean Stores Near You - connecting communities with local stores",
+        "foundingDate": "2023",
+        "mission": "Empower African & Caribbean businesses to reach new customers and grow their income in a community-driven way"
+      }
+    };
+
+    // Remove existing structured data
+    const existingScript = document.querySelector('script[type="application/ld+json"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    // Add new structured data
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }, []);
+
   return (
     <div style={{ background: '#F0F2F5', minHeight: '100vh' }}>
       <Navbar />

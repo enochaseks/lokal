@@ -223,7 +223,7 @@ class SEOAnalytics {
       "@context": "https://schema.org",
       "@type": "WebPage",
       "name": `African & Caribbean Stores in ${city}`,
-      "description": `Find authentic African and Caribbean stores in ${city}`,
+      "description": `Find African & Caribbean Stores Near You in ${city}`,
       "url": `https://lokalshops.co.uk/${city.toLowerCase()}`,
       "about": {
         "@type": "Place",

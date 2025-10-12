@@ -62,7 +62,7 @@ function FeedPage() {
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
       metaDescription.setAttribute('content', 
-        'Stay connected with African, Caribbean & Black businesses in your community. See latest updates, offers, and news from local businesses on Lokal Shops feed.'
+        'Stay connected with African, Caribbean & Black businesses in your community. See latest updates, offers, and news from local stores on Lokal Shops feed.'
       );
     }
 
@@ -75,7 +75,7 @@ function FeedPage() {
     let metaKeywords = document.querySelector('meta[name="keywords"]');
     if (metaKeywords) {
       metaKeywords.setAttribute('content', 
-        'community feed, business updates, african business news, caribbean business posts, black business community, local business feed, business offers'
+        'community feed, store updates, african stores news, caribbean stores posts, black owned businesses community, local stores feed, store offers'
       );
     }
 
@@ -84,12 +84,12 @@ function FeedPage() {
       "@context": "https://schema.org",
       "@type": "WebPage",
       "name": "Community Feed - Lokal Shops",
-      "description": "Community feed showcasing updates from African, Caribbean & Black businesses",
+      "description": "Community feed showcasing updates from African, Caribbean & Black stores",
       "url": "https://lokalshops.co.uk/feed",
       "mainEntity": {
         "@type": "SocialMediaPosting",
-        "headline": "African, Caribbean & Black Business Community Feed",
-        "description": "Real-time updates from local businesses in the African, Caribbean and Black community"
+        "headline": "African, Caribbean & Black Stores Community Feed",
+        "description": "Real-time updates from local stores in the African, Caribbean and Black community"
       }
     };
 

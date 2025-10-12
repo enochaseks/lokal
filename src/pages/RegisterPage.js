@@ -16,7 +16,7 @@ function RegisterPage() {
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
       metaDescription.setAttribute('content', 
-        'Create your free account on Lokal Shops to discover and support African, Caribbean & Black businesses. Join our community today!'
+        'Create your free account on Lokal Shops to find African & Caribbean stores near you. Join our community today!'
       );
     }
 
@@ -29,7 +29,7 @@ function RegisterPage() {
     let metaKeywords = document.querySelector('meta[name="keywords"]');
     if (metaKeywords) {
       metaKeywords.setAttribute('content', 
-        'sign up lokal shops, register account, african caribbean business directory, black business directory, join community'
+        'sign up lokal shops, register account, african caribbean stores, black owned businesses, join community'
       );
     }
 
@@ -38,7 +38,7 @@ function RegisterPage() {
       "@context": "https://schema.org",
       "@type": "WebPage",
       "name": "Sign Up - Lokal Shops",
-      "description": "Create your free account to discover and support African, Caribbean & Black businesses",
+      "description": "Create your free account to find African & Caribbean stores near you",
       "url": "https://lokalshops.co.uk/register",
       "mainEntity": {
         "@type": "RegisterAction",

@@ -1588,7 +1588,7 @@ function ExplorePage() {
       metaKeywords.setAttribute('content', pageKeywords);
     }
 
-    // Add structured data for local business directory
+    // Add structured data for local business listing
     const structuredData = {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -1597,8 +1597,8 @@ function ExplorePage() {
       "url": `https://lokalshops.co.uk/explore${window.location.search}`,
       "mainEntity": {
         "@type": "ItemList",
-        "name": "African, Caribbean & Black Business Directory",
-        "description": "Directory of authentic African, Caribbean & Black-owned businesses across the UK"
+        "name": "African, Caribbean & Black Stores",
+        "description": "Find African & Caribbean Stores Near You - authentic stores across the UK"
       }
     };
 

@@ -126,7 +126,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             <div className="category-card">
               <h3>🍽️ African Restaurants</h3>
               <p>Authentic flavors from across Africa</p>
-              <a href={`/${city.toLowerCase()}/african-restaurants`}>
+              <a href={`/explore?category=Restaurant&location=${city}`}>
                 View All ({stores.filter(s => s.cuisine === 'African').length})
               </a>
             </div>
@@ -134,7 +134,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             <div className="category-card">
               <h3>🌴 Caribbean Restaurants</h3>
               <p>Island cuisine and Caribbean specialties</p>
-              <a href={`/${city.toLowerCase()}/caribbean-restaurants`}>
+              <a href={`/explore?category=Restaurant&location=${city}`}>
                 View All ({stores.filter(s => s.cuisine === 'Caribbean').length})
               </a>
             </div>
@@ -142,7 +142,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             <div className="category-card">
               <h3>🛒 Ethnic Grocery Stores</h3>
               <p>Specialty ingredients and traditional foods</p>
-              <a href={`/${city.toLowerCase()}/grocery-stores`}>
+              <a href={`/explore?category=Grocery&location=${city}`}>
                 View All ({stores.filter(s => s.category === 'Grocery').length})
               </a>
             </div>
@@ -150,7 +150,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             <div className="category-card">
               <h3>💄 Beauty & Hair Salons</h3>
               <p>Specialized beauty services</p>
-              <a href={`/${city.toLowerCase()}/beauty-salons`}>
+              <a href={`/explore?category=Beauty&location=${city}`}>
                 View All ({stores.filter(s => s.category === 'Beauty').length})
               </a>
             </div>
@@ -175,7 +175,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
                     </span>
                     <span>({store.reviewCount || '5+'} reviews)</span>
                   </div>
-                  <a href={`/store/${store.id}`} className="view-store-btn">
+                  <a href={`/store-preview/${store.id}`} className="view-store-btn">
                     View Details
                   </a>
                 </div>
@@ -183,7 +183,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             </div>
             
             <div className="view-all-stores">
-              <a href={`/${city.toLowerCase()}/all-stores`} className="btn-primary">
+              <a href={`/explore?location=${city}`} className="btn-primary">
                 View All {stores.length} Stores in {city}
               </a>
             </div>
@@ -198,7 +198,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
           <div className="info-content">
             <p>
               {city} is home to a vibrant African and Caribbean community with 
-              rich cultural heritage and diverse businesses. Our local directory 
+              rich cultural heritage and diverse businesses. Lokal Shops 
               helps you discover authentic restaurants, specialty stores, and 
               community services that celebrate this heritage.
             </p>
@@ -238,7 +238,7 @@ const LocalSEOPage = ({ city, stores = [] }) => {
             </div>
             
             <div className="faq-item">
-              <h3>How can I add my business to the directory?</h3>
+              <h3>How can I add my business to Lokal Shops?</h3>
               <p>Business owners can register their store for free by clicking the "Register Your Store" link.</p>
             </div>
           </div>

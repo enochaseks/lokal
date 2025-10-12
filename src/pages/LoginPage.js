@@ -15,7 +15,7 @@ function LoginPage() {
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
       metaDescription.setAttribute('content', 
-        'Login to your Lokal Shops account to discover African, Caribbean & Black businesses or manage your business listing.'
+        'Login to your Lokal Shops account to find African & Caribbean stores near you or manage your business listing.'
       );
     }
 
@@ -28,7 +28,7 @@ function LoginPage() {
     let metaKeywords = document.querySelector('meta[name="keywords"]');
     if (metaKeywords) {
       metaKeywords.setAttribute('content', 
-        'login lokal shops, sign in account, african caribbean business directory, black business directory, account access'
+        'login lokal shops, sign in account, african caribbean stores, black owned businesses, account access'
       );
     }
 
@@ -37,7 +37,7 @@ function LoginPage() {
       "@context": "https://schema.org",
       "@type": "WebPage",
       "name": "Login - Lokal Shops",
-      "description": "Login to your account to access African, Caribbean & Black business directory",
+      "description": "Login to your account to find African & Caribbean stores near you",
       "url": "https://lokalshops.co.uk/login",
       "mainEntity": {
         "@type": "LoginAction",

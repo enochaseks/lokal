@@ -29,6 +29,57 @@ function HelpCenterPage() {
   const [helpTopic, setHelpTopic] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+
+  // SEO optimization for help center page
+  useEffect(() => {
+    document.title = "Help Center - Support & FAQ | Lokal Shops";
+    
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 
+        'Get help with Lokal Shops. Find answers to frequently asked questions about finding African & Caribbean stores, account management, payments, and technical support.'
+      );
+    }
+
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) {
+      canonicalLink.setAttribute('href', 'https://lokalshops.co.uk/help-center');
+    }
+
+    // Update keywords for help center page
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 
+        'lokal shops help, customer support, faq, technical support, account help, payment help, business support, african caribbean stores help'
+      );
+    }
+
+    // Add structured data for help center
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Help Center - Support & FAQ",
+      "description": "Get help and support for using Lokal Shops",
+      "url": "https://lokalshops.co.uk/help-center",
+      "mainEntity": {
+        "@type": "FAQPage",
+        "name": "Lokal Shops Help Center",
+        "description": "Frequently asked questions and support for finding African & Caribbean stores"
+      }
+    };
+
+    // Remove existing structured data
+    const existingScript = document.querySelector('script[type="application/ld+json"]');
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    // Add new structured data
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }, []);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [showUnauthSupportModal, setShowUnauthSupportModal] = useState(false);
   const [supportForm, setSupportForm] = useState({
