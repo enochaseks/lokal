@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+import { getMessaging, isSupported } from "firebase/messaging";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -31,6 +31,13 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-const auth = getAuth(app);
 
-export { app, analytics, db, storage, auth }; 
+// Initialize messaging conditionally (not supported in all contexts)
+let messaging = null;
+isSupported().then(supported => {
+  if (supported) {
+    messaging = getMessaging(app);
+  }
+}).catch(err => console.log('Messaging not supported:', err));
+
+export { app, analytics, db, storage, messaging }; 

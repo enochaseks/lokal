@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getAuth } from 'firebase/auth';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import PushNotificationSettings from './PushNotificationSettings';
 
 const NotificationPreferences = ({ isModal = false, onClose = null }) => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -11,7 +12,8 @@ const NotificationPreferences = ({ isModal = false, onClose = null }) => {
     orderNotifications: true,
     paymentNotifications: true,
     collectionNotifications: true,
-    marketingEmails: false
+    marketingEmails: false,
+    pushNotifications: true
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -438,7 +440,16 @@ const NotificationPreferences = ({ isModal = false, onClose = null }) => {
 
       <div className="preference-section">
         <div className="section-title">
-          📢 Marketing & Updates
+          � Push Notifications
+        </div>
+        <div style={{ marginTop: '15px' }}>
+          <PushNotificationSettings />
+        </div>
+      </div>
+
+      <div className="preference-section">
+        <div className="section-title">
+          �📢 Marketing & Updates
         </div>
         
         <div className="preference-item">

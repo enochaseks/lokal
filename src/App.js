@@ -38,6 +38,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LoadingSplashManager from './components/LoadingSplashManager';
 import SimpleLoadingSpinner from './components/SimpleLoadingSpinner';
+import PushNotificationPrompt from './components/PushNotificationPrompt';
 
 function DeletedAccountGuard({ children }) {
   useEffect(() => {
@@ -203,6 +204,7 @@ function App() {
           >
             <DeletedAccountGuard>
               <OnboardingGuard>
+              <PushNotificationPrompt />
           <div className="App" style={{ 
             minHeight: '100vh', 
             width: '100%', 

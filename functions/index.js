@@ -36,6 +36,7 @@ exports.helloWorld = onRequest((request, response) => {
 const boostStoreFunctions = require('./boost-store-function');
 const stripeReceiptFunctions = require('./stripe-receipt-function');
 const emailNotificationFunctions = require('./email-notification-function');
+const pushNotificationFunctions = require('./push-notification-function');
 
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
@@ -58,3 +59,11 @@ exports.onMessageCreated = messageEmailTrigger.onMessageCreated;
 // Test function
 const testEmailFunction = require('./test-email-function');
 exports.testEmailSystem = testEmailFunction.testEmailSystem;
+
+// Export push notification functions
+exports.sendMessageNotification = pushNotificationFunctions.sendMessageNotification;
+exports.sendOrderNotification = pushNotificationFunctions.sendOrderNotification;
+exports.sendPaymentNotification = pushNotificationFunctions.sendPaymentNotification;
+exports.sendReviewNotification = pushNotificationFunctions.sendReviewNotification;
+exports.sendStoreBoostNotification = pushNotificationFunctions.sendStoreBoostNotification;
+exports.sendCustomPushNotification = pushNotificationFunctions.sendCustomPushNotification;
