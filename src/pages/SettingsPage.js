@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import NotificationPreferences from '../components/NotificationPreferences';
 import { getAuth, onAuthStateChanged, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { db } from '../firebase';
-import { doc, getDoc, updateDoc, collection, addDoc, onSnapshot, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, onSnapshot, getDocs, deleteDoc, setDoc, query, where } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { updateMarketingConsent } from '../utils/hubspotClient';
 
@@ -264,13 +264,287 @@ function SettingsPage() {
 
   const deleteStoreSubcollections = async (storeId) => {
     // Delete all items, discounts, followers, reviews subcollections for a store
-    const subcollections = ['items', 'discounts', 'followers', 'reviews'];
+    const subcollections = ['items', 'discounts', 'followers', 'reviews', 'blocked'];
     for (const sub of subcollections) {
       const colRef = collection(db, 'stores', storeId, sub);
       const snap = await getDocs(colRef);
       for (const docu of snap.docs) {
         await deleteDoc(docu.ref);
       }
+    }
+  };
+
+  const deleteAllUserData = async (uid) => {
+    // COMPLETE DATA WIPE - Delete user from ALL collections and subcollections
+    // This removes EVERY trace of the user from the platform
+    console.log('🗑️ Starting COMPLETE DATA WIPE for user:', uid);
+    
+    try {
+      // 1. Delete from users collection + ALL subcollections
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        // Delete ALL user subcollections (viewHistory, blocked_ips, etc.)
+        const userSubcollections = ['viewHistory', 'orders', 'messages', 'notifications', 'blocked_ips', 'cart', 'preferences'];
+        for (const sub of userSubcollections) {
+          try {
+            const colRef = collection(db, 'users', uid, sub);
+            const snap = await getDocs(colRef);
+            for (const docu of snap.docs) {
+              await deleteDoc(docu.ref);
+            }
+          } catch (err) {
+            console.log(`Subcollection ${sub} doesn't exist or already deleted`);
+          }
+        }
+        await deleteDoc(userRef);
+        console.log('✅ Deleted user document and ALL subcollections');
+      }
+
+      // 2. Delete from stores collection (if seller) + ALL store subcollections
+      const storeRef = doc(db, 'stores', uid);
+      const storeSnap = await getDoc(storeRef);
+      if (storeSnap.exists()) {
+        // Delete ALL store subcollections (items, discounts, followers, reviews, blocked, blocked_ips)
+        const storeSubcollections = ['items', 'discounts', 'followers', 'reviews', 'blocked', 'blocked_ips'];
+        for (const sub of storeSubcollections) {
+          try {
+            const colRef = collection(db, 'stores', uid, sub);
+            const snap = await getDocs(colRef);
+            for (const docu of snap.docs) {
+              await deleteDoc(docu.ref);
+            }
+          } catch (err) {
+            console.log(`Store subcollection ${sub} doesn't exist or already deleted`);
+          }
+        }
+        await deleteDoc(storeRef);
+        console.log('✅ Deleted store document and ALL subcollections');
+      }
+
+      // 3. Delete from orders collection (where user is buyer OR seller)
+      const ordersRef = collection(db, 'orders');
+      const buyerOrdersQuery = query(ordersRef, where('buyerId', '==', uid));
+      const sellerOrdersQuery = query(ordersRef, where('sellerId', '==', uid));
+      
+      const [buyerOrders, sellerOrders] = await Promise.all([
+        getDocs(buyerOrdersQuery),
+        getDocs(sellerOrdersQuery)
+      ]);
+      
+      for (const orderDoc of [...buyerOrders.docs, ...sellerOrders.docs]) {
+        await deleteDoc(orderDoc.ref);
+      }
+      console.log('✅ Deleted ALL orders (as buyer and seller)');
+
+      // 4. Delete from transactions collection
+      try {
+        const transactionsRef = collection(db, 'transactions');
+        const userTransactionsQuery = query(transactionsRef, where('buyerId', '==', uid));
+        const sellerTransactionsQuery = query(transactionsRef, where('sellerId', '==', uid));
+        
+        const [buyerTrans, sellerTrans] = await Promise.all([
+          getDocs(userTransactionsQuery),
+          getDocs(sellerTransactionsQuery)
+        ]);
+        
+        for (const transDoc of [...buyerTrans.docs, ...sellerTrans.docs]) {
+          await deleteDoc(transDoc.ref);
+        }
+        console.log('✅ Deleted ALL transactions');
+      } catch (err) {
+        console.log('Transactions collection not found or error:', err.message);
+      }
+
+      // 5. Delete from completedTransactions collection
+      try {
+        const completedRef = collection(db, 'completedTransactions');
+        const completedQuery = query(completedRef, where('buyerId', '==', uid));
+        const completedSellerQuery = query(completedRef, where('sellerId', '==', uid));
+        
+        const [completedBuyer, completedSeller] = await Promise.all([
+          getDocs(completedQuery),
+          getDocs(completedSellerQuery)
+        ]);
+        
+        for (const compDoc of [...completedBuyer.docs, ...completedSeller.docs]) {
+          await deleteDoc(compDoc.ref);
+        }
+        console.log('✅ Deleted ALL completed transactions');
+      } catch (err) {
+        console.log('CompletedTransactions collection not found or error:', err.message);
+      }
+
+      // 6. Delete from posts collection (feed posts)
+      const postsRef = collection(db, 'posts');
+      const postsQuery = query(postsRef, where('userId', '==', uid));
+      const postsSnap = await getDocs(postsQuery);
+      for (const postDoc of postsSnap.docs) {
+        await deleteDoc(postDoc.ref);
+      }
+      console.log('✅ Deleted ALL posts/feed content');
+
+      // 7. Delete from messages collection (both sent AND received)
+      const messagesRef = collection(db, 'messages');
+      const sentMessagesQuery = query(messagesRef, where('senderId', '==', uid));
+      const receivedMessagesQuery = query(messagesRef, where('receiverId', '==', uid));
+      
+      const [sentMessages, receivedMessages] = await Promise.all([
+        getDocs(sentMessagesQuery),
+        getDocs(receivedMessagesQuery)
+      ]);
+      
+      for (const msgDoc of [...sentMessages.docs, ...receivedMessages.docs]) {
+        await deleteDoc(msgDoc.ref);
+      }
+      console.log('✅ Deleted ALL messages (sent & received)');
+
+      // 8. Delete from storeBoosts collection
+      try {
+        const boostsRef = collection(db, 'storeBoosts');
+        const boostsQuery = query(boostsRef, where('storeId', '==', uid));
+        const boostsSnap = await getDocs(boostsQuery);
+        for (const boostDoc of boostsSnap.docs) {
+          await deleteDoc(boostDoc.ref);
+        }
+        console.log('✅ Deleted ALL store boosts');
+      } catch (err) {
+        console.log('StoreBoosts collection not found or error:', err.message);
+      }
+
+      // 9. Delete from storeAnalytics collection
+      try {
+        const analyticsRef = collection(db, 'storeAnalytics');
+        const analyticsQuery = query(analyticsRef, where('storeId', '==', uid));
+        const analyticsSnap = await getDocs(analyticsQuery);
+        for (const analyticsDoc of analyticsSnap.docs) {
+          await deleteDoc(analyticsDoc.ref);
+        }
+        console.log('✅ Deleted ALL store analytics');
+      } catch (err) {
+        console.log('StoreAnalytics collection not found or error:', err.message);
+      }
+
+      // 10. Delete from analyticsNotifications collection
+      try {
+        const analyticsNotifRef = doc(db, 'analyticsNotifications', uid);
+        await deleteDoc(analyticsNotifRef);
+        console.log('✅ Deleted analytics notification preferences');
+      } catch (err) {
+        console.log('AnalyticsNotifications not found or error:', err.message);
+      }
+
+      // 11. Delete from reports collection
+      try {
+        const reportsRef = collection(db, 'reports');
+        const reportsQuery = query(reportsRef, where('reporterId', '==', uid));
+        const reportsSnap = await getDocs(reportsQuery);
+        for (const reportDoc of reportsSnap.docs) {
+          await deleteDoc(reportDoc.ref);
+        }
+        console.log('✅ Deleted ALL reports filed by user');
+      } catch (err) {
+        console.log('Reports collection not found or error:', err.message);
+      }
+
+      // 12. Delete from admin_complaints collection
+      try {
+        const complaintsRef = collection(db, 'admin_complaints');
+        const complaintsQuery = query(complaintsRef, where('userId', '==', uid));
+        const complaintsSnap = await getDocs(complaintsQuery);
+        for (const complaintDoc of complaintsSnap.docs) {
+          await deleteDoc(complaintDoc.ref);
+        }
+        console.log('✅ Deleted ALL admin complaints');
+      } catch (err) {
+        console.log('AdminComplaints collection not found or error:', err.message);
+      }
+
+      // 13. Delete from alcoholIdVerifications collection
+      try {
+        const alcoholRef = collection(db, 'alcoholIdVerifications');
+        const alcoholQuery = query(alcoholRef, where('userId', '==', uid));
+        const alcoholSnap = await getDocs(alcoholQuery);
+        for (const alcoholDoc of alcoholSnap.docs) {
+          await deleteDoc(alcoholDoc.ref);
+        }
+        console.log('✅ Deleted ALL alcohol ID verifications');
+      } catch (err) {
+        console.log('AlcoholIdVerifications collection not found or error:', err.message);
+      }
+
+      // 14. Delete from fcmTokens (push notifications)
+      try {
+        const fcmRef = doc(db, 'fcmTokens', uid);
+        await deleteDoc(fcmRef);
+        console.log('✅ Deleted FCM tokens (push notifications)');
+      } catch (err) {
+        console.log('FCMTokens not found or error:', err.message);
+      }
+
+      // 15. Delete from admins collection (if admin)
+      try {
+        const adminRef = doc(db, 'admins', uid);
+        await deleteDoc(adminRef);
+        console.log('✅ Deleted admin privileges (if any)');
+      } catch (err) {
+        console.log('Admin document not found or error:', err.message);
+      }
+
+      // 16. Delete from notifications collection
+      const notificationsRef = collection(db, 'notifications');
+      const userNotificationsQuery = query(notificationsRef, where('userId', '==', uid));
+      const notificationsSnap = await getDocs(userNotificationsQuery);
+      for (const notifDoc of notificationsSnap.docs) {
+        await deleteDoc(notifDoc.ref);
+      }
+      console.log('✅ Deleted ALL notifications');
+
+      // 17. Delete ALL reviews written by this user (across ALL stores)
+      const allStoresSnap = await getDocs(collection(db, 'stores'));
+      for (const storeDoc of allStoresSnap.docs) {
+        const reviewsRef = collection(db, 'stores', storeDoc.id, 'reviews');
+        const userReviewsQuery = query(reviewsRef, where('userId', '==', uid));
+        const userReviewsSnap = await getDocs(userReviewsQuery);
+        for (const reviewDoc of userReviewsSnap.docs) {
+          await deleteDoc(reviewDoc.ref);
+        }
+      }
+      console.log('✅ Deleted ALL reviews written by user');
+
+      // 18. Delete from followers (unfollowing ALL stores)
+      for (const storeDoc of allStoresSnap.docs) {
+        const followersRef = collection(db, 'stores', storeDoc.id, 'followers');
+        const userFollowerQuery = query(followersRef, where('uid', '==', uid));
+        const userFollowerSnap = await getDocs(userFollowerQuery);
+        for (const followerDoc of userFollowerSnap.docs) {
+          await deleteDoc(followerDoc.ref);
+        }
+      }
+      console.log('✅ Deleted ALL follower relationships');
+
+      // 19. Delete from blocked users (blocked by user OR user was blocked)
+      for (const storeDoc of allStoresSnap.docs) {
+        const blockedRef = collection(db, 'stores', storeDoc.id, 'blocked');
+        const blockedByUserQuery = query(blockedRef, where('userId', '==', uid));
+        const blockedSnap = await getDocs(blockedByUserQuery);
+        for (const blockedDoc of blockedSnap.docs) {
+          await deleteDoc(blockedDoc.ref);
+        }
+        // Also check if uid field exists (different schema)
+        const blockedUidQuery = query(blockedRef, where('uid', '==', uid));
+        const blockedUidSnap = await getDocs(blockedUidQuery);
+        for (const blockedDoc of blockedUidSnap.docs) {
+          await deleteDoc(blockedDoc.ref);
+        }
+      }
+      console.log('✅ Deleted ALL blocked user records');
+
+      console.log('🎉 COMPLETE DATA WIPE SUCCESSFUL - User completely erased from platform:', uid);
+      
+    } catch (error) {
+      console.error('❌ Error during complete data wipe:', error);
+      throw error;
     }
   };
 
@@ -295,25 +569,36 @@ function SettingsPage() {
       }
       const credential = EmailAuthProvider.credential(currentUser.email, reauthPassword);
       await reauthenticateWithCredential(currentUser, credential);
-      // Now do the actual delete logic
+      
+      // Final confirmation
+      if (!window.confirm('⚠️ FINAL WARNING: This will PERMANENTLY DELETE your entire account and ALL your data across the platform. This includes:\n\n- Your profile\n- Your store (if you have one)\n- All orders\n- All messages\n- All posts and reviews\n- Everything else\n\nThis CANNOT be undone. Are you absolutely sure?')) {
+        return;
+      }
+      
+      // Now do the complete data wipe
       try {
-        if (userType === 'seller') {
-          if (!window.confirm('Deleting your account will permanently remove your shop and all its data. This cannot be undone. Are you sure?')) return;
-          await deleteStoreSubcollections(currentUser.uid);
-          await deleteDoc(doc(db, 'stores', currentUser.uid));
-        } else {
-          if (!window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
-          await deleteDoc(doc(db, 'users', currentUser.uid));
-        }
+        console.log('🗑️ Starting account deletion process...');
+        
+        // Delete ALL user data from Firestore
+        await deleteAllUserData(currentUser.uid);
+        
+        // Delete the Firebase Auth account
         await deleteUser(currentUser);
+        
+        console.log('✅ Account deleted successfully');
+        
         setShowReauthModal(false);
         setReauthPassword('');
         setReauthError('');
         setPendingDelete(false);
+        
         // Sign out and redirect
         await auth.signOut();
+        alert('Your account and all data have been permanently deleted.');
         navigate('/');
+        
       } catch (err) {
+        console.error('❌ Error deleting account:', err);
         setReauthError('Error deleting account: ' + err.message);
       }
     } catch (err) {
