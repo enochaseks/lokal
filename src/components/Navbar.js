@@ -22,6 +22,28 @@ function Navbar() {
   const { cart, clearCart } = useCart();
   const { unreadMessageCount } = useMessage();
 
+  // Add custom scrollbar styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .sidebar-scrollable::-webkit-scrollbar {
+        width: 6px;
+      }
+      .sidebar-scrollable::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .sidebar-scrollable::-webkit-scrollbar-thumb {
+        background: rgba(0, 123, 127, 0.3);
+        border-radius: 3px;
+      }
+      .sidebar-scrollable::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 123, 127, 0.5);
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
   // Handle window resize to detect mobile devices
   useEffect(() => {
     const handleResize = () => {
@@ -1325,7 +1347,17 @@ function Navbar() {
             </div>
 
             {/* Menu Items */}
-            <div style={{ flex: 1, padding: '0 1rem' }}>
+            <div 
+              className="sidebar-scrollable"
+              style={{ 
+                flex: 1, 
+                padding: '0 1rem',
+                overflowY: 'auto',
+                maxHeight: 'calc(100vh - 120px)',
+                paddingRight: '0.5rem',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(0, 123, 127, 0.3) transparent'
+              }}>
               <button 
                 onClick={() => { setSidebarOpen(false); navigate('/my-reviews'); }} 
                 style={{ 

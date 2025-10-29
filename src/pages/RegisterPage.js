@@ -493,24 +493,40 @@ function RegisterPage() {
           {/* Terms of Service and Privacy Policy Checkboxes */}
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-              <input 
-                type="checkbox" 
-                id="termsCheckbox"
-                checked={agreedToTerms}
-                onChange={() => setAgreedToTerms(!agreedToTerms)}
-                style={{ 
-                  marginRight: '8px', 
-                  marginTop: '4px',
-                  minWidth: '20px', 
-                  minHeight: '20px',
+              <div style={{ position: 'relative', marginRight: '8px', marginTop: '4px' }}>
+                <input 
+                  type="checkbox" 
+                  id="termsCheckbox"
+                  checked={agreedToTerms}
+                  onChange={() => setAgreedToTerms(!agreedToTerms)}
+                  style={{ 
+                    opacity: 0,
+                    position: 'absolute',
+                    width: '20px',
+                    height: '20px',
+                    cursor: 'pointer'
+                  }}
+                  required
+                />
+                <div style={{
                   width: '20px',
                   height: '20px',
-                  accentColor: '#D92D20',
-                  boxSizing: 'border-box',
-                  border: '2px solid #1C1C1C'
-                }}
-                required
-              />
+                  border: '2px solid #1C1C1C',
+                  borderRadius: '3px',
+                  backgroundColor: agreedToTerms ? '#007B7F' : 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'none'
+                }}>
+                  {agreedToTerms && (
+                    <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+                      <path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
               <label htmlFor="termsCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
                 I have read and agree to the <a 
                   href="/settings" 
@@ -525,24 +541,40 @@ function RegisterPage() {
             </div>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-              <input 
-                type="checkbox" 
-                id="privacyCheckbox"
-                checked={agreedToPrivacy}
-                onChange={() => setAgreedToPrivacy(!agreedToPrivacy)}
-                style={{ 
-                  marginRight: '8px', 
-                  marginTop: '4px',
-                  minWidth: '20px', 
-                  minHeight: '20px',
+              <div style={{ position: 'relative', marginRight: '8px', marginTop: '4px' }}>
+                <input 
+                  type="checkbox" 
+                  id="privacyCheckbox"
+                  checked={agreedToPrivacy}
+                  onChange={() => setAgreedToPrivacy(!agreedToPrivacy)}
+                  style={{ 
+                    opacity: 0,
+                    position: 'absolute',
+                    width: '20px',
+                    height: '20px',
+                    cursor: 'pointer'
+                  }}
+                  required
+                />
+                <div style={{
                   width: '20px',
                   height: '20px',
-                  accentColor: '#D92D20',
-                  boxSizing: 'border-box',
-                  border: '2px solid #1C1C1C'
-                }}
-                required
-              />
+                  border: '2px solid #1C1C1C',
+                  borderRadius: '3px',
+                  backgroundColor: agreedToPrivacy ? '#007B7F' : 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'none'
+                }}>
+                  {agreedToPrivacy && (
+                    <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+                      <path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
               <label htmlFor="privacyCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
                 I have read and agree to the <a 
                   href="/settings" 
@@ -558,24 +590,39 @@ function RegisterPage() {
             
             {/* Marketing Consent Checkbox */}
             <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '1rem', background: '#f8f9fa', padding: '12px', borderRadius: '4px' }}>
-              <input 
-                type="checkbox" 
-                id="marketingCheckbox"
-                checked={marketingConsent}
-                onChange={() => setMarketingConsent(!marketingConsent)}
-                style={{ 
-                  marginRight: '8px', 
-                  marginTop: '4px',
-                  minWidth: '20px', 
-                  minHeight: '20px',
+              <div style={{ position: 'relative', marginRight: '8px', marginTop: '4px' }}>
+                <input 
+                  type="checkbox" 
+                  id="marketingCheckbox"
+                  checked={marketingConsent}
+                  onChange={() => setMarketingConsent(!marketingConsent)}
+                  style={{ 
+                    opacity: 0,
+                    position: 'absolute',
+                    width: '20px',
+                    height: '20px',
+                    cursor: 'pointer'
+                  }}
+                />
+                <div style={{
                   width: '20px',
                   height: '20px',
-                  accentColor: '#D92D20',
-                  boxSizing: 'border-box',
                   border: '2px solid #1C1C1C',
-                  cursor: 'pointer'
-                }}
-              />
+                  borderRadius: '3px',
+                  backgroundColor: marketingConsent ? '#007B7F' : 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'none'
+                }}>
+                  {marketingConsent && (
+                    <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+                      <path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
               <label htmlFor="marketingCheckbox" style={{ fontSize: '0.9rem', lineHeight: '1.4', color: '#1C1C1C' }}>
                 I consent to receive marketing communications about special offers, new features, and personalized recommendations. You can unsubscribe at any time.
               </label>
