@@ -38,6 +38,9 @@ const stripeReceiptFunctions = require('./stripe-receipt-function');
 const emailNotificationFunctions = require('./email-notification-function');
 const pushNotificationFunctions = require('./push-notification-function');
 
+// Import onboarding reminder functions (they export directly)
+const { sendOnboardingReminders, sendOnboardingRemindersManual } = require('./onboarding-reminder-function');
+
 // Export the boost store functions
 exports.updateStoreBoostStatus = boostStoreFunctions.updateStoreBoostStatus;
 exports.expireStoreBoosts = boostStoreFunctions.expireStoreBoosts;
@@ -67,3 +70,7 @@ exports.sendPaymentNotification = pushNotificationFunctions.sendPaymentNotificat
 exports.sendReviewNotification = pushNotificationFunctions.sendReviewNotification;
 exports.sendStoreBoostNotification = pushNotificationFunctions.sendStoreBoostNotification;
 exports.sendCustomPushNotification = pushNotificationFunctions.sendCustomPushNotification;
+
+// Export onboarding reminder functions
+exports.sendOnboardingReminders = sendOnboardingReminders;
+exports.sendOnboardingRemindersManual = sendOnboardingRemindersManual;
