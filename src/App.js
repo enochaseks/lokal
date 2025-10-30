@@ -1,5 +1,6 @@
 
 import './App.css';
+import Navbar from './components/Navbar';
 import ExplorePage from './pages/ExplorePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -205,8 +206,8 @@ function App() {
             <DeletedAccountGuard>
               <OnboardingGuard>
               <PushNotificationPrompt />
-          <div className="App" style={{ 
-            minHeight: '100vh', 
+              <div className="App" style={{ 
+                minHeight: '100vh', 
             width: '100%', 
             display: 'flex', 
             flexDirection: 'column', 

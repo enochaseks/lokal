@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { app, db } from '../firebase';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, onSnapshot, collectionGroup, or } from 'firebase/firestore';
 import { useCart } from '../CartContext';
 import { useMessage } from '../MessageContext';
@@ -21,6 +21,11 @@ function Navbar() {
   const navigate = useNavigate();
   const { cart, clearCart } = useCart();
   const { unreadMessageCount } = useMessage();
+  const location = useLocation();
+
+  const isExplorePage = location.pathname === '/explore' || location.pathname === '/';
+  const showBanner = (!user || userType === 'buyer') && isExplorePage;
+  const bannerHeight = 150;
 
   // Add custom scrollbar styles
   useEffect(() => {
@@ -281,12 +286,11 @@ function Navbar() {
                   notificationsList.push({
                     id: `buyer_comment_likes_${postId}_${commentIndex}`,
                     type: 'comment_likes',
-                    title: `❤️ ${comment.likes.length} ${comment.likes.length === 1 ? 'person liked' : 'people liked'} your comment`,
-                    content: `Your comment: "${comment.text?.substring(0, 80) + (comment.text?.length > 80 ? '...' : '')}"`,
+                    title: `❤️ ${comment.likes.length} ${comment.likes.length === 1 ? 'person liked' : 'people liked'} ${comment.name}'s comment`,
+                    content: `On comment: "${comment.text?.substring(0, 80) + (comment.text?.length > 80 ? '...' : '')}"`,
                     timestamp: commentLikesTimestamp,
                     postId: postId,
                     storeId: post.storeId,
-                    storeName: storeProfile,
                     avatar: null,
                     isRead: false,
                     isNew: commentLikesTimestamp && commentLikesTimestamp >= oneDayAgo
@@ -742,58 +746,34 @@ function Navbar() {
   });
 
   return (
-    <nav style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      alignItems: 'center', 
-      padding: '0 1rem', 
-      background: 'rgba(255, 255, 255, 0.98)', 
-      backdropFilter: 'blur(20px)',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
-      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 9999,
-      transition: 'all 0.3s ease',
-      height: '60px',
-      width: '100%',
-      transform: 'translateZ(0)',
-      backfaceVisibility: 'hidden',
-      willChange: 'transform',
-      margin: 0
-    }}>
+    <>
+      <nav style={{ 
+        position: 'relative',
+        width: '100%',
+        zIndex: 1,
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '0 1rem', 
+        background: 'rgba(255, 255, 255, 0.98)', 
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        transition: 'all 0.3s ease',
+        height: '60px',
+        width: '100%',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        willChange: 'transform',
+        margin: 0
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-          <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
-            <img 
-              src={process.env.PUBLIC_URL + '/images/logo png.png'} 
-              alt="Lokal Logo" 
-              style={{ 
-                maxHeight: '35px', 
-                verticalAlign: 'middle',
-                transition: 'transform 0.2s ease'
-              }} 
-              onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
-              onMouseLeave={e => e.target.style.transform = 'scale(1)'}
-            />
-          </a>
-          <span style={{ 
-            fontSize: '12px', 
-            fontWeight: 'bold', 
-            color: 'rgba(0, 123, 127, 0.8)', 
-            marginLeft: '5px',
-            padding: '1px 6px',
-            borderRadius: '10px',
-            background: 'rgba(0, 123, 127, 0.1)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
-          }}>
-            beta
-          </span>
-        </div>
-        {/* Modern Hamburger menu */}
+        {/* Modern Hamburger menu - moved to left */}
         <button
           onClick={() => setSidebarOpen(true)}
           style={{ 
@@ -823,6 +803,23 @@ function Navbar() {
             <div style={{ height: 2.5, background: '#007B7F', borderRadius: 2 }}></div>
           </div>
         </button>
+        
+        {/* Logo - moved to right of hamburger menu */}
+        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+          <a href="/" style={{ display: 'inline-block', border: 'none', background: 'none' }}>
+            <img 
+              src={process.env.PUBLIC_URL + '/images/logo png.png'} 
+              alt="Lokal Logo" 
+              style={{ 
+                maxHeight: '45px', 
+                verticalAlign: 'middle',
+                transition: 'transform 0.2s ease'
+              }} 
+              onMouseEnter={e => e.target.style.transform = 'scale(1.05)'}
+              onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+            />
+          </a>
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {!user ? (
@@ -1789,7 +1786,7 @@ function Navbar() {
                       textDecoration: 'none',
                       padding: '0.5rem',
                       borderRadius: '50%',
-                      background: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
+                      background: 'linear-gradient(45deg, #f09433  0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -2010,7 +2007,8 @@ function Navbar() {
         </div>
       )}
     </nav>
+    </>
   );
 }
 
-export default Navbar; 
+export default Navbar;
