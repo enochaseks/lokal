@@ -14,16 +14,185 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          city: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      store_products: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          price: number
+          store_id: string
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          price: number
+          store_id: string
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          price?: number
+          store_id?: string
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_products_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          address: string | null
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          bank_sort_code: string | null
+          category: Database["public"]["Enums"]["store_category"]
+          city: string | null
+          created_at: string
+          description: string | null
+          hours: string | null
+          id: string
+          image_url: string | null
+          name: string
+          origin: string | null
+          owner_id: string
+          phone: string | null
+          postcode: string | null
+          published: boolean
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
+          category: Database["public"]["Enums"]["store_category"]
+          city?: string | null
+          created_at?: string
+          description?: string | null
+          hours?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          origin?: string | null
+          owner_id: string
+          phone?: string | null
+          postcode?: string | null
+          published?: boolean
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
+          category?: Database["public"]["Enums"]["store_category"]
+          city?: string | null
+          created_at?: string
+          description?: string | null
+          hours?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          origin?: string | null
+          owner_id?: string
+          phone?: string | null
+          postcode?: string | null
+          published?: boolean
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "shopper" | "merchant" | "admin"
+      store_category:
+        | "Groceries"
+        | "Restaurants"
+        | "Beauty"
+        | "Fashion"
+        | "Other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +319,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["shopper", "merchant", "admin"],
+      store_category: [
+        "Groceries",
+        "Restaurants",
+        "Beauty",
+        "Fashion",
+        "Other",
+      ],
+    },
   },
 } as const
