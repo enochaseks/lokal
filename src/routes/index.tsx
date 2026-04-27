@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Hero } from "@/components/lokal/Hero";
@@ -6,8 +6,10 @@ import { HowItWorks } from "@/components/lokal/HowItWorks";
 import { Footer } from "@/components/lokal/Footer";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
-import { stores, categories, type Store } from "@/data/stores";
+import { stores as seedStores, categories, type Store } from "@/data/stores";
+import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import storePlaceholder from "@/assets/store-grocery.jpg";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -25,8 +27,46 @@ function Index() {
   const [active, setActive] = useState<(typeof categories)[number]["name"]>("All");
   const [selected, setSelected] = useState<Store | null>(null);
   const [open, setOpen] = useState(false);
+  const [liveStores, setLiveStores] = useState<Store[]>([]);
 
-  const filtered = active === "All" ? stores : stores.filter((s) => s.category === active);
+  useEffect(() => {
+    (async () => {
+      const { data: rows } = await supabase
+        .from("stores")
+        .select("id,name,category,origin,description,address,city,hours,phone,image_url,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
+        .eq("published", true)
+        .order("created_at", { ascending: false });
+
+      if (!rows) return;
+      const mapped: Store[] = rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        category: (["Groceries", "Restaurants", "Beauty", "Fashion"].includes(r.category) ? r.category : "Groceries") as Store["category"],
+        origin: r.origin || "🌍 Local",
+        rating: 5.0,
+        reviews: 0,
+        distance: "—",
+        address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
+        hours: r.hours || "Hours on request",
+        phone: r.phone || "—",
+        image: r.image_url || storePlaceholder,
+        description: r.description || "A new Lokal merchant.",
+        bank: {
+          name: r.bank_name || "—",
+          accountName: r.bank_account_name || "—",
+          accountNumber: r.bank_account_number || "—",
+          sortCode: r.bank_sort_code || undefined,
+        },
+        products: (r.store_products ?? [])
+          .sort((a: any, b: any) => a.position - b.position)
+          .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined })),
+      }));
+      setLiveStores(mapped);
+    })();
+  }, []);
+
+  const allStores = [...liveStores, ...seedStores];
+  const filtered = active === "All" ? allStores : allStores.filter((s) => s.category === active);
 
   return (
     <div className="min-h-screen bg-background">
