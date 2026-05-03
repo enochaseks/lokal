@@ -9,12 +9,30 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as OrderRouteImport } from './routes/order'
 import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ListStoreRouteImport } from './routes/list-store'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrderRoute = OrderRouteImport.update({
+  id: '/order',
+  path: '/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MerchantRoute = MerchantRouteImport.update({
   id: '/merchant',
   path: '/merchant',
@@ -46,6 +64,9 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
+  '/order': typeof OrderRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +74,9 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
+  '/order': typeof OrderRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesById {
@@ -61,19 +85,41 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
+  '/order': typeof OrderRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/list-store' | '/merchant' | '/auth/callback'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/list-store'
+    | '/merchant'
+    | '/order'
+    | '/privacy'
+    | '/terms'
+    | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/list-store' | '/merchant' | '/auth/callback'
+  to:
+    | '/'
+    | '/auth'
+    | '/list-store'
+    | '/merchant'
+    | '/order'
+    | '/privacy'
+    | '/terms'
+    | '/auth/callback'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/list-store'
     | '/merchant'
+    | '/order'
+    | '/privacy'
+    | '/terms'
     | '/auth/callback'
   fileRoutesById: FileRoutesById
 }
@@ -82,10 +128,34 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   ListStoreRoute: typeof ListStoreRoute
   MerchantRoute: typeof MerchantRoute
+  OrderRoute: typeof OrderRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/order': {
+      id: '/order'
+      path: '/order'
+      fullPath: '/order'
+      preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/merchant': {
       id: '/merchant'
       path: '/merchant'
@@ -139,6 +209,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   ListStoreRoute: ListStoreRoute,
   MerchantRoute: MerchantRoute,
+  OrderRoute: OrderRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

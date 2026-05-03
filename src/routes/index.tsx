@@ -121,7 +121,7 @@ function Index() {
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-primary">{city ? `Near you · ${city}` : "Near you"}</span>
               <h2 className="mt-2 font-display text-4xl font-bold md:text-5xl text-balance">
-                Stores from across the diaspora.
+                Browse available stores near you.
               </h2>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -154,6 +154,30 @@ function Index() {
                     </div>
                   </div>
                 ))
+              : filtered.length === 0
+              ? (
+                  <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
+                    <div className="text-4xl mb-4">🏪</div>
+                    <h3 className="font-display text-xl font-semibold">
+                      {search
+                        ? `No stores found for "${search}"`
+                        : `No ${active === "All" ? "" : active.toLowerCase() + " "}stores available yet`}
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+                      {search
+                        ? "Try a different search term or browse all stores."
+                        : "We're growing — check back soon, or be the first to list your store."}
+                    </p>
+                    {search && (
+                      <button
+                        onClick={() => setSearch("")}
+                        className="mt-4 text-sm text-primary hover:underline"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                )
               : filtered.map((s) => (
                   <StoreCard key={s.id} store={s} onClick={() => { setSelected(s); setOpen(true); }} />
                 ))}

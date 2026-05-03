@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store, User as UserIcon } from "lucide-react";
+import { MapPin, LogOut, Store } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
+import { supabase } from "@/integrations/supabase/client";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@/assets/logo.jpg";
@@ -11,6 +13,24 @@ export function Navbar() {
   const { user, isMerchant, signOut } = useAuth();
   const navigate = useNavigate();
   const { city, loading } = useLocation();
+  const [storeName, setStoreName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setStoreName(null);
+      return;
+    }
+
+    void supabase
+      .from("stores")
+      .select("name")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        setStoreName(data?.[0]?.name ?? null);
+      });
+  }, [user?.id]);
 
   const initials = (user?.user_metadata?.display_name || user?.email || "?")
     .split(" ").map((s: string) => s[0]).join("").slice(0, 2).toUpperCase();
@@ -57,7 +77,7 @@ export function Navbar() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{user.user_metadata?.display_name || "Lokal user"}</span>
+                    <span className="text-sm font-medium">{storeName || user.user_metadata?.display_name || "Lokal user"}</span>
                     <span className="text-xs text-muted-foreground truncate">{user.email}</span>
                   </div>
                 </DropdownMenuLabel>
@@ -70,9 +90,6 @@ export function Navbar() {
                     <Store className="mr-2 h-4 w-4" /> List your store
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem disabled>
-                  <UserIcon className="mr-2 h-4 w-4" /> Profile (soon)
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={async () => { await signOut(); navigate({ to: "/" }); }}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign out

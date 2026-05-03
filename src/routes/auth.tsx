@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate, Link, useSearch } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,31 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+
+    void supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!active || !session) return;
+
+      if (redirect !== "/") {
+        navigate({ to: redirect as any });
+        return;
+      }
+
+      const { data: storeRow } = await supabase
+        .from("stores")
+        .select("id")
+        .eq("owner_id", session.user.id)
+        .maybeSingle();
+
+      navigate({ to: storeRow ? "/merchant" : "/" });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [navigate, redirect]);
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -53,7 +78,7 @@ function AuthPage() {
         const { error } = await supabase.auth.signInWithPassword({ email: e1.data, password: p1.data });
         if (error) throw error;
         toast.success("Welcome back");
-        navigate({ to: redirect });
+        navigate({ to: redirect === "/" ? "/merchant" : redirect });
       }
     } catch (err: any) {
       toast.error(err.message ?? "Something went wrong");
@@ -65,9 +90,12 @@ function AuthPage() {
   const handleGoogle = async () => {
     setBusy(true);
     try {
+      const callbackUrl = redirect && redirect !== "/"
+        ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
+        : `${window.location.origin}/auth/callback`;
       const { error, data } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin + "/auth/callback" },
+        options: { redirectTo: callbackUrl },
       });
       if (error) throw error;
     } catch (err: any) {
@@ -153,7 +181,15 @@ function AuthPage() {
         )}
 
         <p className="mt-5 text-center text-xs text-muted-foreground">
-          By continuing you agree to Lokal's terms and privacy policy.
+          {tab === "signup" ? (
+            <>
+              By signing up, you agree with our <Link to="/privacy" className="underline-offset-2 hover:underline">privacy policy</Link> and <Link to="/terms" className="underline-offset-2 hover:underline">terms of service</Link>.
+            </>
+          ) : (
+            <>
+              By continuing you agree to Lokal's <Link to="/terms" className="underline-offset-2 hover:underline">terms</Link> and <Link to="/privacy" className="underline-offset-2 hover:underline">privacy policy</Link>.
+            </>
+          )}
         </p>
       </div>
     </div>

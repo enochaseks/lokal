@@ -269,6 +269,7 @@ function ListStorePage() {
                 <div>
                   <Label>Phone</Label>
                   <Input value={store.phone} onChange={(e) => setStore({ ...store, phone: e.target.value })} maxLength={40} className="mt-1" />
+                  <p className="mt-1.5 text-xs text-muted-foreground">You'll receive order alerts by email and SMS to the phone number on your store.</p>
                 </div>
               </div>
 

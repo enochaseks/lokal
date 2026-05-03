@@ -19,6 +19,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [qty, setQty] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [reference, setReference] = useState(() => makeRef());
   const [copied, setCopied] = useState<string | null>(null);
@@ -53,7 +54,6 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   if (!store) return null;
 
-  const merchantWaNumber = store.phone.replace(/\D/g, "");
 
   const items = store.products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 }));
   const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -64,6 +64,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setQty({});
     setName("");
     setPhone("");
+    setEmail("");
     setNote("");
     setReference(makeRef());
     setShowMsgForm(false);
@@ -80,6 +81,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         reference,
         customer_name: name.trim(),
         customer_phone: phone.trim(),
+        customer_email: email.trim() || null,
         note: note.trim() || null,
         items: items.filter((i) => i.qty > 0).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit })),
         total_gbp: total,
@@ -87,24 +89,26 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       });
       if (error) throw error;
 
-      // Phase 2: fire-and-forget WhatsApp alert to merchant via edge function.
+      // Fire-and-forget email alert to merchant.
       void supabase.functions.invoke("send-whatsapp-alert", {
         body: {
           reference,
           total_gbp: total,
           customer_name: name.trim(),
-          customer_phone: phone.trim(),
-          merchant_phone: store.phone,
           store_name: store.name,
+          store_id: store.id,
           items: items.filter((i) => i.qty > 0).map((i) => ({ name: i.name, qty: i.qty, unit: i.unit })),
         },
       }).then(({ error: fnError }) => {
         if (fnError) {
-          console.error("send-whatsapp-alert failed", fnError.message);
+          console.error("send-order-alert failed", fnError.message);
         }
       });
 
-      toast.success("Order sent to merchant", { description: `${store.name} will confirm your transfer shortly.` });
+      toast.success("Order placed!", {
+        description: `Track it at lokalshops.co.uk/order using reference ${reference}`,
+        duration: 8000,
+      });
       onOpenChange(false);
       setTimeout(reset, 200);
     } catch (e: any) {
@@ -131,7 +135,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         direction: "inbound",
       });
       if (error) throw error;
-      toast.success("Message sent!", { description: `${store.name} will get back to you shortly.` });
+      toast.success("Enquiry sent!", { description: `${store.name} will reply to you on WhatsApp or by phone.` });
       setShowMsgForm(false);
       setMsgName(""); setMsgPhone(""); setMsgBody("");
     } catch (e: any) {
@@ -152,6 +156,22 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       }).select("id, reviewer_name, rating, body, created_at").single();
       if (error) throw error;
       setStoreReviews([data, ...storeReviews]);
+
+      // Fire-and-forget merchant email alert for the new review.
+      void supabase.functions.invoke("send-review-alert", {
+        body: {
+          store_id: store.id,
+          store_name: store.name,
+          reviewer_name: reviewName.trim(),
+          rating: reviewRating,
+          body: reviewBody.trim() || null,
+        },
+      }).then(({ error: fnError }) => {
+        if (fnError) {
+          console.error("send-review-alert failed", fnError.message);
+        }
+      });
+
       setShowReviewForm(false);
       setReviewRating(0); setReviewName(""); setReviewBody("");
       toast.success("Review submitted — thanks!");
@@ -217,11 +237,12 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     onClick={() => setShowMsgForm(true)}
                     className="w-full text-center text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                   >
-                    💬 Have a question? Message {store.name} directly
+                    💬 Have a question? Send {store.name} an enquiry
                   </button>
                 ) : (
                   <div className="space-y-3 rounded-xl border border-border bg-secondary/40 p-4">
-                    <p className="text-sm font-semibold">Send a message to {store.name}</p>
+                    <p className="text-sm font-semibold">Send an enquiry to {store.name}</p>
+                    <p className="text-xs text-muted-foreground">They'll reply to you on WhatsApp or by phone.</p>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Your name</label>
                       <Input value={msgName} onChange={(e) => setMsgName(e.target.value)} placeholder="Ama Boateng" className="mt-1" />
@@ -242,7 +263,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                         onClick={handleSendMsg}
                         className="bg-green-600 text-white hover:bg-green-700"
                       >
-                        {sendingMsg ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send message"}
+                        {sendingMsg ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send enquiry"}
                       </Button>
                     </div>
                   </div>
@@ -371,21 +392,14 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+44 ..." className="mt-1" />
                 </div>
                 <div>
+                  <label className="text-sm font-medium">Email <span className="text-muted-foreground font-normal">(for order updates)</span></label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="mt-1" />
+                </div>
+                <div>
                   <label className="text-sm font-medium">Note for merchant (optional)</label>
                   <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Pickup tomorrow around 5pm?" className="mt-1" />
                 </div>
               </div>
-
-              {merchantWaNumber && (
-                <a
-                  href={`https://wa.me/${merchantWaNumber}?text=${encodeURIComponent(`Hi ${store.name}, I want to place an order on Lokal.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-md border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 transition-colors hover:bg-green-100"
-                >
-                  Message merchant on WhatsApp
-                </a>
-              )}
 
               <div className="mt-5 rounded-xl bg-secondary/60 p-4 text-sm">
                 <div className="mb-2 font-semibold">Order summary</div>
@@ -403,7 +417,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
               <Button
                 size="lg"
                 className="mt-5 w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-                disabled={!name || !phone}
+                disabled={!name || !phone || !email}
                 onClick={() => setStep("transfer")}
               >
                 Continue to bank transfer
@@ -458,6 +472,13 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
               >
                 {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming…</> : "I've made the transfer"}
               </Button>
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                After sending, track your order at{" "}
+                <a href={`/order?ref=${reference}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2">
+                  lokalshops.co.uk/order
+                </a>{" "}
+                using reference <span className="font-mono font-bold">{reference}</span>
+              </p>
             </>
           )}
         </div>

@@ -10,14 +10,33 @@ function AuthCallbackPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Exchange the token from the URL (email confirmation & OAuth)
-    supabase.auth.exchangeCodeForSession(window.location.search)
-      .catch(() => {/* ignore if no code present */});
+    let isDone = false;
+
+    // Respect a ?redirect= param passed through from the auth page
+    const params = new URLSearchParams(window.location.search);
+    const redirectTo = params.get("redirect") || "/";
+
+    const finish = () => {
+      if (isDone) return;
+      isDone = true;
+      const dest = redirectTo === "/" ? "/merchant" : redirectTo;
+      navigate({ to: dest as any });
+    };
+
+    // Exchange the token from the URL (email confirmation & OAuth), then route using current session.
+    void supabase.auth.exchangeCodeForSession(window.location.search)
+      .catch(() => {
+        // Ignore when no code is present (e.g. magic-link flow already exchanged).
+      })
+      .finally(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) finish();
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
         subscription.unsubscribe();
-        navigate({ to: "/" });
+        finish();
       }
     });
 

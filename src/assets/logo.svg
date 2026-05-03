@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+  <!-- Green segment: donut arc 152°–268° -->
+  <path fill="#1e7a36" d="M16.45 59.84 A38 38 0 0 1 48.67 4.02 L49.44 26.01 A16 16 0 0 0 35.87 49.51 Z"/>
+  <!-- Yellow/gold segment: donut arc 272°–28° -->
+  <path fill="#f5a800" d="M51.33 4.02 A38 38 0 0 1 83.55 59.84 L64.13 49.51 A16 16 0 0 0 50.56 26.01 Z"/>
+  <!-- Red segment: sector 32°–148° + triangle tip, inner hole punched out -->
+  <path fill="#cc1414" fill-rule="evenodd" d="M82.22 62.14 A38 38 0 0 1 17.78 62.14 L50 110 Z M63.57 50.48 A16 16 0 0 1 36.43 50.48 Z"/>
+</svg>

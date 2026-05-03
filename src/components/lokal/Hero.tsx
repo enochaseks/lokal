@@ -38,13 +38,22 @@ export function Hero({ onSearch }: HeroProps) {
                 placeholder={loading ? "Detecting location..." : city ? `Stores near ${city}` : "Enter your postcode or city"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onSearch?.(query || city || "");
+                    document.getElementById("stores")?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
                 className="h-11 border-0 px-0 text-base shadow-none focus-visible:ring-0"
               />
             </div>
             <Button
               size="lg"
               className="h-12 gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-              onClick={() => onSearch?.(query || city || "")}
+              onClick={() => {
+                onSearch?.(query || city || "");
+                document.getElementById("stores")?.scrollIntoView({ behavior: "smooth" });
+              }}
             >
               <Search className="h-4 w-4" />
               Find stores
@@ -52,9 +61,9 @@ export function Hero({ onSearch }: HeroProps) {
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground">
-            <div><strong className="text-foreground">240+</strong> verified merchants</div>
-            <div><strong className="text-foreground">12</strong> cities</div>
             <div><strong className="text-foreground">Direct</strong> merchant messaging</div>
+            <div><strong className="text-foreground">Bank transfer</strong> — no card fees</div>
+            <div><strong className="text-foreground">Free</strong> to list your store</div>
           </div>
         </div>
 
@@ -67,15 +76,7 @@ export function Hero({ onSearch }: HeroProps) {
             height={1024}
             className="relative aspect-[4/5] w-full rounded-[2rem] object-cover shadow-warm md:aspect-[5/6]"
           />
-          <div className="absolute -bottom-6 -left-6 hidden rounded-2xl border border-border/60 bg-card p-4 shadow-card md:block">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-lg">🌶️</div>
-              <div>
-                <div className="text-xs text-muted-foreground">Today's pick</div>
-                <div className="text-sm font-semibold">Scotch bonnet · £3 / 250g</div>
-              </div>
-            </div>
-          </div>
+
         </div>
       </div>
     </section>

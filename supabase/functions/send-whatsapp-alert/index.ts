@@ -7,34 +7,19 @@ type AlertPayload = {
   reference: string;
   total_gbp: number;
   customer_name: string;
-  customer_phone: string;
-  merchant_phone: string;
   store_name: string;
+  store_id: string;
   items: Array<{ name: string; qty: number; unit?: string }>;
 };
 
-function toE164(raw: string): string | null {
-  const hasPlus = raw.trim().startsWith("+");
-  const digits = raw.replace(/\D/g, "");
+function toE164(raw: string | null | undefined): string | null {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
   if (!digits) return null;
-  return hasPlus ? `+${digits}` : `+${digits}`;
-}
-
-function buildMessageBody(payload: AlertPayload): string {
-  const itemCount = payload.items.reduce((acc, item) => acc + item.qty, 0);
-  const itemSummary = payload.items.slice(0, 3)
-    .map((item) => `${item.qty}x ${item.name}`)
-    .join(", ");
-  const moreItems = payload.items.length > 3 ? ` +${payload.items.length - 3} more` : "";
-
-  return [
-    `New Lokal order: ${payload.reference}`,
-    `Store: ${payload.store_name}`,
-    `Customer: ${payload.customer_name} (${payload.customer_phone})`,
-    `Items: ${itemCount} total${itemSummary ? ` (${itemSummary}${moreItems})` : ""}`,
-    `Total: GBP ${Number(payload.total_gbp).toFixed(2)}`,
-    "Open merchant dashboard to confirm payment.",
-  ].join("\n");
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (digits.startsWith("0")) return `+44${digits.slice(1)}`;
+  return `+${digits}`;
 }
 
 Deno.serve(async (req) => {
@@ -45,64 +30,97 @@ Deno.serve(async (req) => {
   try {
     const payload = (await req.json()) as AlertPayload;
 
-    const merchantPhone = toE164(payload.merchant_phone ?? "");
-    if (!merchantPhone) {
-      return new Response(JSON.stringify({ skipped: true, reason: "merchant phone missing" }), {
+    const brevoKey = Deno.env.get("BREVO_API_KEY");
+    const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
+    const smsSender = Deno.env.get("BREVO_SMS_SENDER") ?? "Lokal";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!brevoKey || !supabaseUrl || !serviceRoleKey) {
+      return new Response(JSON.stringify({ skipped: true, reason: "env not configured" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-    const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-    const from = Deno.env.get("TWILIO_WHATSAPP_FROM");
-
-    if (!sid || !token || !from) {
-      return new Response(JSON.stringify({ skipped: true, reason: "twilio env not configured" }), {
+    // Look up merchant email via service role
+    const storeRes = await fetch(
+      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone`,
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+    );
+    const stores = await storeRes.json();
+    const ownerId = stores?.[0]?.owner_id;
+    const merchantPhone = toE164(stores?.[0]?.phone);
+    if (!ownerId) {
+      return new Response(JSON.stringify({ skipped: true, reason: "store owner not found" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const contentSid = Deno.env.get("TWILIO_WHATSAPP_CONTENT_SID");
-    const body = buildMessageBody(payload);
+    const userRes = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+    );
+    const user = await userRes.json();
+    const merchantEmail = user?.email ?? user?.user?.email ?? null;
 
-    const formData = new URLSearchParams();
-    formData.set("From", from.startsWith("whatsapp:") ? from : `whatsapp:${from}`);
-    formData.set("To", `whatsapp:${merchantPhone}`);
+    const itemLines = payload.items.map((i) => `<li>${i.qty}× ${i.name}</li>`).join("");
+    const itemCount = payload.items.reduce((acc, i) => acc + i.qty, 0);
 
-    // If template SID is configured, use template mode for production-safe business-initiated messages.
-    if (contentSid) {
-      formData.set("ContentSid", contentSid);
-      formData.set("ContentVariables", JSON.stringify({
-        1: payload.store_name,
-        2: payload.reference,
-        3: Number(payload.total_gbp).toFixed(2),
-        4: payload.customer_name,
-        5: payload.customer_phone,
-      }));
-    } else {
-      formData.set("Body", body);
-    }
+    const html = `
+      <h2>🛒 New order on Lokal</h2>
+      <p><strong>Reference:</strong> ${payload.reference}</p>
+      <p><strong>Store:</strong> ${payload.store_name}</p>
+      <p><strong>Customer:</strong> ${payload.customer_name}</p>
+      <p><strong>Items (${itemCount} total):</strong></p>
+      <ul>${itemLines}</ul>
+      <p><strong>Total:</strong> £${Number(payload.total_gbp).toFixed(2)}</p>
+      <p><a href="https://lokalshops.co.uk">Open Lokal →</a></p>
+    `;
 
-    const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formData,
-    });
+    const smsText = [
+      `New Lokal order: ${payload.reference}`,
+      `${payload.store_name} • £${Number(payload.total_gbp).toFixed(2)}`,
+      `Customer: ${payload.customer_name}`,
+      `Open: https://lokalshops.co.uk`,
+    ].join("\n");
 
-    const twilioText = await twilioRes.text();
-    if (!twilioRes.ok) {
-      return new Response(JSON.stringify({ sent: false, error: twilioText }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const [emailResult, smsResult] = await Promise.all([
+      merchantEmail
+        ? fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+              "api-key": brevoKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sender: { email: emailFrom, name: "Lokal" },
+              to: [{ email: merchantEmail }],
+              subject: `New order ${payload.reference} - GBP ${Number(payload.total_gbp).toFixed(2)}`,
+              htmlContent: html,
+            }),
+          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
+        : Promise.resolve({ ok: false, body: "merchant email not found" }),
+      merchantPhone
+        ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+            method: "POST",
+            headers: {
+              "api-key": brevoKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sender: smsSender,
+              recipient: merchantPhone,
+              content: smsText,
+              type: "transactional",
+              tag: "merchant-new-order",
+            }),
+          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
+        : Promise.resolve({ ok: false, body: "merchant phone not found" }),
+    ]);
 
-    return new Response(JSON.stringify({ sent: true, result: twilioText }), {
+    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

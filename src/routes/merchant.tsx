@@ -51,7 +51,7 @@ type StoreRow = {
 };
 
 type OrderRow = {
-  id: string; reference: string; customer_name: string; customer_phone: string;
+  id: string; reference: string; customer_name: string; customer_phone: string; customer_email: string | null;
   note: string | null; items: Array<{ name: string; price: number; qty: number; unit?: string }>;
   total_gbp: number; status: string; created_at: string; store_id: string;
 };
@@ -182,7 +182,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
               <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
               <div><Label>Postcode</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} maxLength={20} className="mt-1" /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /></div>
+              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number.</p></div>
               <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
             </div>
           </div>
@@ -287,20 +287,39 @@ function MerchantPage() {
     toast.success(s.published ? "Store hidden" : "Store published");
   };
 
-  const markOrderPaid = async (orderId: string) => {
-    const { error } = await db.from("orders").update({ status: "payment_received" }).eq("id", orderId);
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    const { error } = await db.from("orders").update({ status }).eq("id", orderId);
     if (error) return toast.error(error.message);
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: "payment_received" } : o));
-    toast.success("Order marked as paid");
+    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+    const labels: Record<string, string> = {
+      transfer_received: "Marked as transfer received",
+      ready: "Order marked ready",
+      completed: "Order completed",
+      cancelled: "Order cancelled",
+    };
+    toast.success(labels[status] ?? "Order updated");
+
+    if (status === "ready") {
+      const order = orders.find((o) => o.id === orderId);
+      const store = stores.find((s) => s.id === order?.store_id);
+      if ((order?.customer_email || order?.customer_phone) && store) {
+        void supabase.functions.invoke("send-order-ready", {
+          body: {
+            reference: order.reference,
+            store_name: store.name,
+            customer_email: order.customer_email,
+            customer_phone: order.customer_phone,
+            customer_name: order.customer_name,
+          },
+        });
+      }
+    }
   };
 
-  const cancelOrder = async (orderId: string) => {
-    const { error } = await db.from("orders").update({ status: "cancelled" }).eq("id", orderId);
-    if (error) return toast.error(error.message);
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: "cancelled" } : o));
-  };
+  const markOrderPaid = (id: string) => updateOrderStatus(id, "transfer_received");
+  const cancelOrder = (id: string) => updateOrderStatus(id, "cancelled");
 
-  const pendingCount = orders.filter((o) => o.status === "pending_transfer").length;
+  const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
   const unreadMessages = messages.filter((m) => m.direction === "inbound").length;
   const storesWithoutPhone = stores.filter((s) => !s.phone);
 
@@ -414,10 +433,10 @@ function MerchantPage() {
                       </Button>
                     </div>
                     {/* Orders for this store */}
-                    {orders.filter((o) => o.store_id === s.id && o.status === "pending_transfer").length > 0 && (
+                    {orders.filter((o) => o.store_id === s.id && ["pending_transfer", "transfer_received"].includes(o.status)).length > 0 && (
                       <button onClick={() => setTab("orders")} className="mt-3 w-full rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-left text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors">
                         <ShoppingBag className="inline h-3.5 w-3.5 mr-1.5" />
-                        {orders.filter((o) => o.store_id === s.id && o.status === "pending_transfer").length} pending order(s) awaiting payment — view inbox →
+                        {orders.filter((o) => o.store_id === s.id && ["pending_transfer", "transfer_received"].includes(o.status)).length} active order(s) — view dashboard →
                       </button>
                     )}
                   </div>
@@ -441,9 +460,9 @@ function MerchantPage() {
             ) : (
               <div className="space-y-3">
                 {/* Filter row */}
-                <div className="flex gap-2 text-xs font-medium">
-                  {["all", "pending_transfer", "payment_received", "cancelled"].map((f) => {
-                    const labels: Record<string, string> = { all: "All", pending_transfer: "Awaiting payment", payment_received: "Paid", cancelled: "Cancelled" };
+                <div className="flex gap-2 text-xs font-medium flex-wrap">
+                  {["all", "pending_transfer", "transfer_received", "ready", "completed", "cancelled"].map((f) => {
+                    const labels: Record<string, string> = { all: "All", pending_transfer: "Awaiting transfer", transfer_received: "Transfer received", ready: "Ready", completed: "Done", cancelled: "Cancelled" };
                     const count = f === "all" ? orders.length : orders.filter((o) => o.status === f).length;
                     return (
                       <span key={f} className="rounded-full bg-secondary px-3 py-1 text-muted-foreground">
@@ -455,19 +474,24 @@ function MerchantPage() {
 
                 {orders.map((o) => {
                   const storeName = stores.find((s) => s.id === o.store_id)?.name ?? "—";
-                  const waLink = `https://wa.me/${o.customer_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi ${o.customer_name}, thanks for your order ${o.reference} on Lokal! 👋`)}`;
+                  const statusMeta: Record<string, { label: string; color: string }> = {
+                    pending_transfer: { label: "Awaiting transfer", color: "bg-amber-100 text-amber-800" },
+                    transfer_received: { label: "Transfer received", color: "bg-blue-100 text-blue-700" },
+                    payment_received: { label: "Transfer received", color: "bg-blue-100 text-blue-700" },
+                    ready: { label: "Ready", color: "bg-green-100 text-green-700" },
+                    completed: { label: "Done", color: "bg-secondary text-muted-foreground" },
+                    cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
+                  };
+                  const sm = statusMeta[o.status] ?? statusMeta.pending_transfer;
+                  const isActive = ["pending_transfer", "transfer_received", "payment_received"].includes(o.status);
                   return (
-                    <div key={o.id} className={`rounded-xl border bg-card p-4 transition-colors ${o.status === "pending_transfer" ? "border-amber-200 bg-amber-50/30" : "border-border"}`}>
+                    <div key={o.id} className={`rounded-xl border bg-card p-4 transition-colors ${isActive ? "border-amber-200 bg-amber-50/30" : "border-border"}`}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-sm font-bold text-primary">{o.reference}</span>
-                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                              o.status === "payment_received" ? "bg-green-100 text-green-700" :
-                              o.status === "cancelled" ? "bg-red-100 text-red-700" :
-                              "bg-amber-100 text-amber-800"
-                            }`}>
-                              {o.status === "payment_received" ? "Paid" : o.status === "cancelled" ? "Cancelled" : "Awaiting transfer"}
+                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>
+                              {sm.label}
                             </span>
                             <span className="text-xs text-muted-foreground">{storeName}</span>
                           </div>
@@ -477,9 +501,6 @@ function MerchantPage() {
                             <span className="font-semibold text-sm">{o.customer_name}</span>
                             <a href={`tel:${o.customer_phone}`} className="flex items-center gap-1 text-sm text-primary hover:underline">
                               📞 {o.customer_phone}
-                            </a>
-                            <a href={waLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-200">
-                              WhatsApp
                             </a>
                           </div>
 
@@ -502,16 +523,26 @@ function MerchantPage() {
                         {/* Amount + actions */}
                         <div className="flex flex-col items-end gap-2">
                           <div className="font-display text-2xl font-bold">£{Number(o.total_gbp).toFixed(2)}</div>
-                          {o.status === "pending_transfer" && (
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => cancelOrder(o.id)}>
-                                Cancel
+                          <div className="flex gap-2 flex-wrap">
+                            {["pending_transfer"].includes(o.status) && (
+                              <>
+                                <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => cancelOrder(o.id)}>Cancel</Button>
+                                <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => markOrderPaid(o.id)}>
+                                  <Check className="mr-1.5 h-3.5 w-3.5" />Transfer received
+                                </Button>
+                              </>
+                            )}
+                            {["transfer_received", "payment_received"].includes(o.status) && (
+                              <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={() => updateOrderStatus(o.id, "ready")}>
+                                <Check className="mr-1.5 h-3.5 w-3.5" />Mark ready
                               </Button>
-                              <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={() => markOrderPaid(o.id)}>
-                                <Check className="mr-1.5 h-3.5 w-3.5" />Mark paid
+                            )}
+                            {o.status === "ready" && (
+                              <Button size="sm" variant="outline" onClick={() => updateOrderStatus(o.id, "completed")}>
+                                <Check className="mr-1.5 h-3.5 w-3.5" />Complete
                               </Button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
