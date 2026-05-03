@@ -6,7 +6,7 @@ import { HowItWorks } from "@/components/lokal/HowItWorks";
 import { Footer } from "@/components/lokal/Footer";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
-import { stores as seedStores, categories, type Store } from "@/data/stores";
+import { categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import storePlaceholder from "@/assets/store-grocery.jpg";
@@ -65,8 +65,7 @@ function Index() {
     })();
   }, []);
 
-  const allStores = [...liveStores, ...seedStores];
-  const filtered = active === "All" ? allStores : allStores.filter((s) => s.category === active);
+  const filtered = active === "All" ? liveStores : liveStores.filter((s) => s.category === active);
 
   return (
     <div className="min-h-screen bg-background">
