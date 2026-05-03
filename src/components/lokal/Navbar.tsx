@@ -38,7 +38,7 @@ export function Navbar() {
 
           {!user ? (
             <>
-              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth" })}>Sign in</Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth", search: {} as never })}>Sign in</Button>
               <Button size="sm" className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => navigate({ to: "/list-store" })}>
                 List your store
               </Button>
