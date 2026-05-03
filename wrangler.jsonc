@@ -1,7 +1,19 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "lokal-app",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "lokalshops.co.uk",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.lokalshops.co.uk",
+      "custom_domain": true
+    }
+  ]
 }

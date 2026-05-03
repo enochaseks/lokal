@@ -1,4 +1,4 @@
-import { Star, MapPin } from "lucide-react";
+import { MapPin, Star } from "lucide-react";
 import type { Store } from "@/data/stores";
 
 export function StoreCard({ store, onClick }: { store: Store; onClick: () => void }) {
@@ -19,10 +19,6 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
         <div className="absolute left-3 top-3 rounded-full bg-background/90 px-3 py-1 text-xs font-medium backdrop-blur">
           {store.origin}
         </div>
-        <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold backdrop-blur">
-          <Star className="h-3 w-3 fill-primary text-primary" />
-          {store.rating}
-        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-5">
@@ -34,8 +30,12 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{store.distance} away</span>
-          <span>{store.reviews} reviews</span>
+          <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{store.city || store.address || "Location on request"}</span>
+          {store.reviews > 0 && (
+            <span className="ml-2 flex shrink-0 items-center gap-0.5 font-medium text-amber-500">
+              <Star className="h-3 w-3 fill-amber-500" />{store.rating} <span className="text-muted-foreground">({store.reviews})</span>
+            </span>
+          )}
         </div>
       </div>
     </button>

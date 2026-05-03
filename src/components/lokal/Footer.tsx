@@ -1,12 +1,12 @@
+import logoImage from "@/assets/logo.jpg";
+
 export function Footer() {
   return (
     <footer id="merchants" className="border-t border-border/60 bg-card">
       <div className="container mx-auto grid gap-10 px-4 py-14 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-warm">
-              <span className="font-display text-lg font-bold text-primary-foreground">L</span>
-            </div>
+            <img src={logoImage} alt="Lokal logo" className="h-9 w-9 rounded-xl object-cover shadow-warm" />
             <span className="font-display text-2xl font-bold">Lokal</span>
           </div>
           <p className="mt-4 max-w-sm text-sm text-muted-foreground">

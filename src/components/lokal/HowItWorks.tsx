@@ -1,7 +1,7 @@
 import { Search, MessageCircle, Landmark } from "lucide-react";
 
 const steps = [
-  { icon: Search, title: "Discover nearby", text: "Browse African & Caribbean stores in your area, filter by category and rating." },
+  { icon: Search, title: "Discover nearby", text: "Browse African & Caribbean stores in your area and filter by the live categories." },
   { icon: MessageCircle, title: "Arrange with merchant", text: "Pick your items and share your details — the merchant confirms pickup or delivery." },
   { icon: Landmark, title: "Pay by bank transfer", text: "No card fees, no middleman. Send the exact amount with your unique reference." },
 ];

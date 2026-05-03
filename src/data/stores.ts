@@ -1,7 +1,9 @@
 import grocery from "@/assets/store-grocery.jpg";
-import restaurant from "@/assets/store-restaurant.jpg";
 import beauty from "@/assets/store-beauty.jpg";
-import fashion from "@/assets/store-fashion.jpg";
+import barber from "@/assets/store-fashion.jpg";
+
+export const LIVE_CATEGORIES = ["Groceries", "Beauty", "Barbers"] as const;
+export type LiveCategory = (typeof LIVE_CATEGORIES)[number];
 
 export type Product = {
   name: string;
@@ -12,12 +14,13 @@ export type Product = {
 export type Store = {
   id: string;
   name: string;
-  category: "Groceries" | "Restaurants" | "Beauty" | "Fashion";
+  category: LiveCategory;
   origin: string;
   rating: number;
   reviews: number;
   distance: string;
   address: string;
+  city?: string;
   hours: string;
   phone: string;
   image: string;
@@ -51,29 +54,6 @@ export const stores: Store[] = [
     ],
   },
   {
-    id: "island-spice",
-    name: "Island Spice Kitchen",
-    category: "Restaurants",
-    origin: "🇯🇲 Jamaican",
-    rating: 4.8,
-    reviews: 532,
-    distance: "1.1 mi",
-    address: "84 Brixton Hill, London SW2 1QN",
-    hours: "Tue–Sun · 12pm – 11pm",
-    phone: "+44 20 7733 2244",
-    image: restaurant,
-    description:
-      "Slow-cooked jerk over pimento wood, oxtail that falls off the bone, and the rice & peas your auntie tried to make.",
-    bank: { name: "NatWest", accountName: "Island Spice Ltd", accountNumber: "33124509", sortCode: "60-12-34" },
-    products: [
-      { name: "Jerk Chicken Plate", price: 14.0 },
-      { name: "Oxtail & Butter Beans", price: 18.5 },
-      { name: "Curry Goat", price: 16.0 },
-      { name: "Festival (3pc)", price: 4.5 },
-      { name: "Sorrel Drink (500ml)", price: 3.5 },
-    ],
-  },
-  {
     id: "shea-and-soul",
     name: "Shea & Soul Apothecary",
     category: "Beauty",
@@ -96,25 +76,25 @@ export const stores: Store[] = [
     ],
   },
   {
-    id: "ankara-atelier",
-    name: "Ankara Atelier",
-    category: "Fashion",
-    origin: "🌍 Pan-African",
-    rating: 4.7,
-    reviews: 89,
+    id: "fade-factory",
+    name: "Fade Factory Barbers",
+    category: "Barbers",
+    origin: "🇬🇭 Ghanaian",
+    rating: 4.8,
+    reviews: 164,
     distance: "2.3 mi",
     address: "5 Dalston Ln, London E8 3DF",
-    hours: "Wed–Sun · 11am – 6pm",
+    hours: "Tue–Sun · 10am – 8pm",
     phone: "+44 20 8123 4477",
-    image: fashion,
+    image: barber,
     description:
-      "Bespoke ankara tailoring and ready-to-wear pieces. Bring an idea or a Pinterest board — we'll bring it to life.",
-    bank: { name: "Starling", accountName: "Ankara Atelier", accountNumber: "55667788", sortCode: "60-83-71" },
+      "Skin fades, beard trims, line-ups and clean cuts for the community, with walk-ins and weekend appointments.",
+    bank: { name: "Starling", accountName: "Fade Factory Ltd", accountNumber: "55667788", sortCode: "60-83-71" },
     products: [
-      { name: "Custom Ankara Dress", price: 120 },
-      { name: "Wax Print Headwrap", price: 18 },
-      { name: "Two-piece Set", price: 95 },
-      { name: "Kente Pocket Square", price: 25 },
+      { name: "Skin Fade", price: 25 },
+      { name: "Kids Cut", price: 18 },
+      { name: "Beard Shape-Up", price: 12 },
+      { name: "Cut + Beard Combo", price: 32 },
     ],
   },
 ];
@@ -122,7 +102,6 @@ export const stores: Store[] = [
 export const categories = [
   { name: "All", emoji: "🌍" },
   { name: "Groceries", emoji: "🥭" },
-  { name: "Restaurants", emoji: "🍛" },
   { name: "Beauty", emoji: "✨" },
-  { name: "Fashion", emoji: "👗" },
+  { name: "Barbers", emoji: "💈" },
 ] as const;

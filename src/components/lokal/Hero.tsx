@@ -1,9 +1,18 @@
+import { useState } from "react";
 import heroImg from "@/assets/hero-market.jpg";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MapPin, Search } from "lucide-react";
+import { useLocation } from "@/hooks/use-location";
 
-export function Hero() {
+type HeroProps = {
+  onSearch?: (query: string) => void;
+};
+
+export function Hero({ onSearch }: HeroProps) {
+  const { city, loading } = useLocation();
+  const [query, setQuery] = useState("");
+
   return (
     <section className="relative overflow-hidden bg-gradient-hero">
       <div className="container relative mx-auto grid gap-12 px-4 py-16 md:grid-cols-2 md:py-24 lg:py-32">
@@ -19,19 +28,24 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-md text-lg text-muted-foreground text-balance">
-            Discover African and Caribbean stores near you — groceries, kitchens, beauty and fashion. Reserve with the merchant, pay by simple bank transfer.
+            Discover African and Caribbean stores near you — groceries, beauty essentials and trusted local barbers. Reserve with the merchant, pay by simple bank transfer.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-card sm:flex-row sm:items-center">
             <div className="flex flex-1 items-center gap-2 px-2">
               <MapPin className="h-5 w-5 shrink-0 text-primary" />
               <Input
-                placeholder="Enter your postcode or city"
+                placeholder={loading ? "Detecting location..." : city ? `Stores near ${city}` : "Enter your postcode or city"}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
                 className="h-11 border-0 px-0 text-base shadow-none focus-visible:ring-0"
-                defaultValue="E8 2NP, London"
               />
             </div>
-            <Button size="lg" className="h-12 gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95">
+            <Button
+              size="lg"
+              className="h-12 gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+              onClick={() => onSearch?.(query || city || "")}
+            >
               <Search className="h-4 w-4" />
               Find stores
             </Button>
@@ -40,7 +54,7 @@ export function Hero() {
           <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground">
             <div><strong className="text-foreground">240+</strong> verified merchants</div>
             <div><strong className="text-foreground">12</strong> cities</div>
-            <div><strong className="text-foreground">4.9★</strong> average rating</div>
+            <div><strong className="text-foreground">Direct</strong> merchant messaging</div>
           </div>
         </div>
 

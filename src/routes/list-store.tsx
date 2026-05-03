@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Store as StoreIcon, Landmark, Package, Check, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Store as StoreIcon, Landmark, Package, Check, ArrowLeft, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import { LIVE_CATEGORIES } from "@/data/stores";
+
+function RouteError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-2xl font-bold">Could not load the form</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{import.meta.env.DEV ? error.message : "Something went wrong. Please try again."}</p>
+        <button onClick={() => { router.invalidate(); reset(); }} className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Try again</button>
+      </div>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/list-store")({
+  beforeLoad: async () => {
+    if (typeof window === "undefined") return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw redirect({ to: "/auth", search: { redirect: "/list-store" } });
+  },
+  errorComponent: RouteError,
   component: ListStorePage,
   head: () => ({
     meta: [
@@ -23,7 +43,7 @@ export const Route = createFileRoute("/list-store")({
   }),
 });
 
-const CATEGORIES = ["Groceries", "Restaurants", "Beauty", "Fashion", "Other"] as const;
+const CATEGORIES = LIVE_CATEGORIES;
 
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
@@ -56,20 +76,39 @@ function ListStorePage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: "",
-    description: "", address: "", city: "London", postcode: "",
+    description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", image_url: "",
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
   const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate({ to: "/auth", search: { redirect: "/list-store" } });
+    // route guard handled by beforeLoad
+  }, []);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${user.id}/cover-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("store-images").getPublicUrl(path);
+      setStore((s) => ({ ...s, image_url: data.publicUrl }));
+      toast.success("Photo uploaded");
+    } catch (e: any) {
+      toast.error(e.message ?? "Upload failed");
+    } finally {
+      setUploading(false);
     }
-  }, [user, loading, navigate]);
+  };
 
   const addProduct = () => setProducts((p) => [...p, { name: "", price: "", unit: "" }]);
   const removeProduct = (i: number) => setProducts((p) => p.filter((_, idx) => idx !== i));
@@ -197,9 +236,21 @@ function ListStorePage() {
               </div>
 
               <div>
-                <Label>Cover photo URL</Label>
-                <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="https://..." className="mt-1" />
-                <p className="mt-1 text-xs text-muted-foreground">Paste a link for now. (We'll add upload later.)</p>
+                <Label>Cover photo</Label>
+                {store.image_url && (
+                  <div className="mt-1 h-32 w-full overflow-hidden rounded-lg bg-secondary">
+                    <img src={store.image_url} alt="preview" className="h-full w-full object-cover" />
+                  </div>
+                )}
+                <div className="mt-1 flex gap-2">
+                  <label className="flex-1 cursor-pointer">
+                    <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
+                      {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload photo"}
+                    </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+                  </label>
+                  <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="or paste URL" className="flex-[2]" />
+                </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
