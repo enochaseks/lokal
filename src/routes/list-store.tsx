@@ -7,12 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Store as StoreIcon, Landmark, Package, Check, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, Trash2, Store as StoreIcon, Landmark, Package, Calendar, Check, ArrowLeft, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
+import { getImageUrl } from "@/lib/utils";
+
+const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -46,6 +49,16 @@ export const Route = createFileRoute("/list-store")({
 const CATEGORIES = LIVE_CATEGORIES;
 const ORIGINS = LIVE_ORIGINS;
 
+function isValidImageReference(value: string) {
+  if (!value) return true;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return /^[^\s/]+(?:\/[^\s/]+)+$/.test(value);
+  }
+}
+
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
   category: z.enum(CATEGORIES),
@@ -57,7 +70,7 @@ const storeSchema = z.object({
   hours: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(40).optional(),
   fulfillment: z.enum(["collection", "delivery", "both"]).default("collection"),
-  image_url: z.string().trim().url("Must be a valid URL").max(500).optional().or(z.literal("")),
+  image_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid URL").optional().or(z.literal("")),
 });
 
 const bankSchema = z.object({
@@ -68,6 +81,7 @@ const bankSchema = z.object({
 });
 
 type Product = { name: string; price: string; unit: string };
+type DayDraft = { day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number };
 
 function slugify(s: string) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) || "store";
@@ -87,6 +101,7 @@ function ListStorePage() {
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
   const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
+  const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 })));
 
   useEffect(() => {
     // route guard handled by beforeLoad
@@ -102,8 +117,8 @@ function ListStorePage() {
       const path = `${user.id}/cover-${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: true });
       if (error) throw error;
-      const { data } = supabase.storage.from("store-images").getPublicUrl(path);
-      setStore((s) => ({ ...s, image_url: data.publicUrl }));
+      // Store relative path, not the full Supabase URL
+      setStore((s) => ({ ...s, image_url: path }));
       toast.success("Photo uploaded");
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
@@ -130,8 +145,9 @@ function ListStorePage() {
 
   const handleSubmit = async () => {
     if (!user) return;
+    const isBarber = isBookable(store.category);
     const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
-    if (validProducts.length === 0) { toast.error("Add at least one product"); return; }
+    if (!isBarber && validProducts.length === 0) { toast.error("Add at least one product"); return; }
 
     setSubmitting(true);
     try {
@@ -149,15 +165,27 @@ function ListStorePage() {
         .from("stores").insert(payload).select("id").single();
       if (storeErr) throw storeErr;
 
-      const productRows = validProducts.map((p, i) => ({
-        store_id: newStore.id,
-        name: p.name.trim().slice(0, 80),
-        price: Number(p.price),
-        unit: p.unit.trim() || null,
-        position: i,
-      }));
-      const { error: prodErr } = await supabase.from("store_products").insert(productRows);
-      if (prodErr) throw prodErr;
+      if (validProducts.length > 0) {
+        const productRows = validProducts.map((p, i) => ({
+          store_id: newStore.id,
+          name: p.name.trim().slice(0, 80),
+          price: Number(p.price),
+          unit: p.unit.trim() || null,
+          position: i,
+        }));
+        const { error: prodErr } = await supabase.from("store_products").insert(productRows);
+        if (prodErr) throw prodErr;
+      }
+
+      if (isBarber) {
+        const activeDays = schedule.filter((d) => d.active);
+        if (activeDays.length > 0) {
+          const { error: availErr } = await supabase.from("store_availability").insert(
+            activeDays.map((d) => ({ store_id: newStore.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+          );
+          if (availErr) throw availErr;
+        }
+      }
 
       // Promote to merchant role
       await supabase.from("user_roles").insert({ user_id: user.id, role: "merchant" });
@@ -192,7 +220,7 @@ function ListStorePage() {
           {[
             { n: 1, label: "About your store", icon: StoreIcon },
             { n: 2, label: "Bank details", icon: Landmark },
-            { n: 3, label: "Products", icon: Package },
+            { n: 3, label: isBookable(store.category) ? "Schedule" : "Products", icon: isBookable(store.category) ? Calendar : Package },
           ].map((s, i) => (
             <div key={s.n} className="flex flex-1 items-center gap-2">
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
@@ -259,17 +287,19 @@ function ListStorePage() {
                 <Label>Cover photo</Label>
                 {store.image_url && (
                   <div className="mt-1 h-32 w-full overflow-hidden rounded-lg bg-secondary">
-                    <img src={store.image_url} alt="preview" className="h-full w-full object-cover" />
+                    <img src={getImageUrl(store.image_url) ?? store.image_url} alt="preview" className="h-full w-full object-cover" />
                   </div>
                 )}
                 <div className="mt-1 flex gap-2">
                   <label className="flex-1 cursor-pointer">
                     <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
-                      {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload photo"}
+                      {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : store.image_url ? "Replace photo" : "Upload photo"}
                     </div>
                     <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
                   </label>
-                  <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="or paste URL" className="flex-[2]" />
+                  {!store.image_url && (
+                    <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="or paste URL" className="flex-[2]" />
+                  )}
                 </div>
               </div>
 
@@ -345,26 +375,104 @@ function ListStorePage() {
 
           {step === 3 && (
             <div className="space-y-4">
-              <div>
-                <h2 className="font-display text-2xl font-bold">Add your products</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Add a few popular items to start — you can edit anytime.</p>
-              </div>
+              {isBookable(store.category) ? (
+                <>
+                  <div>
+                    <h2 className="font-display text-2xl font-bold">Services &amp; schedule</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Add the services you offer, then set your weekly availability.</p>
+                  </div>
 
-              <div className="space-y-3">
-                {products.map((p, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-6" placeholder="Product name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
-                    <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
-                    <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
-                    <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
-                      <Trash2 className="h-4 w-4" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Services</p>
+                    <div className="space-y-3">
+                      {products.map((p, i) => (
+                        <div key={i} className="grid grid-cols-12 gap-2">
+                          <Input className="col-span-6" placeholder="Service name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
+                          <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
+                          <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
+                          <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">
+                        <Plus className="h-3 w-3" /> Add service
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Weekly schedule</p>
+                    <div className="space-y-2">
+                      {schedule.map((d, i) => (
+                        <div key={d.day} className="rounded-lg border border-border p-3">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={d.active}
+                              onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))}
+                              className="h-4 w-4 accent-primary"
+                            />
+                            <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
+                            {d.active && (
+                              <div className="flex flex-1 flex-wrap items-center gap-2">
+                                <Input
+                                  type="time"
+                                  value={d.start_time}
+                                  onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))}
+                                  className="w-28"
+                                />
+                                <span className="text-sm text-muted-foreground">to</span>
+                                <Input
+                                  type="time"
+                                  value={d.end_time}
+                                  onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))}
+                                  className="w-28"
+                                />
+                                <Select
+                                  value={String(d.slot_duration_mins)}
+                                  onValueChange={(v) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, slot_duration_mins: Number(v) } : x))}
+                                >
+                                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="15">15 min</SelectItem>
+                                    <SelectItem value="30">30 min</SelectItem>
+                                    <SelectItem value="45">45 min</SelectItem>
+                                    <SelectItem value="60">60 min</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <h2 className="font-display text-2xl font-bold">Add your products</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Add a few popular items to start — you can edit anytime.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {products.map((p, i) => (
+                      <div key={i} className="grid grid-cols-12 gap-2">
+                        <Input className="col-span-6" placeholder="Product name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
+                        <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
+                        <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
+                        <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">
+                      <Plus className="h-3 w-3" /> Add product
                     </Button>
                   </div>
-                ))}
-                <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">
-                  <Plus className="h-3 w-3" /> Add product
-                </Button>
-              </div>
+                </>
+              )}
 
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" size="lg" className="flex-1" onClick={() => setStep(2)}>Back</Button>

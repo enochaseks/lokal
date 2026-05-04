@@ -33,7 +33,18 @@ function Index() {
   const [liveStores, setLiveStores] = useState<Store[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
   const [search, setSearch] = useState("");
-  const { city } = useLocation();
+  const { city, loading: locationLoading } = useLocation();
+  const [locationFilter, setLocationFilter] = useState<string | null>(null);
+  const [cityManuallySet, setCityManuallySet] = useState(false);
+  const [showCityInput, setShowCityInput] = useState(false);
+  const [cityInputValue, setCityInputValue] = useState("");
+
+  useEffect(() => {
+    if (city && !cityManuallySet) {
+      setLocationFilter(city);
+      setCityInputValue(city);
+    }
+  }, [city, cityManuallySet]);
 
   useEffect(() => {
     (async () => {
@@ -102,6 +113,13 @@ function Index() {
   const filtered = liveStores
     .filter((s) => active === "All" || s.category === active)
     .filter((s) => {
+      if (!locationFilter) return true;
+      if (!s.city) return true; // stores without a city set are shown everywhere
+      const lf = locationFilter.toLowerCase();
+      const sc = s.city.toLowerCase();
+      return sc.includes(lf) || lf.includes(sc);
+    })
+    .filter((s) => {
       if (!search) return true;
       const q = search.toLowerCase();
       return (
@@ -121,9 +139,50 @@ function Index() {
         <section id="stores" className="container mx-auto px-4 py-20">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
             <div>
-              <span className="text-xs font-semibold uppercase tracking-widest text-primary">{city ? `Near you · ${city}` : "Near you"}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+                  {locationFilter ? `Near you · ${locationFilter}` : locationLoading ? "Detecting location…" : "All locations"}
+                </span>
+                {locationFilter && (
+                  <button
+                    onClick={() => { setLocationFilter(null); setCityManuallySet(true); setShowCityInput(false); }}
+                    className="text-[10px] font-medium text-muted-foreground hover:text-foreground border border-border rounded-full px-2 py-0.5"
+                  >
+                    Show all
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowCityInput((v) => !v)}
+                  className="text-[10px] font-medium text-primary hover:underline"
+                >
+                  {showCityInput ? "Cancel" : "Change city"}
+                </button>
+              </div>
+              {showCityInput && (
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const val = cityInputValue.trim();
+                    setLocationFilter(val || null);
+                    setCityManuallySet(true);
+                    setShowCityInput(false);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={cityInputValue}
+                    onChange={(e) => setCityInputValue(e.target.value)}
+                    placeholder="e.g. Birmingham"
+                    className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                  <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+                    Search
+                  </button>
+                </form>
+              )}
               <h2 className="mt-2 font-display text-4xl font-bold md:text-5xl text-balance">
-                Browse available stores near you.
+                Browse available stores{locationFilter ? ` in ${locationFilter}` : " near you"}.
               </h2>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -163,20 +222,28 @@ function Index() {
                     <h3 className="font-display text-xl font-semibold">
                       {search
                         ? `No stores found for "${search}"`
-                        : `No ${active === "All" ? "" : active.toLowerCase() + " "}stores available yet`}
+                        : `No ${active === "All" ? "" : active.toLowerCase() + " "}stores${locationFilter ? ` in ${locationFilter}` : ""} yet`}
                     </h3>
                     <p className="mt-2 text-sm text-muted-foreground max-w-sm">
                       {search
                         ? "Try a different search term or browse all stores."
+                        : locationFilter
+                        ? "No stores in this area yet — try a different city or show all."
                         : "We're growing — check back soon, or be the first to list your store."}
                     </p>
-                    {search && (
-                      <button
-                        onClick={() => setSearch("")}
-                        className="mt-4 text-sm text-primary hover:underline"
-                      >
-                        Clear search
-                      </button>
+                    {(search || locationFilter) && (
+                      <div className="mt-4 flex gap-3">
+                        {search && (
+                          <button onClick={() => setSearch("")} className="text-sm text-primary hover:underline">
+                            Clear search
+                          </button>
+                        )}
+                        {locationFilter && (
+                          <button onClick={() => { setLocationFilter(null); setCityManuallySet(true); }} className="text-sm text-primary hover:underline">
+                            Show all cities
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )

@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
+import { BOOKABLE_CATEGORIES } from "@/data/stores";
+
+const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
 const regionNames =
   typeof Intl !== "undefined" && "DisplayNames" in Intl
@@ -54,6 +57,32 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
+type AvailabilityRow = {
+  id: string;
+  store_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration_mins: number;
+};
+
+const BOOKING_CATEGORIES: string[] = [...BOOKABLE_CATEGORIES];
+
+function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
+  const slots: string[] = [];
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let minutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+  while (minutes + durationMins <= endMinutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    minutes += durationMins;
+  }
+  return slots;
+}
+
 export function StoreDialog({ store, open, onOpenChange }: { store: Store | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const [step, setStep] = useState<"browse" | "arrange" | "transfer">("browse");
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -82,6 +111,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [reviewBody, setReviewBody] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Booking state (Barbers / Beauty)
+  const [showBookingForm, setShowBookingForm] = useState(false);
+  const [bookService, setBookService] = useState("");
+  const [bookDate, setBookDate] = useState("");
+  const [bookTime, setBookTime] = useState("");
+  const [bookName, setBookName] = useState("");
+  const [bookPhone, setBookPhone] = useState("");
+  const [bookPhoneCountry, setBookPhoneCountry] = useState<CountryCode>("GB");
+  const [bookNote, setBookNote] = useState("");
+  const [bookAvailability, setBookAvailability] = useState<AvailabilityRow[]>([]);
+  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submittingBooking, setSubmittingBooking] = useState(false);
+
   useEffect(() => {
     if (!open || !store) return;
     (supabase as any)
@@ -93,6 +136,36 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         setStoreReviews(data ?? []);
       });
   }, [open, store?.id]);
+
+  // Load weekly availability for bookable stores
+  useEffect(() => {
+    if (!open || !store || !BOOKING_CATEGORIES.includes(store.category)) return;
+    (supabase as any)
+      .from("store_availability")
+      .select("*")
+      .eq("store_id", store.id)
+      .then(({ data }: { data: AvailabilityRow[] | null }) => {
+        setBookAvailability(data ?? []);
+      });
+  }, [open, store?.id]);
+
+  // Load taken slots when date is selected
+  useEffect(() => {
+    if (!bookDate || !store) return;
+    setLoadingSlots(true);
+    (supabase as any)
+      .from("store_bookings")
+      .select("slot_start")
+      .eq("store_id", store.id)
+      .neq("status", "cancelled")
+      .gte("slot_start", `${bookDate}T00:00:00`)
+      .lte("slot_start", `${bookDate}T23:59:59`)
+      .then(({ data }: { data: Array<{ slot_start: string }> | null }) => {
+        setTakenSlots((data ?? []).map((r) => r.slot_start.slice(11, 16)));
+        setBookTime("");
+        setLoadingSlots(false);
+      });
+  }, [bookDate, store?.id]);
 
   if (!store) return null;
 
@@ -114,6 +187,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setMsgName(""); setMsgPhone(""); setMsgCountryCode("GB"); setMsgBody("");
     setShowReviewForm(false);
     setReviewRating(0); setReviewName(""); setReviewBody("");
+    setShowBookingForm(false);
+    setBookService(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote("");
+    setBookAvailability([]); setTakenSlots([]);
   };
 
   const handleConfirmTransfer = async () => {
@@ -241,6 +317,64 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     }
   };
 
+  const handleBook = async () => {
+    const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
+    if (!normalizedBookPhone) {
+      toast.error("Enter phone in international format", { description: "Choose a country and enter your local mobile number." });
+      return;
+    }
+    if (!bookDate || !bookTime || !bookName.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    const [y, mo, d] = bookDate.split("-").map(Number);
+    const avail = bookAvailability.find((a) => a.day_of_week === new Date(y, mo - 1, d).getDay());
+    const duration = avail?.slot_duration_mins ?? 30;
+    const [th, tm] = bookTime.split(":").map(Number);
+    const endMins = th * 60 + tm + duration;
+    const slotEnd = `${bookDate}T${String(Math.floor(endMins / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}:00`;
+    setSubmittingBooking(true);
+    try {
+      const { error } = await (supabase as any).from("store_bookings").insert({
+        store_id: store!.id,
+        customer_name: bookName.trim(),
+        customer_phone: normalizedBookPhone,
+        service: bookService || null,
+        slot_start: `${bookDate}T${bookTime}:00`,
+        slot_end: slotEnd,
+        status: "pending",
+        note: bookNote.trim() || null,
+      });
+      if (error) throw error;
+
+      // Notify the merchant by email + SMS (fire-and-forget)
+      void supabase.functions.invoke("send-booking-alert", {
+        body: {
+          store_id: store!.id,
+          store_name: store!.name,
+          customer_name: bookName.trim(),
+          customer_phone: normalizedBookPhone,
+          service: bookService || null,
+          slot_start: `${bookDate}T${bookTime}:00`,
+          note: bookNote.trim() || null,
+        },
+      });
+
+      const prettyDate = new Date(y, mo - 1, d).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+      toast.success("Appointment requested!", {
+        description: `${store!.name} will confirm your ${bookTime} slot on ${prettyDate}.`,
+        duration: 8000,
+      });
+      setShowBookingForm(false);
+      setBookService(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote("");
+      setTakenSlots((prev) => [...prev, bookTime]);
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not request booking");
+    } finally {
+      setSubmittingBooking(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setTimeout(reset, 200); }}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0">
@@ -262,7 +396,21 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           </DialogHeader>
 
           <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-secondary/60 p-4 text-sm sm:grid-cols-3">
-            <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /><span className="truncate">{store.city || store.address || "Location on request"}</span></div>
+            <div className="flex items-start gap-2 text-muted-foreground">
+              <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
+              {(store.address || store.city || store.postcode) ? (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([store.address, store.city, store.postcode].filter(Boolean).join(", "))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="leading-snug hover:text-primary hover:underline"
+                >
+                  {[store.address, store.city, store.postcode].filter(Boolean).join(", ")}
+                </a>
+              ) : (
+                <span>Location on request</span>
+              )}
+            </div>
             <div className="flex items-start gap-2 rounded-lg bg-background/70 px-3 py-2 text-foreground shadow-sm"><Clock className="mt-0.5 h-4 w-4 shrink-0" /><span className="font-medium leading-5">{store.hours}</span></div>
             <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-4 w-4" /><span className="truncate">{store.phone}</span></div>
           </div>
@@ -277,25 +425,144 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
           {step === "browse" && (
             <>
-              <h4 className="mt-6 font-display text-xl font-bold">Available products</h4>
-              <div className="mt-3 divide-y divide-border rounded-xl border border-border">
-                {store.products.map((p) => {
-                  const q = qty[p.name] ?? 0;
-                  return (
-                    <div key={p.name} className="flex items-center justify-between gap-4 p-4">
-                      <div>
-                        <div className="font-medium">{p.name}</div>
-                        <div className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+              {isBookable(store.category) ? (
+                <>
+                  {store.products.length > 0 && (
+                    <>
+                      <h4 className="mt-6 font-display text-xl font-bold">Services</h4>
+                      <div className="mt-3 divide-y divide-border rounded-xl border border-border">
+                        {store.products.map((p) => (
+                          <div key={p.name} className="flex items-center justify-between gap-4 p-4">
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-sm font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setQty({ ...qty, [p.name]: Math.max(0, q - 1) })}>−</Button>
-                        <span className="w-6 text-center font-semibold">{q}</span>
-                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setQty({ ...qty, [p.name]: q + 1 })}>+</Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    </>
+                  )}
+                  <div className="mt-5 space-y-3 rounded-xl border border-border bg-secondary/40 p-4">
+                    <p className="font-semibold text-sm">📅 Book an appointment</p>
+                    {bookAvailability.length === 0 ? (
+                      <p className="py-2 text-sm text-muted-foreground">This shop hasn't set up online booking yet. Use the enquiry form below to get in touch.</p>
+                    ) : (
+                      <>
+                        {store.products.length > 0 && (
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Service</label>
+                            <Select value={bookService} onValueChange={setBookService}>
+                              <SelectTrigger className="mt-1"><SelectValue placeholder="Choose a service" /></SelectTrigger>
+                              <SelectContent>
+                                {store.products.map((p) => (
+                                  <SelectItem key={p.name} value={p.name}>{p.name} — £{p.price.toFixed(2)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Date *</label>
+                          <Input
+                            type="date"
+                            value={bookDate}
+                            min={(() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()}
+                            max={(() => { const d = new Date(); d.setDate(d.getDate() + 28); return d.toISOString().split("T")[0]; })()}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) { setBookDate(""); setBookTime(""); return; }
+                              const [yr, mo, dy] = val.split("-").map(Number);
+                              const day = new Date(yr, mo - 1, dy).getDay();
+                              if (!bookAvailability.some((a) => a.day_of_week === day)) {
+                                toast.error("No availability on this day — pick another date.");
+                                return;
+                              }
+                              setBookDate(val);
+                            }}
+                            className="mt-1"
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Available: {bookAvailability.sort((a, b) => a.day_of_week - b.day_of_week).map((a) => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][a.day_of_week]).join(", ")}
+                          </p>
+                        </div>
+                        {bookDate && (
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Time slot *</label>
+                            {loadingSlots ? (
+                              <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading slots…</div>
+                            ) : (() => {
+                              const [yr, mo, dy] = bookDate.split("-").map(Number);
+                              const avail = bookAvailability.find((a) => a.day_of_week === new Date(yr, mo - 1, dy).getDay());
+                              if (!avail) return null;
+                              const allSlots = generateTimeSlots(avail.start_time.slice(0, 5), avail.end_time.slice(0, 5), avail.slot_duration_mins);
+                              const freeSlots = allSlots.filter((s) => !takenSlots.includes(s));
+                              if (freeSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No slots left on this day — try another date.</p>;
+                              return (
+                                <Select value={bookTime} onValueChange={setBookTime}>
+                                  <SelectTrigger className="mt-1"><SelectValue placeholder="Pick a time" /></SelectTrigger>
+                                  <SelectContent>
+                                    {freeSlots.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Your name *</label>
+                          <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="Ama Boateng" className="mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Your phone *</label>
+                          <div className="mt-1 grid grid-cols-12 gap-2">
+                            <div className="col-span-5 sm:col-span-4">
+                              <Select value={bookPhoneCountry} onValueChange={(v) => setBookPhoneCountry(v as CountryCode)}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-7 sm:col-span-8">
+                              <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="Local number" />
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
+                          <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} placeholder="Any special requests?" rows={2} className="mt-1" />
+                        </div>
+                        <Button
+                          size="sm"
+                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking}
+                          onClick={handleBook}
+                          className="bg-gradient-primary text-primary-foreground"
+                        >
+                          {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 className="mt-6 font-display text-xl font-bold">Available products</h4>
+                  <div className="mt-3 divide-y divide-border rounded-xl border border-border">
+                    {store.products.map((p) => {
+                      const q = qty[p.name] ?? 0;
+                      return (
+                        <div key={p.name} className="flex items-center justify-between gap-4 p-4">
+                          <div>
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setQty({ ...qty, [p.name]: Math.max(0, q - 1) })}>−</Button>
+                            <span className="w-6 text-center font-semibold">{q}</span>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setQty({ ...qty, [p.name]: q + 1 })}>+</Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
 
               {/* Message store */}
               <div className="mt-5">
@@ -437,20 +704,22 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             )}
           </div>
 
-              <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Total</div>
-                  <div className="font-display text-2xl font-bold">£{total.toFixed(2)}</div>
+              {!isBookable(store.category) && (
+                <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total</div>
+                    <div className="font-display text-2xl font-bold">£{total.toFixed(2)}</div>
+                  </div>
+                  <Button
+                    size="lg"
+                    disabled={!hasItems}
+                    onClick={() => setStep("arrange")}
+                    className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                  >
+                    Arrange order →
+                  </Button>
                 </div>
-                <Button
-                  size="lg"
-                  disabled={!hasItems}
-                  onClick={() => setStep("arrange")}
-                  className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-                >
-                  Arrange order →
-                </Button>
-              </div>
+              )}
             </>
           )}
 

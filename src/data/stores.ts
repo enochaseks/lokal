@@ -2,7 +2,10 @@ import grocery from "@/assets/store-grocery.jpg";
 import beauty from "@/assets/store-beauty.jpg";
 import barber from "@/assets/store-fashion.jpg";
 
-export const LIVE_CATEGORIES = ["Groceries", "Beauty", "Barbers"] as const;
+export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & Beauty"] as const;
+
+/** Categories that use the booking/schedule system instead of an order basket */
+export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
 export type LiveCategory = (typeof LIVE_CATEGORIES)[number];
 
 export const LIVE_ORIGINS = [
@@ -81,7 +84,7 @@ export const stores: Store[] = [
   {
     id: "shea-and-soul",
     name: "Shea & Soul Apothecary",
-    category: "Beauty",
+    category: "Beauty Store",
     origin: "🇳🇬 Nigerian",
     rating: 4.9,
     reviews: 147,
@@ -127,6 +130,7 @@ export const stores: Store[] = [
 export const categories = [
   { name: "All", emoji: "🌍" },
   { name: "Groceries", emoji: "🥭" },
-  { name: "Beauty", emoji: "✨" },
+  { name: "Beauty Store", emoji: "✨" },
   { name: "Barbers", emoji: "💈" },
+  { name: "Hair & Beauty", emoji: "💅" },
 ] as const;

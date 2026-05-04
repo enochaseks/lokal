@@ -190,8 +190,9 @@ export type Database = {
       store_category:
         | "Groceries"
         | "Restaurants"
-        | "Beauty"
+        | "Beauty Store"
         | "Barbers"
+        | "Hair & Beauty"
         | "Fashion"
         | "Other"
     }
@@ -325,8 +326,9 @@ export const Constants = {
       store_category: [
         "Groceries",
         "Restaurants",
-        "Beauty",
+        "Beauty Store",
         "Barbers",
+        "Hair & Beauty",
         "Fashion",
         "Other",
       ],

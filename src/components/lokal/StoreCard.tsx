@@ -38,7 +38,7 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
           )}
         </div>
         <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-          <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{store.city || store.address || "Location on request"}</span>
+          <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{[store.address, store.city, store.postcode].filter(Boolean).join(", ") || "Location on request"}</span>
           {store.reviews > 0 && (
             <span className="ml-2 flex shrink-0 items-center gap-0.5 font-medium text-amber-500">
               <Star className="h-3 w-3 fill-amber-500" />{store.rating} <span className="text-muted-foreground">({store.reviews})</span>

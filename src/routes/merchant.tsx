@@ -13,7 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
+
+const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -64,6 +66,23 @@ type MessageRow = {
   body: string; direction: "inbound" | "outbound"; created_at: string;
 };
 
+type AvailabilityRow = {
+  id: string; store_id: string; day_of_week: number;
+  start_time: string; end_time: string; slot_duration_mins: number;
+};
+
+type BookingRow = {
+  id: string; store_id: string; customer_name: string; customer_phone: string;
+  customer_email: string | null; service: string | null;
+  slot_start: string; slot_end: string;
+  status: "pending" | "confirmed" | "cancelled" | "completed";
+  note: string | null; created_at: string;
+};
+
+type DayDraft = {
+  day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number;
+};
+
 function toWhatsAppNumber(input: string) {
   const trimmed = input.trim();
   if (!trimmed) return "";
@@ -104,6 +123,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   });
   const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 })));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -113,6 +133,19 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "" })));
         setLoadingProducts(false);
       });
+    if (isBookable(store.category)) {
+      (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
+        .then((result: any) => {
+          const data: any[] | null = result.data;
+          if (data && data.length > 0) {
+            setEditAvail([0,1,2,3,4,5,6].map((day) => {
+              const row = (data as any[]).find((r) => r.day_of_week === day);
+              if (!row) return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 };
+              return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins };
+            }));
+          }
+        });
+    }
   }, [store.id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,6 +189,17 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, position: i }))
         );
         if (prodErr) throw prodErr;
+      }
+
+      if (isBookable(form.category)) {
+        await (supabase as any).from("store_availability").delete().eq("store_id", store.id);
+        const activeDays = editAvail.filter((d) => d.active);
+        if (activeDays.length > 0) {
+          const { error: availErr } = await (supabase as any).from("store_availability").insert(
+            activeDays.map((d) => ({ store_id: store.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+          );
+          if (availErr) throw availErr;
+        }
       }
 
       onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
@@ -239,14 +283,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Products</p>
-              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />Add</Button>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isBookable(form.category) ? "Services" : "Products"}</p>
+              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isBookable(form.category) ? "Add service" : "Add"}</Button>
             </div>
             {loadingProducts ? <p className="text-sm text-muted-foreground">Loading…</p> : (
               <div className="space-y-2">
                 {products.map((p, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-5" placeholder="Product name" value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
+                    <Input className="col-span-5" placeholder={isBookable(form.category) ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
                     <Input className="col-span-3 font-mono" placeholder="£0.00" value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
                     <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
                     <button onClick={() => setProducts((prev) => prev.filter((_, idx) => idx !== i))} className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
@@ -255,6 +299,37 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               </div>
             )}
           </div>
+          {isBookable(form.category) && (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
+              <div className="space-y-2">
+                {editAvail.map((d, i) => (
+                  <div key={d.day} className="rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={d.active} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))} className="h-4 w-4 accent-primary" />
+                      <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
+                      {d.active && (
+                        <div className="flex flex-1 flex-wrap items-center gap-2">
+                          <Input type="time" value={d.start_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                          <span className="text-sm text-muted-foreground">to</span>
+                          <Input type="time" value={d.end_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                          <Select value={String(d.slot_duration_mins)} onValueChange={(v) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, slot_duration_mins: Number(v) } : x))}>
+                            <SelectTrigger className="h-8 text-xs w-24"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="15">15 min</SelectItem>
+                              <SelectItem value="30">30 min</SelectItem>
+                              <SelectItem value="45">45 min</SelectItem>
+                              <SelectItem value="60">60 min</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -271,13 +346,19 @@ function MerchantPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const db = supabase as unknown as { from: (table: string) => any };
-  const [tab, setTab] = useState<"stores" | "orders" | "messages">("stores");
+  const [tab, setTab] = useState<"stores" | "orders" | "messages" | "bookings">("stores");
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
   const [editingStore, setEditingStore] = useState<StoreRow | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [storeAvailability, setStoreAvailability] = useState<AvailabilityRow[]>([]);
+  const [editingAvailStoreId, setEditingAvailStoreId] = useState<string | null>(null);
+  const [availDraft, setAvailDraft] = useState<DayDraft[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -300,6 +381,21 @@ function MerchantPage() {
         setMessages((msgsData ?? []) as MessageRow[]);
       } catch { /* messages table not yet created */ }
 
+      // Load bookings and availability for Barbers/Beauty stores
+      const bookableIds = rows.filter((s) => isBookable(s.category)).map((s) => s.id);
+      if (bookableIds.length > 0) {
+        try {
+          const [{ data: availData }, { data: bookingsData }] = await Promise.all([
+            db.from("store_availability").select("*").in("store_id", bookableIds),
+            db.from("store_bookings").select("*").in("store_id", bookableIds)
+              .gte("slot_start", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 19))
+              .order("slot_start", { ascending: true }).limit(200),
+          ]);
+          setStoreAvailability((availData ?? []) as AvailabilityRow[]);
+          setBookings((bookingsData ?? []) as BookingRow[]);
+        } catch { /* bookings tables not yet created */ }
+      }
+
       // Real-time subscriptions
       const channel = supabase
         .channel("merchant-realtime")
@@ -314,6 +410,10 @@ function MerchantPage() {
           setMessages((prev) => [payload.new as MessageRow, ...prev]);
           toast("💬 New message!", { description: `From ${(payload.new as MessageRow).customer_name}` });
         })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_bookings", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
+          setBookings((prev) => [...prev, payload.new as BookingRow].sort((a, b) => a.slot_start.localeCompare(b.slot_start)));
+          toast("📅 New booking request!", { description: `${(payload.new as BookingRow).customer_name} — ${(payload.new as BookingRow).slot_start.slice(0, 16).replace("T", " ")}` });
+        })
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
@@ -325,6 +425,22 @@ function MerchantPage() {
     if (error) return toast.error(error.message);
     setStores((prev) => prev.map((x) => (x.id === s.id ? { ...x, published: !s.published } : x)));
     toast.success(s.published ? "Store hidden" : "Store published");
+  };
+
+  const deleteStore = async (id: string) => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("stores").delete().eq("id", id);
+      if (error) throw error;
+      setStores((prev) => prev.filter((x) => x.id !== id));
+      setOrders((prev) => prev.filter((o) => o.store_id !== id));
+      toast.success("Store deleted");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not delete store");
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
+    }
   };
 
   const updateOrderStatus = async (orderId: string, status: string) => {
@@ -420,6 +536,17 @@ function MerchantPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setTab("bookings")}
+              className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "bookings" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Bookings
+              {bookings.filter((b) => b.status === "pending").length > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {bookings.filter((b) => b.status === "pending").length > 9 ? "9+" : bookings.filter((b) => b.status === "pending").length}
+                </span>
+              )}
+            </button>
         </div>
 
         {/* Stores tab */}
@@ -470,6 +597,9 @@ function MerchantPage() {
                       </Button>
                       <Button size="sm" variant="outline" asChild>
                         <Link to="/">View</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setConfirmDeleteId(s.id)}>
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                     {/* Orders for this store */}
@@ -714,6 +844,208 @@ function MerchantPage() {
           </div>
         )}
 
+        {/* Bookings tab */}
+        {tab === "bookings" && (
+          <div className="mt-8">
+            {(() => {
+              const bookableStores = stores.filter((s) => isBookable(s.category));
+              if (bookableStores.length === 0) {
+                return (
+                  <div className="rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary text-2xl">✂️</div>
+                    <h2 className="mt-4 font-display text-2xl font-bold">No bookable stores</h2>
+                    <p className="mt-1 text-muted-foreground">Add a Barbers or Hair &amp; Beauty store to enable appointment booking.</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-6">
+                  {bookableStores.map((s) => {
+                    const storeBookings = bookings.filter((b) => b.store_id === s.id);
+                    const now = new Date().toISOString().slice(0, 19);
+                    const upcomingBookings = storeBookings.filter((b) => b.status !== "cancelled" && b.slot_start >= now);
+                    const pendingCount = storeBookings.filter((b) => b.status === "pending").length;
+                    const storeAvail = storeAvailability.filter((a) => a.store_id === s.id);
+                    const isEditingAvail = editingAvailStoreId === s.id;
+                    const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+                    return (
+                      <div key={s.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                        <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-5 py-4">
+                          <div>
+                            <h3 className="font-display text-xl font-bold">{s.name}</h3>
+                            <p className="text-sm text-muted-foreground">{s.category}</p>
+                          </div>
+                          {pendingCount > 0 && (
+                            <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
+                              {pendingCount} pending
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-5 p-5">
+                          {/* Schedule editor */}
+                          <div>
+                            <div className="mb-3 flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
+                              <Button
+                                size="sm" variant="outline"
+                                onClick={() => {
+                                  if (isEditingAvail) {
+                                    setEditingAvailStoreId(null);
+                                  } else {
+                                    const draft: DayDraft[] = [0, 1, 2, 3, 4, 5, 6].map((day) => {
+                                      const ex = storeAvail.find((a) => a.day_of_week === day);
+                                      return { day, active: !!ex, start_time: ex?.start_time.slice(0, 5) ?? "09:00", end_time: ex?.end_time.slice(0, 5) ?? "18:00", slot_duration_mins: ex?.slot_duration_mins ?? 30 };
+                                    });
+                                    setAvailDraft(draft);
+                                    setEditingAvailStoreId(s.id);
+                                  }
+                                }}
+                              >
+                                {isEditingAvail ? "Cancel" : storeAvail.length === 0 ? "Set schedule" : "Edit schedule"}
+                              </Button>
+                            </div>
+
+                            {isEditingAvail ? (
+                              <div className="space-y-2">
+                                {availDraft.map((dayRow, i) => (
+                                  <div key={dayRow.day} className={`grid grid-cols-12 items-center gap-2 rounded-lg px-3 py-2 transition-opacity ${dayRow.active ? "bg-secondary/60" : "opacity-50 bg-secondary/20"}`}>
+                                    <div className="col-span-2 flex items-center gap-2">
+                                      <input type="checkbox" checked={dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, active: e.target.checked } : d))} className="h-4 w-4 accent-primary" />
+                                      <span className="text-xs font-semibold">{DAY_LABELS[dayRow.day]}</span>
+                                    </div>
+                                    <div className="col-span-4">
+                                      <Input type="time" value={dayRow.start_time} disabled={!dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, start_time: e.target.value } : d))} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="col-span-4 flex items-center gap-1">
+                                      <span className="shrink-0 text-xs text-muted-foreground">to</span>
+                                      <Input type="time" value={dayRow.end_time} disabled={!dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, end_time: e.target.value } : d))} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="col-span-2">
+                                      <Select value={String(dayRow.slot_duration_mins)} disabled={!dayRow.active} onValueChange={(v) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, slot_duration_mins: Number(v) } : d))}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="15">15m</SelectItem>
+                                          <SelectItem value="30">30m</SelectItem>
+                                          <SelectItem value="45">45m</SelectItem>
+                                          <SelectItem value="60">60m</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                ))}
+                                <Button
+                                  className="mt-2 w-full bg-gradient-primary text-primary-foreground"
+                                  onClick={async () => {
+                                    try {
+                                      await db.from("store_availability").delete().eq("store_id", s.id);
+                                      const activeDays = availDraft.filter((d) => d.active);
+                                      if (activeDays.length > 0) {
+                                        const { error } = await db.from("store_availability").insert(
+                                          activeDays.map((d) => ({ store_id: s.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+                                        );
+                                        if (error) throw error;
+                                      }
+                                      setStoreAvailability((prev) => [
+                                        ...prev.filter((a) => a.store_id !== s.id),
+                                        ...activeDays.map((d, idx) => ({ id: `new-${idx}`, store_id: s.id, day_of_week: d.day, start_time: d.start_time + ":00", end_time: d.end_time + ":00", slot_duration_mins: d.slot_duration_mins })),
+                                      ]);
+                                      setEditingAvailStoreId(null);
+                                      toast.success("Schedule saved");
+                                    } catch (e: any) { toast.error(e.message ?? "Could not save schedule"); }
+                                  }}
+                                >
+                                  Save schedule
+                                </Button>
+                              </div>
+                            ) : storeAvail.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No schedule set yet. Customers won't be able to book until you add one.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {storeAvail.sort((a, b) => a.day_of_week - b.day_of_week).map((a) => (
+                                  <span key={a.id} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">
+                                    {DAY_LABELS[a.day_of_week]} {a.start_time.slice(0, 5)}–{a.end_time.slice(0, 5)} ({a.slot_duration_mins}m slots)
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bookings list */}
+                          <div>
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upcoming bookings</p>
+                            {upcomingBookings.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No upcoming bookings yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {upcomingBookings.map((b) => {
+                                  const statusMeta: Record<string, { label: string; color: string }> = {
+                                    pending: { label: "Pending", color: "bg-amber-100 text-amber-800" },
+                                    confirmed: { label: "Confirmed", color: "bg-green-100 text-green-700" },
+                                    completed: { label: "Done", color: "bg-secondary text-muted-foreground" },
+                                  };
+                                  const sm = statusMeta[b.status] ?? statusMeta.pending;
+                                  const [datePart, timePart] = b.slot_start.split("T");
+                                  const [yr, mo, dy] = datePart.split("-").map(Number);
+                                  const prettyDate = new Date(yr, mo - 1, dy).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+                                  return (
+                                    <div key={b.id} className={`flex items-start justify-between gap-3 rounded-xl border bg-card p-4 transition-colors ${b.status === "pending" ? "border-amber-200 bg-amber-50/30" : "border-border"}`}>
+                                      <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="font-semibold text-sm">{prettyDate} at {timePart.slice(0, 5)}</span>
+                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>{sm.label}</span>
+                                        </div>
+                                        <div className="mt-1 font-medium text-sm">{b.customer_name}</div>
+                                        {b.service && <div className="text-xs text-muted-foreground">{b.service}</div>}
+                                        {b.note && <div className="mt-1 text-xs italic text-muted-foreground">"{b.note}"</div>}
+                                        <a href={`tel:${b.customer_phone}`} className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline">
+                                          📞 {b.customer_phone}
+                                        </a>
+                                      </div>
+                                      <div className="flex shrink-0 gap-2">
+                                        {b.status === "pending" && (
+                                          <>
+                                            <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={async () => {
+                                              await db.from("store_bookings").update({ status: "cancelled" }).eq("id", b.id);
+                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "cancelled" } : x));
+                                              toast.success("Booking cancelled");
+                                            }}>Cancel</Button>
+                                            <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={async () => {
+                                              await db.from("store_bookings").update({ status: "confirmed" }).eq("id", b.id);
+                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "confirmed" } : x));
+                                              toast.success("Booking confirmed");
+                                            }}>
+                                              <Check className="mr-1.5 h-3.5 w-3.5" />Confirm
+                                            </Button>
+                                          </>
+                                        )}
+                                        {b.status === "confirmed" && (
+                                          <Button size="sm" variant="outline" onClick={async () => {
+                                            await db.from("store_bookings").update({ status: "completed" }).eq("id", b.id);
+                                            setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "completed" } : x));
+                                            toast.success("Booking marked complete");
+                                          }}>
+                                            <Check className="mr-1.5 h-3.5 w-3.5" />Mark done
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       {editingStore && (
         <EditStoreDialog
           store={editingStore}
@@ -724,6 +1056,27 @@ function MerchantPage() {
           }}
         />
       )}
+
+      {/* Confirm delete dialog */}
+      {confirmDeleteId && (
+        <Dialog open onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteId(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete store?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete <strong>{stores.find((s) => s.id === confirmDeleteId)?.name}</strong> and all its products. Orders will remain in your records. This cannot be undone.
+            </p>
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setConfirmDeleteId(null)} disabled={deleting}>Cancel</Button>
+              <Button variant="destructive" onClick={() => deleteStore(confirmDeleteId)} disabled={deleting}>
+                {deleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</> : "Delete store"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <Toaster position="bottom-center" />
     </div>
   );
