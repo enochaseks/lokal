@@ -12,7 +12,7 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS } from "@/data/stores";
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -44,17 +44,19 @@ export const Route = createFileRoute("/list-store")({
 });
 
 const CATEGORIES = LIVE_CATEGORIES;
+const ORIGINS = LIVE_ORIGINS;
 
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
   category: z.enum(CATEGORIES),
-  origin: z.string().trim().max(60).optional(),
+  origin: z.enum(ORIGINS, { message: "Please select an African/Caribbean origin" }),
   description: z.string().trim().max(500).optional(),
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(60).optional(),
   postcode: z.string().trim().max(20).optional(),
   hours: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(40).optional(),
+  fulfillment: z.enum(["collection", "delivery", "both"]).default("collection"),
   image_url: z.string().trim().url("Must be a valid URL").max(500).optional().or(z.literal("")),
 });
 
@@ -79,9 +81,9 @@ function ListStorePage() {
   const [uploading, setUploading] = useState(false);
 
   const [store, setStore] = useState({
-    name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: "",
+    name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
     description: "", address: "", city: "", postcode: "",
-    hours: "", phone: "", image_url: "",
+    hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both", image_url: "",
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
   const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
@@ -225,9 +227,27 @@ function ListStorePage() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Origin (e.g. 🇬🇭 Ghanaian)</Label>
-                  <Input value={store.origin} onChange={(e) => setStore({ ...store, origin: e.target.value })} placeholder="🇯🇲 Jamaican" maxLength={60} className="mt-1" />
+                  <Label>Origin *</Label>
+                  <Select value={store.origin} onValueChange={(v) => setStore({ ...store, origin: v as any })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+
+              <div>
+                <Label>Fulfilment</Label>
+                <Select value={store.fulfillment} onValueChange={(v) => setStore({ ...store, fulfillment: v as any })}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="collection">🏪 Collection only</SelectItem>
+                    <SelectItem value="delivery">🚚 Delivery only</SelectItem>
+                    <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1.5 text-xs text-muted-foreground">How will customers receive their order? You arrange this directly with them.</p>
               </div>
 
               <div>

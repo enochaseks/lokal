@@ -3,10 +3,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Clock, Phone, Landmark, Copy, Check, ArrowLeft, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
+
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+const COUNTRY_OPTIONS = getCountries()
+  .map((country) => {
+    const code = getCountryCallingCode(country);
+    const name = regionNames?.of(country) ?? country;
+    return {
+      value: country,
+      label: `${name} (+${code})`,
+      code,
+    };
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 function makeRef() {
   const buf = new Uint8Array(4);
@@ -14,11 +33,33 @@ function makeRef() {
   return "LKL-" + Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 6);
 }
 
+function normalizePhoneForAlerts(raw: string, country: CountryCode): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+  const countryCode = getCountryCallingCode(country);
+
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+
+  // If user pasted an international number but forgot "+", accept as-is.
+  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+
+  const localDigits = digits.replace(/^0+/, "");
+  if (!localDigits) return null;
+  if (localDigits.length < 6 || localDigits.length > 14) return null;
+  return `+${countryCode}${localDigits}`;
+}
+
 export function StoreDialog({ store, open, onOpenChange }: { store: Store | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const [step, setStep] = useState<"browse" | "arrange" | "transfer">("browse");
   const [qty, setQty] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState<CountryCode>("GB");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [reference, setReference] = useState(() => makeRef());
@@ -27,6 +68,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [showMsgForm, setShowMsgForm] = useState(false);
   const [msgName, setMsgName] = useState("");
   const [msgPhone, setMsgPhone] = useState("");
+  const [msgCountryCode, setMsgCountryCode] = useState<CountryCode>("GB");
   const [msgBody, setMsgBody] = useState("");
   const [sendingMsg, setSendingMsg] = useState(false);
 
@@ -64,23 +106,32 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setQty({});
     setName("");
     setPhone("");
+    setPhoneCountryCode("GB");
     setEmail("");
     setNote("");
     setReference(makeRef());
     setShowMsgForm(false);
-    setMsgName(""); setMsgPhone(""); setMsgBody("");
+    setMsgName(""); setMsgPhone(""); setMsgCountryCode("GB"); setMsgBody("");
     setShowReviewForm(false);
     setReviewRating(0); setReviewName(""); setReviewBody("");
   };
 
   const handleConfirmTransfer = async () => {
+    const normalizedPhone = normalizePhoneForAlerts(phone, phoneCountryCode);
+    if (!normalizedPhone) {
+      toast.error("Enter phone in international format", {
+        description: "Choose a country and enter your local mobile number.",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase.from("orders").insert({
         store_id: store.id,
         reference,
         customer_name: name.trim(),
-        customer_phone: phone.trim(),
+        customer_phone: normalizedPhone,
         customer_email: email.trim() || null,
         note: note.trim() || null,
         items: items.filter((i) => i.qty > 0).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit })),
@@ -125,12 +176,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   };
 
   const handleSendMsg = async () => {
+    const normalizedMsgPhone = normalizePhoneForAlerts(msgPhone, msgCountryCode);
+    if (!normalizedMsgPhone) {
+      toast.error("Enter phone in international format", {
+        description: "Choose a country and enter your local mobile number.",
+      });
+      return;
+    }
+
     setSendingMsg(true);
     try {
       const { error } = await (supabase as any).from("messages").insert({
         store_id: store.id,
         customer_name: msgName.trim(),
-        customer_phone: msgPhone.trim(),
+        customer_phone: normalizedMsgPhone,
         body: msgBody.trim(),
         direction: "inbound",
       });
@@ -207,6 +266,14 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             <div className="flex items-start gap-2 rounded-lg bg-background/70 px-3 py-2 text-foreground shadow-sm"><Clock className="mt-0.5 h-4 w-4 shrink-0" /><span className="font-medium leading-5">{store.hours}</span></div>
             <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-4 w-4" /><span className="truncate">{store.phone}</span></div>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {(store.fulfillment === "collection" || store.fulfillment === "both") && (
+              <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">🏪 Collection available</span>
+            )}
+            {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
+              <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">🚚 Delivery available</span>
+            )}
+          </div>
 
           {step === "browse" && (
             <>
@@ -249,7 +316,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Your WhatsApp / phone</label>
-                      <Input value={msgPhone} onChange={(e) => setMsgPhone(e.target.value)} placeholder="+44 ..." className="mt-1" />
+                      <div className="mt-1 grid grid-cols-12 gap-2">
+                        <div className="col-span-5 sm:col-span-4">
+                          <Select value={msgCountryCode} onValueChange={(v) => setMsgCountryCode(v as CountryCode)}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-7 sm:col-span-8">
+                          <Input value={msgPhone} onChange={(e) => setMsgPhone(e.target.value)} placeholder="Local number" />
+                        </div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">Pick your country, then enter your local number. You can also paste full international format (+...).</p>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Message</label>
@@ -389,7 +469,19 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 </div>
                 <div>
                   <label className="text-sm font-medium">Phone</label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+44 ..." className="mt-1" />
+                  <div className="mt-1 grid grid-cols-12 gap-2">
+                    <div className="col-span-5 sm:col-span-4">
+                      <Select value={phoneCountryCode} onValueChange={(v) => setPhoneCountryCode(v as CountryCode)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-7 sm:col-span-8">
+                      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Local number" />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Email <span className="text-muted-foreground font-normal">(for order updates)</span></label>

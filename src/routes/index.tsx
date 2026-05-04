@@ -39,7 +39,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,hours,phone,image_url,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
+        .select("id,name,category,origin,description,address,city,hours,phone,image_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -58,6 +58,7 @@ function Index() {
         address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
         hours: r.hours || "Hours on request",
         phone: r.phone || "—",
+        fulfillment: (r.fulfillment as "collection" | "delivery" | "both") || "collection",
         image: getImageUrl(r.image_url) || storePlaceholder,
         description: r.description || "A new Lokal merchant.",
         bank: {

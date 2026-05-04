@@ -18,7 +18,10 @@ function toE164(raw: string | null | undefined): string | null {
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return null;
   if (trimmed.startsWith("+")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+44${digits.slice(1)}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+  if (/^07\d{9}$/.test(digits)) return `+44${digits.slice(1)}`;
+  if (digits.startsWith("0")) return null;
+  if (digits.length < 8 || digits.length > 15) return null;
   return `+${digits}`;
 }
 

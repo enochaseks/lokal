@@ -29,7 +29,15 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
           </span>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
-        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mt-auto flex items-center gap-1.5 pt-2 text-[11px]">
+          {(store.fulfillment === "collection" || store.fulfillment === "both") && (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">🏪 Collection</span>
+          )}
+          {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">🚚 Delivery</span>
+          )}
+        </div>
+        <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{store.city || store.address || "Location on request"}</span>
           {store.reviews > 0 && (
             <span className="ml-2 flex shrink-0 items-center gap-0.5 font-medium text-amber-500">

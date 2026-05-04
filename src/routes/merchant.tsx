@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS } from "@/data/stores";
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -40,13 +40,15 @@ export const Route = createFileRoute("/merchant")({
 });
 
 const CATEGORIES = LIVE_CATEGORIES;
+const ORIGINS = LIVE_ORIGINS;
 type Category = (typeof CATEGORIES)[number];
+type Origin = (typeof ORIGINS)[number];
 
 type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
-  image_url: string | null; published: boolean;
+  image_url: string | null; published: boolean; fulfillment: string;
   bank_name: string | null; bank_account_name: string | null;
   bank_account_number: string | null; bank_sort_code: string | null;
 };
@@ -62,17 +64,41 @@ type MessageRow = {
   body: string; direction: "inbound" | "outbound"; created_at: string;
 };
 
+function toWhatsAppNumber(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+
+  // Keep only digits, but preserve leading "+" semantics.
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (trimmed.startsWith("+")) return digits;
+  if (trimmed.startsWith("00")) return digits.slice(2);
+
+  // Backward compatibility for legacy local UK mobile numbers entered as 07...
+  if (/^07\d{9}$/.test(digits)) return `44${digits.slice(1)}`;
+
+  // Ambiguous local numbers (leading 0) should include country code.
+  if (digits.startsWith("0")) return "";
+
+  // Accept international numbers entered without leading "+".
+  if (digits.length < 8 || digits.length > 15) return "";
+
+  // Already in international format without "+".
+  return digits;
+}
+
 function EditStoreDialog({ store, onClose, onSaved }: {
   store: StoreRow;
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: string; description: string; address: string; city: string; postcode: string; hours: string; phone: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
-    origin: store.origin ?? "", description: store.description ?? "",
+    origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
-    hours: store.hours ?? "", phone: store.phone ?? "", image_url: normalizeImagePath(store.image_url) ?? "",
+    hours: store.hours ?? "", phone: store.phone ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
   });
@@ -113,11 +139,11 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
     setSaving(true);
     try {
-      const { error: storeErr } = await supabase.from("stores").update({
+      const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
-        origin: n(form.origin), description: n(form.description),
+        origin: form.origin, description: n(form.description),
         address: n(form.address), city: n(form.city), postcode: n(form.postcode),
-        hours: n(form.hours), phone: n(form.phone), image_url: n(form.image_url),
+        hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
         bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
       }).eq("id", store.id);
@@ -132,7 +158,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         if (prodErr) throw prodErr;
       }
 
-      onSaved({ ...store, ...form, origin: n(form.origin), description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -157,7 +183,12 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Origin</Label><Input value={form.origin} onChange={(e) => setForm((f) => ({ ...f, origin: e.target.value }))} placeholder="🇬🇭 Ghanaian" maxLength={60} className="mt-1" /></div>
+              <div><Label>Origin</Label>
+                <Select value={form.origin} onValueChange={(v) => setForm((f) => ({ ...f, origin: v as Origin }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
               <div className="sm:col-span-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} maxLength={500} rows={3} className="mt-1" /></div>
             </div>
           </div>
@@ -179,8 +210,20 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
               <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
               <div><Label>Postcode</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} maxLength={20} className="mt-1" /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number.</p></div>
+              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number. Use international format (e.g. +1, +44, +234).</p></div>
               <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
+              <div className="sm:col-span-2">
+                <Label>Fulfilment</Label>
+                <Select value={form.fulfillment} onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="collection">🏪 Collection only</SelectItem>
+                    <SelectItem value="delivery">🚚 Delivery only</SelectItem>
+                    <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
+              </div>
             </div>
           </div>
 
@@ -241,7 +284,7 @@ function MerchantPage() {
     (async () => {
       const { data: storesData, error } = await supabase.from("stores").select("*").eq("owner_id", user.id).order("created_at", { ascending: false });
       if (error) { toast.error(error.message); setBusy(false); return; }
-      const rows = (storesData as StoreRow[]) ?? [];
+      const rows = (storesData as unknown as StoreRow[]) ?? [];
       setStores(rows);
       setBusy(false);
 
@@ -609,9 +652,10 @@ function MerchantPage() {
                 <div className="space-y-2">
                   {convs.map(([key, conv]) => {
                     const storeName = stores.find((s) => s.id === conv.storeId)?.name ?? "—";
-                    const rawPhone = conv.customerPhone.replace(/\D/g, "");
-                    const e164Phone = rawPhone.startsWith("0") ? "44" + rawPhone.slice(1) : rawPhone;
-                    const waLink = `https://wa.me/${e164Phone}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`;
+                    const waDigits = toWhatsAppNumber(conv.customerPhone);
+                    const waLink = waDigits
+                      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`
+                      : null;
                     const isExpanded = expandedConv === key;
                     const thread = [...conv.msgs].sort((a, b) => a.created_at.localeCompare(b.created_at));
                     return (
@@ -652,9 +696,10 @@ function MerchantPage() {
                               <a href={`tel:${conv.customerPhone}`} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary">
                                 📞 Call
                               </a>
-                              <a href={waLink} target="_blank" rel="noopener noreferrer" className="rounded-full bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700">
+                              <a href={waLink ?? "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!waLink} onClick={(e) => { if (!waLink) e.preventDefault(); }} className={`rounded-full px-3 py-1.5 text-xs font-medium text-white transition-colors ${waLink ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-green-400/70"}`}>
                                 Reply on WhatsApp
                               </a>
+                              {!waLink && <span className="text-[10px] text-amber-600">Customer phone missing country code</span>}
                               <span className="ml-auto text-xs text-muted-foreground">{conv.customerPhone}</span>
                             </div>
                           </div>

@@ -5,6 +5,30 @@ import barber from "@/assets/store-fashion.jpg";
 export const LIVE_CATEGORIES = ["Groceries", "Beauty", "Barbers"] as const;
 export type LiveCategory = (typeof LIVE_CATEGORIES)[number];
 
+export const LIVE_ORIGINS = [
+  "🌍 Pan-African",
+  "🇬🇭 Ghanaian",
+  "🇳🇬 Nigerian",
+  "🇰🇪 Kenyan",
+  "🇪🇹 Ethiopian",
+  "🇸🇴 Somali",
+  "🇪🇷 Eritrean",
+  "🇿🇦 South African",
+  "🇿🇼 Zimbabwean",
+  "🇨🇩 Congolese",
+  "🇸🇳 Senegalese",
+  "🇨🇮 Ivorian",
+  "🏝️ Caribbean mixed",
+  "🇯🇲 Jamaican",
+  "🇹🇹 Trinidadian & Tobagonian",
+  "🇧🇧 Barbadian",
+  "🇬🇾 Guyanese",
+  "🇭🇹 Haitian",
+  "🇩🇴 Dominican",
+  "🇨🇺 Cuban",
+] as const;
+export type LiveOrigin = (typeof LIVE_ORIGINS)[number];
+
 export type Product = {
   name: string;
   price: number;
@@ -25,6 +49,7 @@ export type Store = {
   phone: string;
   image: string;
   description: string;
+  fulfillment: "collection" | "delivery" | "both";
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
 };

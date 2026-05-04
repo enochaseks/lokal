@@ -23,8 +23,8 @@ export function Hero({ onSearch }: HeroProps) {
           </span>
 
           <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight text-balance md:text-6xl lg:text-7xl">
-            Taste of home,
-            <span className="block bg-gradient-primary bg-clip-text text-transparent">just around the corner.</span>
+            Feel at home,
+            <span className="block bg-gradient-primary bg-clip-text text-transparent">Support your Local Merchant.</span>
           </h1>
 
           <p className="mt-6 max-w-md text-lg text-muted-foreground text-balance">
