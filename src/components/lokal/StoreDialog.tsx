@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Clock, Phone, Landmark, Copy, Check, ArrowLeft, Loader2, Star, Rss, Heart } from "lucide-react";
+import { MapPin, Clock, Phone, Landmark, Copy, Check, ArrowLeft, Loader2, Star, Rss, Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
@@ -122,6 +122,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followCount, setFollowCount] = useState(0);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   // Booking state (Barbers / Beauty)
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -410,6 +411,16 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     }
   };
 
+  const handleShareStore = () => {
+    if (!store) return;
+    const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+    const shareUrl = `${domain}/store/${store.id}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShare(true);
+    toast.success("Share link copied!");
+    setTimeout(() => setCopiedShare(false), 2000);
+  };
+
   const handleBook = async () => {
     const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
     if (!normalizedBookPhone) {
@@ -499,6 +510,15 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             >
               {followLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Heart className={`h-3.5 w-3.5${isFollowing ? " fill-current" : ""}`} />}
               {isFollowing ? "Following" : "Follow"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={handleShareStore}
+            >
+              {copiedShare ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copiedShare ? "Copied!" : "Share"}
             </Button>
             {followCount > 0 && (
               <span className="text-xs text-muted-foreground">{followCount} follower{followCount !== 1 ? "s" : ""} on Lokal</span>

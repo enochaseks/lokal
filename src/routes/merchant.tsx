@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon } from "lucide-react";
+import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
@@ -379,6 +379,16 @@ function MerchantPage() {
   const [postDraftImage, setPostDraftImage] = useState("");
   const [postDraftUploading, setPostDraftUploading] = useState(false);
   const [postDraftSaving, setPostDraftSaving] = useState(false);
+  const [sharedStoreId, setSharedStoreId] = useState<string | null>(null);
+
+  const handleShareStore = (storeId: string) => {
+    const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+    const shareUrl = `${domain}/store/${storeId}`;
+    navigator.clipboard.writeText(shareUrl);
+    setSharedStoreId(storeId);
+    toast.success("Share link copied!");
+    setTimeout(() => setSharedStoreId(null), 2000);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -642,6 +652,9 @@ function MerchantPage() {
                       </Button>
                       <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" asChild>
                         <Link to="/">View</Link>
+                      </Button>
+                      <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1 gap-1.5" onClick={() => handleShareStore(s.id)} title="Copy shareable link">
+                        {sharedStoreId === s.id ? <><Check className="h-3 w-3" /> Done</> : <><Share2 className="h-3 w-3" /> Share</>}
                       </Button>
                       <Button size="sm" variant="outline" className="shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setConfirmDeleteId(s.id)}>
                         <Trash2 className="h-3 w-3" />
