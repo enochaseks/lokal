@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2 } from "lucide-react";
+import whatsappLogo from "@/assets/WhatsApp_icon.png";
+import facebookLogo from "@/assets/Facebook_Logo_2023.png";
+import xLogo from "@/assets/X_icon.svg.png";
+import instagramLogo from "@/assets/Instagram_logo_2016.svg.png";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Footer } from "@/components/lokal/Footer";
 import { Button } from "@/components/ui/button";
@@ -365,25 +369,25 @@ function StoreDetail() {
                   onClick={handleShareWhatsApp}
                   className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  <span>💚</span> WhatsApp
+                  <img src={whatsappLogo} alt="WhatsApp" className="h-5 w-5" /> WhatsApp
                 </button>
                 <button
                   onClick={handleShareFacebook}
                   className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  <span>📘</span> Facebook
+                  <img src={facebookLogo} alt="Facebook" className="h-5 w-5" /> Facebook
                 </button>
                 <button
                   onClick={handleShareTwitter}
                   className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  <span>𝕏</span> Twitter
+                  <img src={xLogo} alt="X" className="h-5 w-5" /> X
                 </button>
                 <button
                   onClick={handleShareInstagram}
                   className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
                 >
-                  <span>📷</span> Instagram
+                  <img src={instagramLogo} alt="Instagram" className="h-5 w-5" /> Instagram
                 </button>
               </div>
             </div>
