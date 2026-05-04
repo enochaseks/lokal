@@ -19,6 +19,17 @@ export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Sign in · Lokal" }] }),
 });
 
+function getAuthSiteOrigin() {
+  const configuredOrigin = (import.meta.env.VITE_SITE_URL || process.env.SITE_URL || "").trim().replace(/\/$/, "");
+  if (configuredOrigin) return configuredOrigin;
+
+  if (typeof window === "undefined") return "https://lokalshops.co.uk";
+
+  const host = window.location.hostname;
+  const isLocalHost = host === "localhost" || host === "127.0.0.1";
+  return isLocalHost ? window.location.origin : "https://lokalshops.co.uk";
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const { redirect } = useSearch({ from: "/auth" });
@@ -28,6 +39,7 @@ function AuthPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const authSiteOrigin = getAuthSiteOrigin();
 
   useEffect(() => {
     let active = true;
@@ -68,7 +80,7 @@ function AuthPage() {
           email: e1.data,
           password: p1.data,
           options: {
-            emailRedirectTo: window.location.origin + "/auth/callback",
+            emailRedirectTo: authSiteOrigin + "/auth/callback",
             data: { display_name: name.trim() || undefined },
           },
         });
@@ -91,8 +103,8 @@ function AuthPage() {
     setBusy(true);
     try {
       const callbackUrl = redirect && redirect !== "/"
-        ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
-        : `${window.location.origin}/auth/callback`;
+        ? `${authSiteOrigin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
+        : `${authSiteOrigin}/auth/callback`;
       const { error, data } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: callbackUrl },

@@ -202,9 +202,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             <DialogDescription className="text-base">{store.description}</DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-secondary/60 p-4 text-sm sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-secondary/60 p-4 text-sm sm:grid-cols-3">
             <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /><span className="truncate">{store.city || store.address || "Location on request"}</span></div>
-            <div className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" /><span className="truncate">{store.hours}</span></div>
+            <div className="flex items-start gap-2 rounded-lg bg-background/70 px-3 py-2 text-foreground shadow-sm"><Clock className="mt-0.5 h-4 w-4 shrink-0" /><span className="font-medium leading-5">{store.hours}</span></div>
             <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-4 w-4" /><span className="truncate">{store.phone}</span></div>
           </div>
 

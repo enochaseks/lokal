@@ -10,6 +10,7 @@ import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LIVE_CATEGORIES, categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
+import { getImageUrl } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import storePlaceholder from "@/assets/store-grocery.jpg";
 
@@ -57,7 +58,7 @@ function Index() {
         address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
         hours: r.hours || "Hours on request",
         phone: r.phone || "—",
-        image: r.image_url || storePlaceholder,
+        image: getImageUrl(r.image_url) || storePlaceholder,
         description: r.description || "A new Lokal merchant.",
         bank: {
           name: r.bank_name || "—",

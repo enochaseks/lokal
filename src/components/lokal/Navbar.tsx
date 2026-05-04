@@ -46,6 +46,7 @@ export function Navbar() {
         <nav className="hidden items-center gap-8 md:flex">
           <Link to="/" hash="stores" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Stores</Link>
           <a href="/#how" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">How it works</a>
+          <Link to="/help" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Help</Link>
           {user && (
             <Link to="/merchant" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">My store</Link>
           )}
@@ -90,6 +91,10 @@ export function Navbar() {
                     <Store className="mr-2 h-4 w-4" /> List your store
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate({ to: "/help" })}>
+                  <Store className="mr-2 h-4 w-4" /> Help Center
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={async () => { await signOut(); navigate({ to: "/" }); }}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign out

@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link, redirect, useRouter } from "@tansta
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
+import { getImageUrl, normalizeImagePath } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +43,7 @@ const CATEGORIES = LIVE_CATEGORIES;
 type Category = (typeof CATEGORIES)[number];
 
 type StoreRow = {
-  id: string; name: string; category: string; origin: string | null;
+  id: string; owner_id: string; name: string; category: string; origin: string | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
   image_url: string | null; published: boolean;
@@ -71,7 +72,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: store.origin ?? "", description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
-    hours: store.hours ?? "", phone: store.phone ?? "", image_url: store.image_url ?? "",
+    hours: store.hours ?? "", phone: store.phone ?? "", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
   });
@@ -94,11 +95,10 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     setUploading(true);
     try {
       const ext = file.name.split(".").pop();
-      const path = `${store.id}/cover.${ext}`;
+      const path = `${store.owner_id}/${store.id}/cover.${ext}`;
       const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: true });
       if (error) throw error;
-      const { data } = supabase.storage.from("store-images").getPublicUrl(path);
-      setForm((f) => ({ ...f, image_url: data.publicUrl }));
+      setForm((f) => ({ ...f, image_url: path }));
       toast.success("Image uploaded");
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
@@ -164,16 +164,13 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
           <div className="space-y-2">
             <Label>Cover photo</Label>
-            {form.image_url && <div className="h-28 w-full overflow-hidden rounded-lg bg-secondary"><img src={form.image_url} alt="" className="h-full w-full object-cover" /></div>}
-            <div className="flex gap-2">
-              <label className="flex-1 cursor-pointer">
-                <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
-                  {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload photo"}
-                </div>
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
-              </label>
-              <Input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} placeholder="or paste URL" className="flex-[2]" />
-            </div>
+            {form.image_url && <div className="h-28 w-full overflow-hidden rounded-lg bg-secondary"><img src={getImageUrl(form.image_url) || ""} alt="" className="h-full w-full object-cover" /></div>}
+            <label className="cursor-pointer">
+              <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
+                {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload photo"}
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+            </label>
           </div>
 
           <div className="space-y-3">
@@ -403,7 +400,7 @@ function MerchantPage() {
                 <div key={s.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
                   <div className="relative aspect-[5/2] bg-secondary">
                     {s.image_url ? (
-                      <img src={s.image_url} alt={s.name} className="h-full w-full object-cover" />
+                      <img src={getImageUrl(s.image_url) || ""} alt={s.name} className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full items-center justify-center text-muted-foreground"><StoreIcon className="h-8 w-8" /></div>
                     )}
@@ -612,7 +609,9 @@ function MerchantPage() {
                 <div className="space-y-2">
                   {convs.map(([key, conv]) => {
                     const storeName = stores.find((s) => s.id === conv.storeId)?.name ?? "—";
-                    const waLink = `https://wa.me/${conv.customerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`;
+                    const rawPhone = conv.customerPhone.replace(/\D/g, "");
+                    const e164Phone = rawPhone.startsWith("0") ? "44" + rawPhone.slice(1) : rawPhone;
+                    const waLink = `https://wa.me/${e164Phone}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`;
                     const isExpanded = expandedConv === key;
                     const thread = [...conv.msgs].sort((a, b) => a.created_at.localeCompare(b.created_at));
                     return (

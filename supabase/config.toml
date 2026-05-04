@@ -1,1 +1,17 @@
 project_id = "qzilbalaucocgwsdphgh"
+
+[auth]
+site_url = "https://lokalshops.co.uk"
+additional_redirect_urls = [
+  "https://lokalshops.co.uk/auth/callback",
+  "https://www.lokalshops.co.uk/auth/callback"
+]
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8

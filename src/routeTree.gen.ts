@@ -14,6 +14,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ListStoreRouteImport } from './routes/list-store'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -43,6 +44,11 @@ const ListStoreRoute = ListStoreRouteImport.update({
   path: '/list-store',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -62,6 +68,7 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/help'
     | '/list-store'
     | '/merchant'
     | '/order'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/help'
     | '/list-store'
     | '/merchant'
     | '/order'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/auth'
+    | '/help'
     | '/list-store'
     | '/merchant'
     | '/order'
@@ -126,6 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRouteWithChildren
+  HelpRoute: typeof HelpRoute
   ListStoreRoute: typeof ListStoreRoute
   MerchantRoute: typeof MerchantRoute
   OrderRoute: typeof OrderRoute
@@ -170,6 +183,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListStoreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -207,6 +227,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
+  HelpRoute: HelpRoute,
   ListStoreRoute: ListStoreRoute,
   MerchantRoute: MerchantRoute,
   OrderRoute: OrderRoute,
