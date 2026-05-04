@@ -84,7 +84,7 @@ const bankSchema = z.object({
 });
 
 type Product = { name: string; price: string; unit: string };
-type DayDraft = { day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number };
+type DayDraft = { day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number };
 
 function slugify(s: string) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) || "store";
@@ -105,7 +105,7 @@ function ListStorePage() {
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
   const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
-  const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 })));
+  const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
 
   useEffect(() => {
     // route guard handled by beforeLoad
@@ -188,7 +188,7 @@ function ListStorePage() {
         const activeDays = schedule.filter((d) => d.active);
         if (activeDays.length > 0) {
           const { error: availErr } = await (supabase as any).from("store_availability").insert(
-            activeDays.map((d) => ({ store_id: newStore.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+            activeDays.map((d) => ({ store_id: newStore.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
           );
           if (availErr) throw availErr;
         }
@@ -464,6 +464,18 @@ function ListStorePage() {
                                     <SelectItem value="60">60 min</SelectItem>
                                   </SelectContent>
                                 </Select>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm text-muted-foreground">Max</span>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    value={d.max_bookings_per_slot}
+                                    onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : x))}
+                                    className="w-16 font-mono"
+                                  />
+                                  <span className="text-sm text-muted-foreground">clients/slot</span>
+                                </div>
                               </div>
                             )}
                           </div>

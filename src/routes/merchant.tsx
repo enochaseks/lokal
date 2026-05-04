@@ -69,7 +69,7 @@ type MessageRow = {
 
 type AvailabilityRow = {
   id: string; store_id: string; day_of_week: number;
-  start_time: string; end_time: string; slot_duration_mins: number;
+  start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number;
 };
 
 type BookingRow = {
@@ -85,7 +85,7 @@ type PostRow = {
 };
 
 type DayDraft = {
-  day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number;
+  day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number;
 };
 
 function toWhatsAppNumber(input: string) {
@@ -128,7 +128,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   });
   const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 })));
+  const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -145,8 +145,8 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           if (data && data.length > 0) {
             setEditAvail([0,1,2,3,4,5,6].map((day) => {
               const row = (data as any[]).find((r) => r.day_of_week === day);
-              if (!row) return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30 };
-              return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins };
+              if (row) return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins, max_bookings_per_slot: row.max_bookings_per_slot ?? 1 };
+              return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 };
             }));
           }
         });
@@ -206,7 +206,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         const activeDays = editAvail.filter((d) => d.active);
         if (activeDays.length > 0) {
           const { error: availErr } = await (supabase as any).from("store_availability").insert(
-            activeDays.map((d) => ({ store_id: store.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+            activeDays.map((d) => ({ store_id: store.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
           );
           if (availErr) throw availErr;
         }
@@ -335,6 +335,18 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                               <SelectItem value="60">60 min</SelectItem>
                             </SelectContent>
                           </Select>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Max</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={d.max_bookings_per_slot}
+                              onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : x))}
+                              className="h-8 text-xs w-14 font-mono"
+                            />
+                            <span className="text-xs text-muted-foreground">clients</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -952,7 +964,7 @@ function MerchantPage() {
                                   } else {
                                     const draft: DayDraft[] = [0, 1, 2, 3, 4, 5, 6].map((day) => {
                                       const ex = storeAvail.find((a) => a.day_of_week === day);
-                                      return { day, active: !!ex, start_time: ex?.start_time.slice(0, 5) ?? "09:00", end_time: ex?.end_time.slice(0, 5) ?? "18:00", slot_duration_mins: ex?.slot_duration_mins ?? 30 };
+                                      return { day, active: !!ex, start_time: ex?.start_time.slice(0, 5) ?? "09:00", end_time: ex?.end_time.slice(0, 5) ?? "18:00", slot_duration_mins: ex?.slot_duration_mins ?? 30, max_bookings_per_slot: ex?.max_bookings_per_slot ?? 1 };
                                     });
                                     setAvailDraft(draft);
                                     setEditingAvailStoreId(s.id);
@@ -989,6 +1001,18 @@ function MerchantPage() {
                                         </SelectContent>
                                       </Select>
                                     </div>
+                                    <div className="col-span-2 flex items-center gap-1">
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        max={20}
+                                        disabled={!dayRow.active}
+                                        value={dayRow.max_bookings_per_slot}
+                                        onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : d))}
+                                        className="h-8 text-xs w-12 font-mono"
+                                      />
+                                      <span className="shrink-0 text-xs text-muted-foreground">max</span>
+                                    </div>
                                   </div>
                                 ))}
                                 <Button
@@ -999,13 +1023,13 @@ function MerchantPage() {
                                       const activeDays = availDraft.filter((d) => d.active);
                                       if (activeDays.length > 0) {
                                         const { error } = await db.from("store_availability").insert(
-                                          activeDays.map((d) => ({ store_id: s.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
+                                          activeDays.map((d) => ({ store_id: s.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
                                         );
                                         if (error) throw error;
                                       }
                                       setStoreAvailability((prev) => [
                                         ...prev.filter((a) => a.store_id !== s.id),
-                                        ...activeDays.map((d, idx) => ({ id: `new-${idx}`, store_id: s.id, day_of_week: d.day, start_time: d.start_time + ":00", end_time: d.end_time + ":00", slot_duration_mins: d.slot_duration_mins })),
+                                        ...activeDays.map((d, idx) => ({ id: `new-${idx}`, store_id: s.id, day_of_week: d.day, start_time: d.start_time + ":00", end_time: d.end_time + ":00", slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot })),
                                       ]);
                                       setEditingAvailStoreId(null);
                                       toast.success("Schedule saved");

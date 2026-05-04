@@ -27,6 +27,7 @@ type AvailabilityRow = {
   start_time: string;
   end_time: string;
   slot_duration_mins: number;
+  max_bookings_per_slot: number;
 };
 
 type StoreDetails = {
@@ -98,7 +99,7 @@ export const Route = createFileRoute("/store/$id")({
   loader: async ({ params }) => {
     const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins)")
+      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot)")
       .eq("id", params.id)
       .limit(1);
 
@@ -145,7 +146,7 @@ function StoreDetail() {
   const [bookName, setBookName] = useState("");
   const [bookPhone, setBookPhone] = useState("");
   const [bookNote, setBookNote] = useState("");
-  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
@@ -175,12 +176,12 @@ function StoreDetail() {
         selectedDayAvailability.start_time.slice(0, 5),
         selectedDayAvailability.end_time.slice(0, 5),
         selectedDayAvailability.slot_duration_mins,
-      ).filter((slot) => !takenSlots.includes(slot))
+      ).filter((slot) => (slotCounts[slot] ?? 0) < (selectedDayAvailability.max_bookings_per_slot ?? 1))
     : [];
 
   useEffect(() => {
     if (!bookDate) {
-      setTakenSlots([]);
+      setSlotCounts({});
       setBookTime("");
       return;
     }
@@ -194,12 +195,17 @@ function StoreDetail() {
       .gte("slot_start", `${bookDate}T00:00:00`)
       .lte("slot_start", `${bookDate}T23:59:59`)
       .then(({ data }: { data: Array<{ slot_start: string }> | null }) => {
-        setTakenSlots((data ?? []).map((r) => r.slot_start.slice(11, 16)));
+        const counts: Record<string, number> = {};
+        (data ?? []).forEach((r) => {
+          const time = r.slot_start.slice(11, 16);
+          counts[time] = (counts[time] ?? 0) + 1;
+        });
+        setSlotCounts(counts);
         setBookTime("");
         setLoadingSlots(false);
       })
       .catch(() => {
-        setTakenSlots([]);
+        setSlotCounts({});
         setLoadingSlots(false);
       });
   }, [bookDate, store.id]);
