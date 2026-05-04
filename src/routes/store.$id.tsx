@@ -1,12 +1,29 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { MapPin, Phone, Clock, Globe, Share2, Copy, Check } from "lucide-react";
+import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Footer } from "@/components/lokal/Footer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { BOOKABLE_CATEGORIES } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
-import { getImageUrl } from "@/lib/utils";
+import { buildInstagramUrl, buildTikTokUrl, getImageUrl, normalizeWebsiteUrl } from "@/lib/utils";
 import { toast } from "sonner";
+
+type ProductRow = {
+  name: string;
+  price: number;
+  unit: string | null;
+  position: number;
+};
+
+type AvailabilityRow = {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration_mins: number;
+};
 
 type StoreDetails = {
   id: string;
@@ -25,7 +42,32 @@ type StoreDetails = {
   image_url: string | null;
   fulfillment: string;
   published: boolean;
+  store_products: ProductRow[] | null;
+  store_availability: AvailabilityRow[] | null;
 };
+
+const isBookable = (category: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(category);
+
+function makeRef() {
+  const buf = new Uint8Array(4);
+  crypto.getRandomValues(buf);
+  return "LKL-" + Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 6);
+}
+
+function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
+  const slots: string[] = [];
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let minutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+  while (minutes + durationMins <= endMinutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    minutes += durationMins;
+  }
+  return slots;
+}
 
 export const Route = createFileRoute("/store/$id")({
   component: StoreDetail,
@@ -49,17 +91,22 @@ export const Route = createFileRoute("/store/$id")({
       ] : [],
     };
   },
-  beforeLoad: async (props) => {
-    const { data, error } = await supabase
+  loader: async ({ params }) => {
+    const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*")
-      .eq("id", props.params.id)
-      .single();
+      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins)")
+      .eq("id", params.id)
+      .limit(1);
 
-    if (error || !data) {
-      throw new Error("Store not found or no longer available");
+    if (error) {
+      throw new Error(`Error loading store: ${error.message}`);
     }
-    return data;
+
+    if (!data || data.length === 0) {
+      throw new Error("Store not found");
+    }
+
+    return data[0] as unknown as StoreDetails;
   },
   errorComponent: ({ error }) => (
     <div className="min-h-screen flex flex-col bg-background">
@@ -80,10 +127,78 @@ export const Route = createFileRoute("/store/$id")({
 function StoreDetail() {
   const store = Route.useLoaderData() as StoreDetails;
   const [copied, setCopied] = useState(false);
+  const [reference, setReference] = useState(() => makeRef());
+
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [orderNote, setOrderNote] = useState("");
+  const [placingOrder, setPlacingOrder] = useState(false);
+
+  const [bookService, setBookService] = useState("");
+  const [bookDate, setBookDate] = useState("");
+  const [bookTime, setBookTime] = useState("");
+  const [bookName, setBookName] = useState("");
+  const [bookPhone, setBookPhone] = useState("");
+  const [bookNote, setBookNote] = useState("");
+  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submittingBooking, setSubmittingBooking] = useState(false);
 
   const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
   const shareUrl = `${domain}/store/${store.id}`;
   const shareText = `Check out ${store.name} on Lokal!`;
+  const websiteHref = normalizeWebsiteUrl(store.website_url);
+  const instagramHref = buildInstagramUrl(store.instagram_handle);
+  const tiktokHref = buildTikTokUrl(store.tiktok_handle);
+  const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
+  const availableDays = [...(store.store_availability ?? [])].sort((a, b) => a.day_of_week - b.day_of_week);
+
+  const cartItems = products
+    .map((p) => ({ ...p, qty: qty[p.name] ?? 0 }))
+    .filter((p) => p.qty > 0);
+  const orderTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+  const selectedDayAvailability = (() => {
+    if (!bookDate) return null;
+    const [y, m, d] = bookDate.split("-").map(Number);
+    const day = new Date(y, m - 1, d).getDay();
+    return availableDays.find((a) => a.day_of_week === day) ?? null;
+  })();
+
+  const freeSlots = selectedDayAvailability
+    ? generateTimeSlots(
+        selectedDayAvailability.start_time.slice(0, 5),
+        selectedDayAvailability.end_time.slice(0, 5),
+        selectedDayAvailability.slot_duration_mins,
+      ).filter((slot) => !takenSlots.includes(slot))
+    : [];
+
+  useEffect(() => {
+    if (!bookDate) {
+      setTakenSlots([]);
+      setBookTime("");
+      return;
+    }
+
+    setLoadingSlots(true);
+    (supabase as any)
+      .from("store_bookings")
+      .select("slot_start")
+      .eq("store_id", store.id)
+      .neq("status", "cancelled")
+      .gte("slot_start", `${bookDate}T00:00:00`)
+      .lte("slot_start", `${bookDate}T23:59:59`)
+      .then(({ data }: { data: Array<{ slot_start: string }> | null }) => {
+        setTakenSlots((data ?? []).map((r) => r.slot_start.slice(11, 16)));
+        setBookTime("");
+        setLoadingSlots(false);
+      })
+      .catch(() => {
+        setTakenSlots([]);
+        setLoadingSlots(false);
+      });
+  }, [bookDate, store.id]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -119,6 +234,95 @@ function StoreDetail() {
     );
   };
 
+  const handlePlaceOrder = async () => {
+    if (cartItems.length === 0) {
+      toast.error("Add at least one product");
+      return;
+    }
+    if (!customerName.trim() || !customerPhone.trim()) {
+      toast.error("Name and phone are required");
+      return;
+    }
+
+    setPlacingOrder(true);
+    try {
+      const { error } = await (supabase as any).from("orders").insert({
+        store_id: store.id,
+        reference,
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        customer_email: null,
+        note: orderNote.trim() || null,
+        items: cartItems.map((item) => ({ name: item.name, price: item.price, qty: item.qty, unit: item.unit ?? undefined })),
+        total_gbp: orderTotal,
+        status: "pending_transfer",
+      });
+      if (error) throw error;
+
+      toast.success("Order placed", {
+        description: `Reference ${reference}. The merchant will confirm next steps.`,
+        duration: 8000,
+      });
+
+      setQty({});
+      setCustomerName("");
+      setCustomerPhone("");
+      setOrderNote("");
+      setReference(makeRef());
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not place order");
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
+  const handleBook = async () => {
+    if (!bookDate || !bookTime || !bookName.trim() || !bookPhone.trim()) {
+      toast.error("Please fill in all required booking fields");
+      return;
+    }
+    if (!selectedDayAvailability) {
+      toast.error("No availability on this day");
+      return;
+    }
+
+    const duration = selectedDayAvailability.slot_duration_mins;
+    const [th, tm] = bookTime.split(":").map(Number);
+    const endMins = th * 60 + tm + duration;
+    const slotEnd = `${bookDate}T${String(Math.floor(endMins / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}:00`;
+
+    setSubmittingBooking(true);
+    try {
+      const { error } = await (supabase as any).from("store_bookings").insert({
+        store_id: store.id,
+        customer_name: bookName.trim(),
+        customer_phone: bookPhone.trim(),
+        service: bookService || null,
+        slot_start: `${bookDate}T${bookTime}:00`,
+        slot_end: slotEnd,
+        status: "pending",
+        note: bookNote.trim() || null,
+      });
+      if (error) throw error;
+
+      toast.success("Booking request sent", {
+        description: `${store.name} will confirm your appointment soon.`,
+        duration: 8000,
+      });
+
+      setBookService("");
+      setBookDate("");
+      setBookTime("");
+      setBookName("");
+      setBookPhone("");
+      setBookNote("");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not request booking");
+    } finally {
+      setSubmittingBooking(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -147,7 +351,7 @@ function StoreDetail() {
               </div>
             </div>
 
-            {/* Share dropdown */}
+            {/* Share buttons */}
             <div className="flex flex-col gap-2 sm:min-w-48">
               <Button
                 onClick={handleCopyLink}
@@ -156,39 +360,189 @@ function StoreDetail() {
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied!" : "Copy link"}
               </Button>
-              <details className="group">
-                <summary className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-secondary">
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </summary>
-                <div className="absolute right-4 top-full z-10 mt-2 flex flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-lg">
-                  <button
-                    onClick={handleShareWhatsApp}
-                    className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-secondary"
-                  >
-                    <span>💚</span> WhatsApp
-                  </button>
-                  <button
-                    onClick={handleShareFacebook}
-                    className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-secondary"
-                  >
-                    <span>📘</span> Facebook
-                  </button>
-                  <button
-                    onClick={handleShareTwitter}
-                    className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-secondary"
-                  >
-                    <span>𝕏</span> Twitter
-                  </button>
-                  <button
-                    onClick={handleShareInstagram}
-                    className="flex items-center gap-2 rounded px-3 py-2 text-sm hover:bg-secondary"
-                  >
-                    <span>📷</span> Instagram
-                  </button>
-                </div>
-              </details>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleShareWhatsApp}
+                  className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
+                >
+                  <span>💚</span> WhatsApp
+                </button>
+                <button
+                  onClick={handleShareFacebook}
+                  className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
+                >
+                  <span>📘</span> Facebook
+                </button>
+                <button
+                  onClick={handleShareTwitter}
+                  className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
+                >
+                  <span>𝕏</span> Twitter
+                </button>
+                <button
+                  onClick={handleShareInstagram}
+                  className="flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-secondary"
+                >
+                  <span>📷</span> Instagram
+                </button>
+              </div>
             </div>
+          </div>
+
+          {/* Buy / book section */}
+          <div className="mb-8 rounded-2xl border border-border bg-card p-6">
+            {isBookable(store.category) ? (
+              <div className="space-y-4">
+                <h2 className="font-display text-2xl font-bold">Book with this store</h2>
+                {products.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-sm font-medium">Services</p>
+                    <div className="space-y-2 rounded-lg border border-border p-3">
+                      {products.map((p) => (
+                        <div key={p.name} className="flex items-center justify-between text-sm">
+                          <span>{p.name}</span>
+                          <span className="font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {availableDays.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Online booking is not enabled yet. Use phone or social links above.</p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Service</p>
+                      <Input
+                        value={bookService}
+                        onChange={(e) => setBookService(e.target.value)}
+                        placeholder="Haircut, line-up, braids..."
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Date *</p>
+                      <Input
+                        type="date"
+                        value={bookDate}
+                        min={(() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()}
+                        max={(() => { const d = new Date(); d.setDate(d.getDate() + 28); return d.toISOString().split("T")[0]; })()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setBookDate("");
+                            return;
+                          }
+                          const [yr, mo, dy] = val.split("-").map(Number);
+                          const day = new Date(yr, mo - 1, dy).getDay();
+                          if (!availableDays.some((a) => a.day_of_week === day)) {
+                            toast.error("No availability on this day");
+                            return;
+                          }
+                          setBookDate(val);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Time *</p>
+                      {loadingSlots ? (
+                        <div className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading slots...
+                        </div>
+                      ) : (
+                        <select
+                          value={bookTime}
+                          onChange={(e) => setBookTime(e.target.value)}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Choose a slot</option>
+                          {freeSlots.map((slot) => (
+                            <option key={slot} value={slot}>{slot}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Your name *</p>
+                      <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="Your full name" />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
+                      <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="+44..." />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Note (optional)</p>
+                      <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} rows={2} placeholder="Anything the merchant should know?" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Button
+                        onClick={handleBook}
+                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim()}
+                        className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                      >
+                        {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h2 className="font-display text-2xl font-bold">Buy from this store</h2>
+                {products.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No products listed yet. Use phone or social links above to enquire.</p>
+                ) : (
+                  <>
+                    <div className="divide-y divide-border rounded-lg border border-border">
+                      {products.map((p) => {
+                        const count = qty[p.name] ?? 0;
+                        return (
+                          <div key={p.name} className="flex items-center justify-between gap-4 p-3">
+                            <div>
+                              <p className="text-sm font-medium">{p.name}</p>
+                              <p className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" onClick={() => setQty((prev) => ({ ...prev, [p.name]: Math.max(0, count - 1) }))}>-</Button>
+                              <span className="w-6 text-center text-sm font-semibold">{count}</span>
+                              <Button variant="outline" size="sm" onClick={() => setQty((prev) => ({ ...prev, [p.name]: count + 1 }))}>+</Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Your name *</p>
+                        <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Your full name" />
+                      </div>
+                      <div>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
+                        <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="+44..." />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Order note (optional)</p>
+                        <Textarea value={orderNote} onChange={(e) => setOrderNote(e.target.value)} rows={2} placeholder="Any substitutions or notes?" />
+                      </div>
+                      <div className="sm:col-span-2 rounded-md bg-secondary px-3 py-2 text-sm">
+                        Total: <span className="font-semibold">£{orderTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Button
+                          onClick={handlePlaceOrder}
+                          disabled={placingOrder || cartItems.length === 0 || !customerName.trim() || !customerPhone.trim()}
+                          className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                        >
+                          {placingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : `Place order (${reference})`}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Store info grid */}
@@ -252,9 +606,9 @@ function StoreDetail() {
             <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
               <h2 className="font-display text-xl font-bold">Connect</h2>
 
-              {store.website_url && (
+              {websiteHref && (
                 <a
-                  href={store.website_url}
+                  href={websiteHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
@@ -262,14 +616,14 @@ function StoreDetail() {
                   <Globe className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">Website</p>
-                    <p className="text-sm text-primary hover:underline truncate">{store.website_url}</p>
+                    <p className="text-sm text-primary hover:underline truncate">{websiteHref}</p>
                   </div>
                 </a>
               )}
 
-              {store.instagram_handle && (
+              {instagramHref && (
                 <a
-                  href={`https://instagram.com/${store.instagram_handle.replace(/^@/, "")}`}
+                  href={instagramHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
@@ -277,14 +631,14 @@ function StoreDetail() {
                   <span className="text-xl mt-0.5">📷</span>
                   <div>
                     <p className="text-sm font-medium">Instagram</p>
-                    <p className="text-sm text-primary hover:underline truncate">@{store.instagram_handle.replace(/^@/, "")}</p>
+                    <p className="text-sm text-primary hover:underline truncate">Open profile</p>
                   </div>
                 </a>
               )}
 
-              {store.tiktok_handle && (
+              {tiktokHref && (
                 <a
-                  href={`https://tiktok.com/@${store.tiktok_handle.replace(/^@/, "")}`}
+                  href={tiktokHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
@@ -292,12 +646,12 @@ function StoreDetail() {
                   <span className="text-xl mt-0.5">🎵</span>
                   <div>
                     <p className="text-sm font-medium">TikTok</p>
-                    <p className="text-sm text-primary hover:underline truncate">@{store.tiktok_handle.replace(/^@/, "")}</p>
+                    <p className="text-sm text-primary hover:underline truncate">Open profile</p>
                   </div>
                 </a>
               )}
 
-              {!store.website_url && !store.instagram_handle && !store.tiktok_handle && (
+              {!websiteHref && !instagramHref && !tiktokHref && (
                 <p className="text-sm text-muted-foreground">No social links available yet.</p>
               )}
             </div>

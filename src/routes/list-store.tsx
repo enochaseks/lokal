@@ -168,7 +168,7 @@ function ListStorePage() {
         published: true,
       };
 
-      const { data: newStore, error: storeErr } = await supabase
+      const { data: newStore, error: storeErr } = await (supabase as any)
         .from("stores").insert(payload).select("id").single();
       if (storeErr) throw storeErr;
 
@@ -187,7 +187,7 @@ function ListStorePage() {
       if (isBarber) {
         const activeDays = schedule.filter((d) => d.active);
         if (activeDays.length > 0) {
-          const { error: availErr } = await supabase.from("store_availability").insert(
+          const { error: availErr } = await (supabase as any).from("store_availability").insert(
             activeDays.map((d) => ({ store_id: newStore.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins }))
           );
           if (availErr) throw availErr;
