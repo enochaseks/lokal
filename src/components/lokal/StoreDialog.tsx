@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Clock, Phone, Landmark, Copy, Check, ArrowLeft, Loader2, Star } from "lucide-react";
+import { MapPin, Clock, Phone, Landmark, Copy, Check, ArrowLeft, Loader2, Star, Rss, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
 import { BOOKABLE_CATEGORIES } from "@/data/stores";
+import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
@@ -111,6 +112,17 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [reviewBody, setReviewBody] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Posts / updates feed
+  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
+  const [storePosts, setStorePosts] = useState<PostRow[]>([]);
+  const [postsTab, setPostsTab] = useState<"info" | "updates">("info");
+
+  // Follow state
+  const [followerId, setFollowerId] = useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followCount, setFollowCount] = useState(0);
+
   // Booking state (Barbers / Beauty)
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookService, setBookService] = useState("");
@@ -135,6 +147,52 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       .then(({ data }: { data: ReviewRow[] | null }) => {
         setStoreReviews(data ?? []);
       });
+  }, [open, store?.id]);
+
+  // Load posts for this store
+  useEffect(() => {
+    if (!open || !store) return;
+    setStorePosts([]);
+    (supabase as any)
+      .from("store_posts")
+      .select("id, store_id, body, image_url, created_at")
+      .eq("store_id", store.id)
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data }: { data: PostRow[] | null }) => {
+        setStorePosts(data ?? []);
+      });
+  }, [open, store?.id]);
+
+  // Load auth user + follow state
+  useEffect(() => {
+    if (!open || !store) return;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id ?? null;
+      setFollowerId(uid);
+      if (uid) {
+        const { count } = await (supabase as any)
+          .from("store_follows")
+          .select("*", { count: "exact", head: true })
+          .eq("store_id", store.id);
+        setFollowCount(count ?? 0);
+        const { data: myFollow } = await (supabase as any)
+          .from("store_follows")
+          .select("user_id")
+          .eq("store_id", store.id)
+          .eq("user_id", uid)
+          .maybeSingle();
+        setIsFollowing(!!myFollow);
+      } else {
+        const { count } = await (supabase as any)
+          .from("store_follows")
+          .select("*", { count: "exact", head: true })
+          .eq("store_id", store.id);
+        setFollowCount(count ?? 0);
+        setIsFollowing(false);
+      }
+    })();
   }, [open, store?.id]);
 
   // Load weekly availability for bookable stores
@@ -169,6 +227,12 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   if (!store) return null;
 
+  const socialLinks = [
+    store.instagramHandle ? { label: "Instagram", href: buildInstagramUrl(store.instagramHandle) } : null,
+    store.tiktokHandle ? { label: "TikTok", href: buildTikTokUrl(store.tiktokHandle) } : null,
+    store.websiteUrl ? { label: "Website", href: store.websiteUrl } : null,
+  ].filter((item): item is { label: string; href: string | null } => !!item && !!item.href);
+
 
   const items = store.products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 }));
   const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -190,6 +254,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setShowBookingForm(false);
     setBookService(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote("");
     setBookAvailability([]); setTakenSlots([]);
+    setStorePosts([]);
+    setPostsTab("info");
+    setFollowerId(null); setIsFollowing(false); setFollowCount(0);
   };
 
   const handleConfirmTransfer = async () => {
@@ -242,6 +309,32 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       toast.error(e.message ?? "Could not save your order");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleFollow = async () => {
+    if (!store) return;
+    if (!followerId) {
+      toast("Sign in to follow stores", { description: "Create a free account to follow your favourite shops." });
+      return;
+    }
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await (supabase as any).from("store_follows").delete().eq("store_id", store.id).eq("user_id", followerId);
+        setIsFollowing(false);
+        setFollowCount((c) => Math.max(0, c - 1));
+        toast.success("Unfollowed");
+      } else {
+        await (supabase as any).from("store_follows").insert({ store_id: store.id, user_id: followerId });
+        setIsFollowing(true);
+        setFollowCount((c) => c + 1);
+        toast.success(`Following ${store.name}!`);
+      }
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not update follow");
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -395,6 +488,68 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             <DialogDescription className="text-base">{store.description}</DialogDescription>
           </DialogHeader>
 
+          {/* Follow button */}
+          <div className="mt-3 flex items-center gap-3">
+            <Button
+              size="sm"
+              variant={isFollowing ? "default" : "outline"}
+              className={isFollowing ? "bg-primary text-primary-foreground gap-1.5" : "gap-1.5"}
+              onClick={handleToggleFollow}
+              disabled={followLoading}
+            >
+              {followLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Heart className={`h-3.5 w-3.5${isFollowing ? " fill-current" : ""}`} />}
+              {isFollowing ? "Following" : "Follow"}
+            </Button>
+            {followCount > 0 && (
+              <span className="text-xs text-muted-foreground">{followCount} follower{followCount !== 1 ? "s" : ""} on Lokal</span>
+            )}
+          </div>
+
+          {/* Info / Updates tabs */}
+          <div className="mt-4 flex gap-1 rounded-lg bg-secondary/60 p-1 w-fit">
+            <button
+              onClick={() => setPostsTab("info")}
+              className={`rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ${postsTab === "info" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Info
+            </button>
+            <button
+              onClick={() => setPostsTab("updates")}
+              className={`relative rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ${postsTab === "updates" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Updates
+              {storePosts.length > 0 && postsTab !== "updates" && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">{storePosts.length > 9 ? "9+" : storePosts.length}</span>
+              )}
+            </button>
+          </div>
+
+          {postsTab === "updates" && (
+            <div className="mt-4 space-y-4">
+              {storePosts.length === 0 ? (
+                <div className="rounded-xl border-2 border-dashed border-border bg-secondary/30 p-10 text-center">
+                  <Rss className="mx-auto h-8 w-8 text-muted-foreground/50 mb-3" />
+                  <p className="text-sm font-medium">{store.name} hasn't posted any updates yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Follow them to be first to know when they post.</p>
+                </div>
+              ) : (
+                storePosts.map((post) => (
+                  <div key={post.id} className="rounded-xl border border-border bg-card p-4">
+                    <p className="text-xs text-muted-foreground mb-2">{new Date(post.created_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    <p className="text-sm whitespace-pre-wrap">{post.body}</p>
+                    {post.image_url && (
+                      <div className="mt-3 overflow-hidden rounded-lg max-h-72 bg-secondary">
+                        <img src={getImageUrl(post.image_url) || ""} alt="" className="w-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {postsTab === "info" && (
+          <>
           <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-secondary/60 p-4 text-sm sm:grid-cols-3">
             <div className="flex items-start gap-2 text-muted-foreground">
               <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
@@ -704,6 +859,25 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             )}
           </div>
 
+              {socialLinks.length > 0 && (
+                <div className="mt-6 rounded-xl border border-border bg-secondary/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Find this merchant elsewhere</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {socialLinks.map((link) => (
+                      <a
+                        key={link.label}
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!isBookable(store.category) && (
                 <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
                   <div>
@@ -721,6 +895,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 </div>
               )}
             </>
+          )}
+          </>
           )}
 
           {step === "arrange" && (

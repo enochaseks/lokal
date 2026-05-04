@@ -3,14 +3,14 @@ import { createFileRoute, useNavigate, Link, redirect, useRouter } from "@tansta
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
-import { getImageUrl, normalizeImagePath } from "@/lib/utils";
+import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone } from "lucide-react";
+import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
@@ -50,6 +50,7 @@ type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
+  instagram_handle: string | null; tiktok_handle: string | null; website_url: string | null;
   image_url: string | null; published: boolean; fulfillment: string;
   bank_name: string | null; bank_account_name: string | null;
   bank_account_number: string | null; bank_sort_code: string | null;
@@ -77,6 +78,10 @@ type BookingRow = {
   slot_start: string; slot_end: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
   note: string | null; created_at: string;
+};
+
+type PostRow = {
+  id: string; store_id: string; body: string; image_url: string | null; created_at: string;
 };
 
 type DayDraft = {
@@ -112,12 +117,12 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
-    hours: store.hours ?? "", phone: store.phone ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
+    hours: store.hours ?? "", phone: store.phone ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
   });
@@ -172,11 +177,16 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
     setSaving(true);
     try {
+      const instagramHandle = normalizeInstagramHandle(form.instagram_handle);
+      const tiktokHandle = normalizeTikTokHandle(form.tiktok_handle);
+      const websiteUrl = normalizeWebsiteUrl(form.website_url);
+
       const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
         origin: form.origin, description: n(form.description),
         address: n(form.address), city: n(form.city), postcode: n(form.postcode),
         hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
+        instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
         bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
       }).eq("id", store.id);
@@ -202,7 +212,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -256,6 +266,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               <div><Label>Postcode</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} maxLength={20} className="mt-1" /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number. Use international format (e.g. +1, +44, +234).</p></div>
               <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
+              <div><Label>Instagram</Label><Input value={form.instagram_handle} onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
+              <div><Label>TikTok</Label><Input value={form.tiktok_handle} onChange={(e) => setForm((f) => ({ ...f, tiktok_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
+              <div className="sm:col-span-2"><Label>Website</Label><Input value={form.website_url} onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))} placeholder="https://..." maxLength={200} className="mt-1" /></div>
               <div className="sm:col-span-2">
                 <Label>Fulfilment</Label>
                 <Select value={form.fulfillment} onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}>
@@ -346,11 +359,12 @@ function MerchantPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const db = supabase as unknown as { from: (table: string) => any };
-  const [tab, setTab] = useState<"stores" | "orders" | "messages" | "bookings">("stores");
+  const [tab, setTab] = useState<"stores" | "orders" | "messages" | "bookings" | "posts">("stores");
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [seenInboundMessageIds, setSeenInboundMessageIds] = useState<Set<string>>(new Set());
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
   const [editingStore, setEditingStore] = useState<StoreRow | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -359,6 +373,12 @@ function MerchantPage() {
   const [storeAvailability, setStoreAvailability] = useState<AvailabilityRow[]>([]);
   const [editingAvailStoreId, setEditingAvailStoreId] = useState<string | null>(null);
   const [availDraft, setAvailDraft] = useState<DayDraft[]>([]);
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [postDraftStoreId, setPostDraftStoreId] = useState<string | null>(null);
+  const [postDraftBody, setPostDraftBody] = useState("");
+  const [postDraftImage, setPostDraftImage] = useState("");
+  const [postDraftUploading, setPostDraftUploading] = useState(false);
+  const [postDraftSaving, setPostDraftSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -380,6 +400,12 @@ function MerchantPage() {
           const { data: msgsData } = await db.from("messages").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(200);
         setMessages((msgsData ?? []) as MessageRow[]);
       } catch { /* messages table not yet created */ }
+
+      // Load posts
+      try {
+        const { data: postsData } = await db.from("store_posts").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(200);
+        setPosts((postsData ?? []) as PostRow[]);
+      } catch { /* posts table may not exist yet */ }
 
       // Load bookings and availability for Barbers/Beauty stores
       const bookableIds = rows.filter((s) => isBookable(s.category)).map((s) => s.id);
@@ -419,6 +445,17 @@ function MerchantPage() {
       return () => { supabase.removeChannel(channel); };
     })();
   }, [user]);
+
+  useEffect(() => {
+    if (tab !== "messages") return;
+    setSeenInboundMessageIds((prev) => {
+      const next = new Set(prev);
+      for (const m of messages) {
+        if (m.direction === "inbound") next.add(m.id);
+      }
+      return next;
+    });
+  }, [tab, messages]);
 
   const togglePublish = async (s: StoreRow) => {
     const { error } = await supabase.from("stores").update({ published: !s.published }).eq("id", s.id);
@@ -476,13 +513,13 @@ function MerchantPage() {
   const cancelOrder = (id: string) => updateOrderStatus(id, "cancelled");
 
   const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
-  const unreadMessages = messages.filter((m) => m.direction === "inbound").length;
+  const unreadMessages = messages.filter((m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id)).length;
   const storesWithoutPhone = stores.filter((s) => !s.phone);
 
   if (loading || !user) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-hidden bg-background">
       <Navbar />
       <main className="container mx-auto max-w-5xl px-4 py-12">
 
@@ -507,27 +544,28 @@ function MerchantPage() {
           </div>
         )}
 
-        <div className="mt-8 flex gap-1 rounded-xl bg-secondary p-1 w-fit">
-          <button
-            onClick={() => setTab("stores")}
-            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "stores" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Stores
-          </button>
-          <button
-            onClick={() => setTab("orders")}
-            className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "orders" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Orders
-            {pendingCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                {pendingCount > 9 ? "9+" : pendingCount}
-              </span>
-            )}
-          </button>
+        <div className="mt-8 overflow-x-auto pb-1">
+          <div className="flex w-max min-w-full gap-1 rounded-xl bg-secondary p-1">
+            <button
+              onClick={() => setTab("stores")}
+              className={`whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "stores" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Stores
+            </button>
+            <button
+              onClick={() => setTab("orders")}
+              className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "orders" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Orders
+              {pendingCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {pendingCount > 9 ? "9+" : pendingCount}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setTab("messages")}
-              className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "messages" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "messages" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               Messages
               {unreadMessages > 0 && (
@@ -538,7 +576,7 @@ function MerchantPage() {
             </button>
             <button
               onClick={() => setTab("bookings")}
-              className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "bookings" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "bookings" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               Bookings
               {bookings.filter((b) => b.status === "pending").length > 0 && (
@@ -547,6 +585,13 @@ function MerchantPage() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setTab("posts")}
+              className={`whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "posts" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Posts
+            </button>
+          </div>
         </div>
 
         {/* Stores tab */}
@@ -588,17 +633,17 @@ function MerchantPage() {
                       {s.address && <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{s.address}{s.city ? `, ${s.city}` : ""}</div>}
                       {s.bank_name && <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3" />{s.bank_name} ····{(s.bank_account_number || "").slice(-4)}</div>}
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={() => togglePublish(s)}>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)}>
                         {s.published ? <><EyeOff className="h-3 w-3" /> Hide</> : <><Eye className="h-3 w-3" /> Publish</>}
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={() => setEditingStore(s)}>
+                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => setEditingStore(s)}>
                         <Pencil className="h-3 w-3" /> Edit
                       </Button>
-                      <Button size="sm" variant="outline" asChild>
+                      <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" asChild>
                         <Link to="/">View</Link>
                       </Button>
-                      <Button size="sm" variant="outline" className="text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setConfirmDeleteId(s.id)}>
+                      <Button size="sm" variant="outline" className="shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setConfirmDeleteId(s.id)}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -722,8 +767,6 @@ function MerchantPage() {
             )}
           </div>
         )}
-
-      </main>
 
         {/* Messages tab */}
         {tab === "messages" && (
@@ -1045,6 +1088,161 @@ function MerchantPage() {
             })()}
           </div>
         )}
+
+      {/* Posts tab */}
+        {tab === "posts" && (
+          <div className="mt-8 space-y-6">
+            {stores.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Rss className="h-6 w-6" />
+                </div>
+                <h2 className="mt-4 font-display text-2xl font-bold">No stores yet</h2>
+                <p className="mt-1 text-muted-foreground">Add a store first to start posting updates.</p>
+              </div>
+            ) : (
+              <>
+                {/* New post form */}
+                <div className="rounded-2xl border border-border bg-card p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">New update</p>
+                  <div className="space-y-3">
+                    {stores.length > 1 && (
+                      <div>
+                        <Label>Store</Label>
+                        <Select value={postDraftStoreId ?? stores[0].id} onValueChange={setPostDraftStoreId}>
+                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <Label>Update</Label>
+                      <Textarea
+                        className="mt-1"
+                        rows={3}
+                        maxLength={1000}
+                        placeholder="New stock just arrived! Fresh plantain, egusi, and crayfish in store today 🥭"
+                        value={postDraftBody}
+                        onChange={(e) => setPostDraftBody(e.target.value)}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground text-right">{postDraftBody.length}/1000</p>
+                    </div>
+                    <div>
+                      <Label>Photo (optional)</Label>
+                      {postDraftImage && (
+                        <div className="mt-1 relative w-40 h-28 rounded-lg overflow-hidden bg-secondary">
+                          <img src={getImageUrl(postDraftImage) || ""} alt="" className="h-full w-full object-cover" />
+                          <button onClick={() => setPostDraftImage("")} className="absolute top-1 right-1 rounded-full bg-background/80 p-0.5 text-xs hover:bg-background">✕</button>
+                        </div>
+                      )}
+                      <label className="mt-1 cursor-pointer block">
+                        <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${postDraftUploading ? " opacity-50" : ""}`}>
+                          {postDraftUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : <><ImageIcon className="mr-2 h-4 w-4" />Upload photo</>}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={postDraftUploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !user) return;
+                            setPostDraftUploading(true);
+                            try {
+                              const storeId = postDraftStoreId ?? stores[0].id;
+                              const ext = file.name.split(".").pop();
+                              const path = `${user.id}/${storeId}/post-${Date.now()}.${ext}`;
+                              const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: false });
+                              if (error) throw error;
+                              setPostDraftImage(path);
+                              toast.success("Photo uploaded");
+                            } catch (err: any) {
+                              toast.error(err.message ?? "Upload failed");
+                            } finally {
+                              setPostDraftUploading(false);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <Button
+                      disabled={!postDraftBody.trim() || postDraftSaving}
+                      className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                      onClick={async () => {
+                        if (!postDraftBody.trim()) return;
+                        setPostDraftSaving(true);
+                        const storeId = postDraftStoreId ?? stores[0].id;
+                        try {
+                          const { data, error } = await db.from("store_posts").insert({
+                            store_id: storeId,
+                            body: postDraftBody.trim(),
+                            image_url: postDraftImage || null,
+                          }).select("*").single();
+                          if (error) throw error;
+                          setPosts((prev) => [data as PostRow, ...prev]);
+                          setPostDraftBody("");
+                          setPostDraftImage("");
+                          toast.success("Update posted!");
+                        } catch (e: any) {
+                          toast.error(e.message ?? "Could not post update");
+                        } finally {
+                          setPostDraftSaving(false);
+                        }
+                      }}
+                    >
+                      {postDraftSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Posting…</> : "Post update"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Existing posts */}
+                {posts.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center">
+                    <Rss className="mx-auto h-8 w-8 text-muted-foreground/50 mb-3" />
+                    <p className="text-muted-foreground text-sm">No updates yet. Post your first update above.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {posts.map((post) => {
+                      const storeName = stores.find((s) => s.id === post.store_id)?.name ?? "—";
+                      return (
+                        <div key={post.id} className="rounded-xl border border-border bg-card p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <span className="text-xs font-semibold text-primary">{storeName}</span>
+                                <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{post.body}</p>
+                              {post.image_url && (
+                                <div className="mt-3 overflow-hidden rounded-lg max-h-60 bg-secondary">
+                                  <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              className="shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={async () => {
+                                const { error } = await db.from("store_posts").delete().eq("id", post.id);
+                                if (error) { toast.error(error.message); return; }
+                                setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                                toast.success("Post deleted");
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+      </main>
 
       {editingStore && (
         <EditStoreDialog

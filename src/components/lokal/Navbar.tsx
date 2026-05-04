@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store } from "lucide-react";
+import { MapPin, LogOut, Store, Heart } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ export function Navbar() {
   const navigate = useNavigate();
   const { city, loading } = useLocation();
   const [storeName, setStoreName] = useState<string | null>(null);
+  const [hasNewFollowingPosts, setHasNewFollowingPosts] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
@@ -32,6 +33,49 @@ export function Navbar() {
       });
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id || typeof window === "undefined") {
+      setHasNewFollowingPosts(false);
+      return;
+    }
+
+    const readAndCheck = async () => {
+      const lastSeenRaw = window.localStorage.getItem(`lokal:following:lastSeen:${user.id}`);
+      const lastSeenIso = lastSeenRaw && !Number.isNaN(Date.parse(lastSeenRaw)) ? new Date(lastSeenRaw).toISOString() : null;
+
+      const { data: follows } = await (supabase as any)
+        .from("store_follows")
+        .select("store_id")
+        .eq("user_id", user.id);
+
+      const storeIds = (follows ?? []).map((f: any) => f.store_id) as string[];
+      if (storeIds.length === 0) {
+        setHasNewFollowingPosts(false);
+        return;
+      }
+
+      let query = (supabase as any)
+        .from("store_posts")
+        .select("id, created_at")
+        .in("store_id", storeIds)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (lastSeenIso) query = query.gt("created_at", lastSeenIso);
+
+      const { data: latest } = await query;
+      setHasNewFollowingPosts((latest ?? []).length > 0);
+    };
+
+    void readAndCheck();
+  }, [user?.id]);
+
+  const markFollowingSeen = () => {
+    if (!user?.id || typeof window === "undefined") return;
+    window.localStorage.setItem(`lokal:following:lastSeen:${user.id}`, new Date().toISOString());
+    setHasNewFollowingPosts(false);
+  };
+
   const initials = (user?.user_metadata?.display_name || user?.email || "?")
     .split(" ").map((s: string) => s[0]).join("").slice(0, 2).toUpperCase();
 
@@ -47,6 +91,18 @@ export function Navbar() {
           <Link to="/" hash="stores" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Stores</Link>
           <a href="/#how" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">How it works</a>
           <Link to="/help" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Help</Link>
+          {user && (
+            <Link
+              to="/following"
+              onClick={markFollowingSeen}
+              className="relative text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Following
+              {hasNewFollowingPosts && (
+                <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-primary" aria-label="New following updates" />
+              )}
+            </Link>
+          )}
           {user && (
             <Link to="/merchant" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">My store</Link>
           )}
@@ -91,6 +147,11 @@ export function Navbar() {
                     <Store className="mr-2 h-4 w-4" /> List your store
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { markFollowingSeen(); navigate({ to: "/following" }); }}>
+                  <Heart className="mr-2 h-4 w-4" /> Following
+                  {hasNewFollowingPosts && <span className="ml-auto h-2.5 w-2.5 rounded-full bg-primary" />}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate({ to: "/help" })}>
                   <Store className="mr-2 h-4 w-4" /> Help Center

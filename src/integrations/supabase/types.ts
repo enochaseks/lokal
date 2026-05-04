@@ -96,6 +96,7 @@ export type Database = {
           hours: string | null
           id: string
           image_url: string | null
+          instagram_handle: string | null
           name: string
           origin: string | null
           owner_id: string
@@ -103,7 +104,9 @@ export type Database = {
           postcode: string | null
           published: boolean
           slug: string
+          tiktok_handle: string | null
           updated_at: string
+          website_url: string | null
         }
         Insert: {
           address?: string | null
@@ -118,6 +121,7 @@ export type Database = {
           hours?: string | null
           id?: string
           image_url?: string | null
+          instagram_handle?: string | null
           name: string
           origin?: string | null
           owner_id: string
@@ -125,7 +129,9 @@ export type Database = {
           postcode?: string | null
           published?: boolean
           slug: string
+          tiktok_handle?: string | null
           updated_at?: string
+          website_url?: string | null
         }
         Update: {
           address?: string | null
@@ -140,6 +146,7 @@ export type Database = {
           hours?: string | null
           id?: string
           image_url?: string | null
+          instagram_handle?: string | null
           name?: string
           origin?: string | null
           owner_id?: string
@@ -147,7 +154,9 @@ export type Database = {
           postcode?: string | null
           published?: boolean
           slug?: string
+          tiktok_handle?: string | null
           updated_at?: string
+          website_url?: string | null
         }
         Relationships: []
       }

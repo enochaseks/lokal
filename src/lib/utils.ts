@@ -33,3 +33,48 @@ export function normalizeImagePath(path: string | null | undefined): string | nu
   // Fallback for unrecognized URLs
   return null;
 }
+
+export function normalizeWebsiteUrl(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withProtocol);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSocialPath(value: string, domainPattern: RegExp) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  const normalizedSource = domainPattern.test(withoutProtocol) ? withoutProtocol.replace(domainPattern, "") : trimmed;
+  const handle = normalizedSource
+    .replace(/^@/, "")
+    .split(/[/?#]/)[0]
+    .trim();
+
+  return handle || null;
+}
+
+export function normalizeInstagramHandle(value: string | null | undefined): string | null {
+  return value ? normalizeSocialPath(value, /^instagram\.com\//i) : null;
+}
+
+export function normalizeTikTokHandle(value: string | null | undefined): string | null {
+  const handle = value ? normalizeSocialPath(value, /^tiktok\.com\//i) : null;
+  return handle?.replace(/^@/, "") ?? null;
+}
+
+export function buildInstagramUrl(handle: string | null | undefined): string | null {
+  const normalized = normalizeInstagramHandle(handle);
+  return normalized ? `https://www.instagram.com/${normalized}` : null;
+}
+
+export function buildTikTokUrl(handle: string | null | undefined): string | null {
+  const normalized = normalizeTikTokHandle(handle);
+  return normalized ? `https://www.tiktok.com/@${normalized}` : null;
+}

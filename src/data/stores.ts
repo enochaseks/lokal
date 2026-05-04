@@ -48,11 +48,15 @@ export type Store = {
   distance: string;
   address: string;
   city?: string;
+  postcode?: string;
   hours: string;
   phone: string;
   image: string;
   description: string;
   fulfillment: "collection" | "delivery" | "both";
+  instagramHandle?: string;
+  tiktokHandle?: string;
+  websiteUrl?: string;
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
 };

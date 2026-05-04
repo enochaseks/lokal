@@ -13,7 +13,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
-import { getImageUrl } from "@/lib/utils";
+import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
@@ -71,6 +71,9 @@ const storeSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   fulfillment: z.enum(["collection", "delivery", "both"]).default("collection"),
   image_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid URL").optional().or(z.literal("")),
+  instagram_handle: z.string().trim().max(80).optional(),
+  tiktok_handle: z.string().trim().max(80).optional(),
+  website_url: z.string().trim().max(200).refine((value) => !value || !!normalizeWebsiteUrl(value), "Must be a valid website").optional(),
 });
 
 const bankSchema = z.object({
@@ -98,6 +101,7 @@ function ListStorePage() {
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
     description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both", image_url: "",
+    instagram_handle: "", tiktok_handle: "", website_url: "",
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
   const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
@@ -158,6 +162,9 @@ function ListStorePage() {
         owner_id: user.id,
         slug,
         image_url: store.image_url || null,
+        instagram_handle: normalizeInstagramHandle(store.instagram_handle),
+        tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
+        website_url: normalizeWebsiteUrl(store.website_url),
         published: true,
       };
 
@@ -326,6 +333,22 @@ function ListStorePage() {
               <div>
                 <Label>Opening hours</Label>
                 <Input value={store.hours} onChange={(e) => setStore({ ...store, hours: e.target.value })} placeholder="Mon–Sat · 9am – 8pm" maxLength={80} className="mt-1" />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Social links</Label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Input value={store.instagram_handle} onChange={(e) => setStore({ ...store, instagram_handle: e.target.value })} placeholder="Instagram handle or profile URL" maxLength={80} className="mt-1" />
+                  </div>
+                  <div>
+                    <Input value={store.tiktok_handle} onChange={(e) => setStore({ ...store, tiktok_handle: e.target.value })} placeholder="TikTok handle or profile URL" maxLength={80} className="mt-1" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input value={store.website_url} onChange={(e) => setStore({ ...store, website_url: e.target.value })} placeholder="Website URL" maxLength={200} className="mt-1" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">These appear as secondary links in your store profile, below Lokal's order, booking, and message actions.</p>
               </div>
 
               <Button size="lg" className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => { if (validateStep1()) setStep(2); }}>

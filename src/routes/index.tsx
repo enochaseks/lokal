@@ -39,6 +39,35 @@ function Index() {
   const [showCityInput, setShowCityInput] = useState(false);
   const [cityInputValue, setCityInputValue] = useState("");
 
+  // Following feed
+  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
+  const [followedPosts, setFollowedPosts] = useState<PostRow[]>([]);
+  const [followedStoreIds, setFollowedStoreIds] = useState<string[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(false);
+  const [showFeed, setShowFeed] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const uid = session.user.id;
+      const { data: follows } = await (supabase as any).from("store_follows").select("store_id").eq("user_id", uid);
+      const ids: string[] = (follows ?? []).map((f: any) => f.store_id);
+      setFollowedStoreIds(ids);
+      if (ids.length === 0) return;
+      setLoadingFeed(true);
+      const { data: posts } = await (supabase as any)
+        .from("store_posts")
+        .select("id, store_id, body, image_url, created_at")
+        .in("store_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      setFollowedPosts((posts ?? []) as PostRow[]);
+      setLoadingFeed(false);
+      if ((posts ?? []).length > 0 || ids.length > 0) setShowFeed(true);
+    })();
+  }, []);
+
   useEffect(() => {
     if (city && !cityManuallySet) {
       setLocationFilter(city);
@@ -50,7 +79,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,hours,phone,image_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
+        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -66,12 +95,16 @@ function Index() {
         reviews: 0,
         distance: "—",
         city: r.city || undefined,
+        postcode: r.postcode || undefined,
         address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
         hours: r.hours || "Hours on request",
         phone: r.phone || "—",
         fulfillment: (r.fulfillment as "collection" | "delivery" | "both") || "collection",
         image: getImageUrl(r.image_url) || storePlaceholder,
         description: r.description || "A new Lokal merchant.",
+        instagramHandle: r.instagram_handle || undefined,
+        tiktokHandle: r.tiktok_handle || undefined,
+        websiteUrl: r.website_url || undefined,
         bank: {
           name: r.bank_name || "—",
           accountName: r.bank_account_name || "—",
@@ -252,6 +285,61 @@ function Index() {
                 ))}
           </div>
         </section>
+
+        {/* Following feed — only visible when the user follows ≥1 store */}
+        {showFeed && (
+          <section className="container mx-auto px-4 py-12">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="text-2xl">❤️</span>
+              <div>
+                <h2 className="font-display text-2xl font-bold">Followed on Lokal</h2>
+                <p className="text-sm text-muted-foreground">Latest updates from stores you follow</p>
+              </div>
+            </div>
+
+            {loadingFeed ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-border bg-card p-4">
+                    <div className="h-4 w-1/4 rounded bg-secondary animate-pulse mb-2" />
+                    <div className="h-16 w-full rounded bg-secondary animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : followedPosts.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-border bg-card p-10 text-center">
+                <p className="text-sm text-muted-foreground">The stores you follow haven't posted any updates yet. Check back soon.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {followedPosts.map((post) => {
+                  const storeName = liveStores.find((s) => s.id === post.store_id)?.name ?? "Store";
+                  const storeObj = liveStores.find((s) => s.id === post.store_id);
+                  return (
+                    <div
+                      key={post.id}
+                      className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-card hover:border-primary/30 transition-colors"
+                      onClick={() => { if (storeObj) { setSelected(storeObj); setOpen(true); } }}
+                    >
+                      {post.image_url && (
+                        <div className="aspect-[5/3] overflow-hidden bg-secondary">
+                          <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-primary">{storeName}</span>
+                          <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                        </div>
+                        <p className="text-sm line-clamp-4 whitespace-pre-wrap">{post.body}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         <HowItWorks />
       </main>
