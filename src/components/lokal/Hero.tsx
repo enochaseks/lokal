@@ -1,5 +1,4 @@
 import { useState } from "react";
-import heroImg from "@/assets/hero-market.jpg";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MapPin, Search } from "lucide-react";
@@ -15,7 +14,7 @@ export function Hero({ onSearch }: HeroProps) {
 
   return (
     <section className="relative overflow-hidden bg-gradient-hero">
-      <div className="container relative mx-auto grid gap-12 px-4 py-16 md:grid-cols-2 md:py-24 lg:py-32">
+      <div className="container relative mx-auto px-4 py-16 md:py-24 lg:py-32">
         <div className="flex flex-col justify-center">
           <span className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-background/70 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-primary backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
@@ -65,18 +64,6 @@ export function Hero({ onSearch }: HeroProps) {
             <div><strong className="text-foreground">Bank transfer</strong> — no card fees</div>
             <div><strong className="text-foreground">Free</strong> to list your store</div>
           </div>
-        </div>
-
-        <div className="relative">
-          <div className="absolute -inset-6 rounded-[2.5rem] bg-gradient-primary opacity-30 blur-3xl" aria-hidden />
-          <img
-            src={heroImg}
-            alt="Vibrant African and Caribbean market with fresh produce and woven baskets"
-            width={1536}
-            height={1024}
-            className="relative aspect-[4/5] w-full rounded-[2rem] object-cover shadow-warm md:aspect-[5/6]"
-          />
-
         </div>
       </div>
     </section>
