@@ -50,15 +50,14 @@ export const Route = createFileRoute("/store/$id")({
     };
   },
   beforeLoad: async (props) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("stores")
       .select("*")
       .eq("id", props.params.id)
-      .eq("published", true)
       .single();
 
-    if (!data) {
-      throw new Error("Store not found");
+    if (error || !data) {
+      throw new Error("Store not found or no longer available");
     }
     return data;
   },
