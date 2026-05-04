@@ -41,6 +41,23 @@ function AuthPage() {
   const [emailSent, setEmailSent] = useState(false);
   const authSiteOrigin = getAuthSiteOrigin();
 
+  const getFriendlyAuthError = (message: string, mode: "signin" | "signup") => {
+    const normalized = message.toLowerCase();
+    if (mode === "signin") {
+      if (normalized.includes("invalid login credentials") || normalized.includes("invalid_credentials")) {
+        return "Incorrect email or password. Please try again.";
+      }
+      if (normalized.includes("email not confirmed")) {
+        return "Please confirm your email before signing in.";
+      }
+      if (normalized.includes("too many requests")) {
+        return "Too many sign-in attempts. Please wait a moment and try again.";
+      }
+      return "Could not sign in. Please check your details and try again.";
+    }
+    return message || "Could not create account. Please try again.";
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -93,7 +110,7 @@ function AuthPage() {
         navigate({ to: redirect === "/" ? "/merchant" : redirect });
       }
     } catch (err: any) {
-      toast.error(err.message ?? "Something went wrong");
+      toast.error(getFriendlyAuthError(String(err?.message ?? ""), tab));
     } finally {
       setBusy(false);
     }
