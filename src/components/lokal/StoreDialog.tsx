@@ -65,9 +65,22 @@ type AvailabilityRow = {
   start_time: string;
   end_time: string;
   slot_duration_mins: number;
+  max_bookings_per_slot: number;
+};
+
+type StaffRow = {
+  id: string;
+  store_id: string;
+  name: string;
+  phone: string | null;
+  active: boolean;
+  position: number;
+  daily_capacity?: number | null;
+  available_days?: number[] | null;
 };
 
 const BOOKING_CATEGORIES: string[] = [...BOOKABLE_CATEGORIES];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
   const slots: string[] = [];
@@ -127,6 +140,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   // Booking state (Barbers / Beauty)
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookService, setBookService] = useState("");
+  const [bookStaffId, setBookStaffId] = useState("");
   const [bookDate, setBookDate] = useState("");
   const [bookTime, setBookTime] = useState("");
   const [bookName, setBookName] = useState("");
@@ -134,9 +148,15 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [bookPhoneCountry, setBookPhoneCountry] = useState<CountryCode>("GB");
   const [bookNote, setBookNote] = useState("");
   const [bookAvailability, setBookAvailability] = useState<AvailabilityRow[]>([]);
-  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [bookStaff, setBookStaff] = useState<StaffRow[]>([]);
+  const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
+
+  // Staff ratings (display only — customers rate via email link after appointment)
+  const [staffRatings, setStaffRatings] = useState<Record<string, { avg: number; count: number }>>({});
+  const [staffBookingCounts, setStaffBookingCounts] = useState<Record<string, number>>({});
+  const [bookEmail, setBookEmail] = useState("");
 
   useEffect(() => {
     if (!open || !store) return;
@@ -206,25 +226,82 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       .then(({ data }: { data: AvailabilityRow[] | null }) => {
         setBookAvailability(data ?? []);
       });
+
+    (supabase as any)
+      .from("store_staff")
+      .select("*")
+      .eq("store_id", store.id)
+      .eq("active", true)
+      .order("position", { ascending: true })
+      .then(({ data }: { data: StaffRow[] | null }) => {
+        setBookStaff(data ?? []);
+      });
+
+    // Load staff ratings for this store
+    (supabase as any)
+      .from("staff_reviews")
+      .select("staff_id, rating")
+      .eq("store_id", store.id)
+      .then(({ data }: { data: Array<{ staff_id: string; rating: number }> | null }) => {
+        const sums: Record<string, { total: number; count: number }> = {};
+        (data ?? []).forEach((r) => {
+          if (!sums[r.staff_id]) sums[r.staff_id] = { total: 0, count: 0 };
+          sums[r.staff_id].total += r.rating;
+          sums[r.staff_id].count += 1;
+        });
+        const map: Record<string, { avg: number; count: number }> = {};
+        Object.keys(sums).forEach((k) => { map[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count }; });
+        setStaffRatings(map);
+      });
   }, [open, store?.id]);
 
   // Load taken slots when date is selected
   useEffect(() => {
-    if (!bookDate || !store) return;
+    if (!bookDate || !store) {
+      setSlotCounts({});
+      setStaffBookingCounts({});
+      setBookTime("");
+      return;
+    }
     setLoadingSlots(true);
     (supabase as any)
       .from("store_bookings")
-      .select("slot_start")
+      .select("slot_start, staff_id")
       .eq("store_id", store.id)
       .neq("status", "cancelled")
       .gte("slot_start", `${bookDate}T00:00:00`)
       .lte("slot_start", `${bookDate}T23:59:59`)
-      .then(({ data }: { data: Array<{ slot_start: string }> | null }) => {
-        setTakenSlots((data ?? []).map((r) => r.slot_start.slice(11, 16)));
+      .then(({ data }: { data: Array<{ slot_start: string; staff_id: string | null }> | null }) => {
+        const counts: Record<string, number> = {};
+        (data ?? []).forEach((r) => {
+          const time = r.slot_start.slice(11, 16);
+          counts[time] = (counts[time] ?? 0) + 1;
+        });
+        setSlotCounts(counts);
+        const sCounts: Record<string, number> = {};
+        (data ?? []).forEach((r) => { if (r.staff_id) sCounts[r.staff_id] = (sCounts[r.staff_id] ?? 0) + 1; });
+        setStaffBookingCounts(sCounts);
         setBookTime("");
+        setLoadingSlots(false);
+      })
+      .catch(() => {
+        setSlotCounts({});
+        setStaffBookingCounts({});
         setLoadingSlots(false);
       });
   }, [bookDate, store?.id]);
+
+  useEffect(() => {
+    if (!bookStaffId) return;
+    if (!bookDate) return;
+    const [yr, mo, dy] = bookDate.split("-").map(Number);
+    const day = new Date(yr, mo - 1, dy).getDay();
+    const selected = bookStaff.find((m) => m.id === bookStaffId);
+    if (!selected) return;
+    if (!Array.isArray(selected.available_days) || selected.available_days.length === 0) return;
+    if (selected.available_days.includes(day)) return;
+    setBookStaffId("");
+  }, [bookStaffId, bookDate, bookStaff]);
 
   if (!store) return null;
 
@@ -238,6 +315,18 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const items = store.products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 }));
   const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const hasItems = total > 0;
+  const selectedBookingDay = bookDate
+    ? (() => {
+        const [yr, mo, dy] = bookDate.split("-").map(Number);
+        return new Date(yr, mo - 1, dy).getDay();
+      })()
+    : null;
+  const availableBookStaff = selectedBookingDay == null
+    ? bookStaff
+    : bookStaff.filter((member) => {
+        if (!Array.isArray(member.available_days) || member.available_days.length === 0) return true;
+        return member.available_days.includes(selectedBookingDay);
+      });
 
   const reset = () => {
     setStep("browse");
@@ -253,8 +342,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setShowReviewForm(false);
     setReviewRating(0); setReviewName(""); setReviewBody("");
     setShowBookingForm(false);
-    setBookService(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote("");
-    setBookAvailability([]); setTakenSlots([]);
+    setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
+    setBookAvailability([]); setBookStaff([]); setSlotCounts({}); setStaffBookingCounts({});
+    setStaffRatings({});
     setStorePosts([]);
     setPostsTab("info");
     setFollowerId(null); setIsFollowing(false); setFollowCount(0);
@@ -271,7 +361,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
     setSaving(true);
     try {
-      const { error } = await supabase.from("orders").insert({
+      const { error } = await (supabase as any).from("orders").insert({
         store_id: store.id,
         reference,
         customer_name: name.trim(),
@@ -422,6 +512,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   };
 
   const handleBook = async () => {
+    const selectedStaff = bookStaff.find((s) => s.id === bookStaffId) ?? null;
+    if (selectedStaff && selectedBookingDay != null && Array.isArray(selectedStaff.available_days) && selectedStaff.available_days.length > 0 && !selectedStaff.available_days.includes(selectedBookingDay)) {
+      toast.error("Selected team member is unavailable on this day");
+      return;
+    }
     const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
     if (!normalizedBookPhone) {
       toast.error("Enter phone in international format", { description: "Choose a country and enter your local mobile number." });
@@ -429,6 +524,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     }
     if (!bookDate || !bookTime || !bookName.trim()) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+    if (bookStaff.length > 0 && !selectedStaff) {
+      toast.error("Please choose a team member");
       return;
     }
     const [y, mo, d] = bookDate.split("-").map(Number);
@@ -443,7 +542,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         store_id: store!.id,
         customer_name: bookName.trim(),
         customer_phone: normalizedBookPhone,
+        customer_email: bookEmail.trim() || null,
         service: bookService || null,
+        staff_id: selectedStaff?.id ?? null,
+        staff_name: selectedStaff?.name ?? null,
+        staff_phone: selectedStaff?.phone ?? null,
         slot_start: `${bookDate}T${bookTime}:00`,
         slot_end: slotEnd,
         status: "pending",
@@ -459,6 +562,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           customer_name: bookName.trim(),
           customer_phone: normalizedBookPhone,
           service: bookService || null,
+          staff_name: selectedStaff?.name ?? null,
+          staff_phone: selectedStaff?.phone ?? null,
           slot_start: `${bookDate}T${bookTime}:00`,
           note: bookNote.trim() || null,
         },
@@ -470,8 +575,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         duration: 8000,
       });
       setShowBookingForm(false);
-      setBookService(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote("");
-      setTakenSlots((prev) => [...prev, bookTime]);
+      setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
+      setSlotCounts((prev) => ({ ...prev, [bookTime]: (prev[bookTime] ?? 0) + 1 }));
+      if (selectedStaff?.id) {
+        setStaffBookingCounts((prev) => ({ ...prev, [selectedStaff.id]: (prev[selectedStaff.id] ?? 0) + 1 }));
+      }
     } catch (e: any) {
       toast.error(e.message ?? "Could not request booking");
     } finally {
@@ -634,6 +742,30 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                             </Select>
                           </div>
                         )}
+                        {bookStaff.length > 0 && (
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Team member *</label>
+                            <Select value={bookStaffId} onValueChange={setBookStaffId}>
+                              <SelectTrigger className="mt-1"><SelectValue placeholder="Choose who you want to book with" /></SelectTrigger>
+                              <SelectContent>
+                                {availableBookStaff.map((member) => {
+                                  const atCapacity = !!bookDate && member.daily_capacity != null && (staffBookingCounts[member.id] ?? 0) >= member.daily_capacity;
+                                  const dayLabel = Array.isArray(member.available_days) && member.available_days.length > 0
+                                    ? member.available_days.slice().sort((a, b) => a - b).map((d) => DAY_LABELS[d]).join(",")
+                                    : "All days";
+                                  return (
+                                    <SelectItem key={member.id} value={member.id} disabled={atCapacity}>
+                                      {member.name}{staffRatings[member.id] ? ` · ★ ${staffRatings[member.id].avg.toFixed(1)} (${staffRatings[member.id].count})` : ""}{` · ${dayLabel}`}{atCapacity ? " · Full on selected day" : ""}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                            {bookDate && availableBookStaff.length === 0 && (
+                              <p className="mt-1 text-xs text-amber-600">No team members are available on this day. Pick another date.</p>
+                            )}
+                          </div>
+                        )}
                         <div>
                           <label className="text-xs font-medium text-muted-foreground">Date *</label>
                           <Input
@@ -655,7 +787,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                             className="mt-1"
                           />
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Available: {bookAvailability.sort((a, b) => a.day_of_week - b.day_of_week).map((a) => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][a.day_of_week]).join(", ")}
+                            Booking days: {[...bookAvailability]
+                              .sort((a, b) => a.day_of_week - b.day_of_week)
+                              .map((a) => `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`)
+                              .join(", ")}
                           </p>
                         </div>
                         {bookDate && (
@@ -668,7 +803,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                               const avail = bookAvailability.find((a) => a.day_of_week === new Date(yr, mo - 1, dy).getDay());
                               if (!avail) return null;
                               const allSlots = generateTimeSlots(avail.start_time.slice(0, 5), avail.end_time.slice(0, 5), avail.slot_duration_mins);
-                              const freeSlots = allSlots.filter((s) => !takenSlots.includes(s));
+                              const freeSlots = allSlots.filter((s) => (slotCounts[s] ?? 0) < (avail.max_bookings_per_slot ?? 1));
                               if (freeSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No slots left on this day — try another date.</p>;
                               return (
                                 <Select value={bookTime} onValueChange={setBookTime}>
@@ -700,12 +835,21 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                           </div>
                         </div>
                         <div>
+                          <label className="text-xs font-medium text-muted-foreground">Email (optional — for rating reminder)</label>
+                          <Input value={bookEmail} onChange={(e) => setBookEmail(e.target.value)} placeholder="you@example.com" type="email" className="mt-1" />
+                        </div>
+                        <div>
                           <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
                           <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} placeholder="Any special requests?" rows={2} className="mt-1" />
                         </div>
+                        {store.deposit_amount && (
+                          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                            💳 A deposit of <strong>£{Number(store.deposit_amount).toFixed(2)}</strong> is required. The merchant will contact you with payment details.
+                          </div>
+                        )}
                         <Button
                           size="sm"
-                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking}
+                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0)))}
                           onClick={handleBook}
                           className="bg-gradient-primary text-primary-foreground"
                         >
@@ -886,7 +1030,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     {socialLinks.map((link) => (
                       <a
                         key={link.label}
-                        href={link.href}
+                        href={link.href ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"

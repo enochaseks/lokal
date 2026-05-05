@@ -79,7 +79,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)")
+        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,store_products(name,price,unit,position)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -114,6 +114,7 @@ function Index() {
         products: (r.store_products ?? [])
           .sort((a: any, b: any) => a.position - b.position)
           .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined })),
+        deposit_amount: r.deposit_amount ?? undefined,
       }];
       });
       setLiveStores(mapped);

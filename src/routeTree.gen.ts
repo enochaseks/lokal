@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as RateRouteImport } from './routes/rate'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as MerchantRouteImport } from './routes/merchant'
@@ -24,6 +25,11 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RateRoute = RateRouteImport.update({
+  id: '/rate',
+  path: '/rate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
+  '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/store/$id': typeof StoreIdRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
+  '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/store/$id': typeof StoreIdRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/merchant': typeof MerchantRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
+  '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/store/$id': typeof StoreIdRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/order'
     | '/privacy'
+    | '/rate'
     | '/terms'
     | '/auth/callback'
     | '/store/$id'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/order'
     | '/privacy'
+    | '/rate'
     | '/terms'
     | '/auth/callback'
     | '/store/$id'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/merchant'
     | '/order'
     | '/privacy'
+    | '/rate'
     | '/terms'
     | '/auth/callback'
     | '/store/$id'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   MerchantRoute: typeof MerchantRoute
   OrderRoute: typeof OrderRoute
   PrivacyRoute: typeof PrivacyRoute
+  RateRoute: typeof RateRoute
   TermsRoute: typeof TermsRoute
   StoreIdRoute: typeof StoreIdRoute
 }
@@ -179,6 +192,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rate': {
+      id: '/rate'
+      path: '/rate'
+      fullPath: '/rate'
+      preLoaderRoute: typeof RateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -273,6 +293,7 @@ const rootRouteChildren: RootRouteChildren = {
   MerchantRoute: MerchantRoute,
   OrderRoute: OrderRoute,
   PrivacyRoute: PrivacyRoute,
+  RateRoute: RateRoute,
   TermsRoute: TermsRoute,
   StoreIdRoute: StoreIdRoute,
 }

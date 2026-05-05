@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2 } from "lucide-react";
+import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star } from "lucide-react";
 import whatsappLogo from "@/assets/WhatsApp_icon.png";
 import facebookLogo from "@/assets/Facebook_Logo_2023.png";
 import xLogo from "@/assets/X_icon.svg.png";
@@ -30,6 +30,16 @@ type AvailabilityRow = {
   max_bookings_per_slot: number;
 };
 
+type StaffRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  active: boolean;
+  position: number;
+  daily_capacity?: number | null;
+  available_days?: number[] | null;
+};
+
 type StoreDetails = {
   id: string;
   name: string;
@@ -49,6 +59,9 @@ type StoreDetails = {
   published: boolean;
   store_products: ProductRow[] | null;
   store_availability: AvailabilityRow[] | null;
+  store_staff: StaffRow[] | null;
+  staff_reviews: Array<{ staff_id: string; rating: number }> | null;
+  deposit_amount?: number | null;
 };
 
 const isBookable = (category: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(category);
@@ -73,6 +86,8 @@ function generateTimeSlots(startTime: string, endTime: string, durationMins: num
   }
   return slots;
 }
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export const Route = createFileRoute("/store/$id")({
   component: StoreDetail,
@@ -99,7 +114,7 @@ export const Route = createFileRoute("/store/$id")({
   loader: async ({ params }) => {
     const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot)")
+      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
       .eq("id", params.id)
       .limit(1);
 
@@ -111,7 +126,12 @@ export const Route = createFileRoute("/store/$id")({
       throw new Error("Store not found");
     }
 
-    return data[0] as unknown as StoreDetails;
+    const { data: rd } = await (supabase as any)
+      .from("staff_reviews")
+      .select("staff_id, rating")
+      .eq("store_id", params.id);
+
+    return { ...data[0], staff_reviews: rd ?? [] } as unknown as StoreDetails;
   },
   errorComponent: ({ error }) => (
     <div className="min-h-screen flex flex-col bg-background">
@@ -141,6 +161,7 @@ function StoreDetail() {
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const [bookService, setBookService] = useState("");
+  const [bookStaffId, setBookStaffId] = useState("");
   const [bookDate, setBookDate] = useState("");
   const [bookTime, setBookTime] = useState("");
   const [bookName, setBookName] = useState("");
@@ -150,6 +171,10 @@ function StoreDetail() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
+  // Email for post-appointment rating link
+  const [bookEmail, setBookEmail] = useState("");
+  const [staffBookingCounts, setStaffBookingCounts] = useState<Record<string, number>>({});
+
   const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
   const shareUrl = `${domain}/store/${store.id}`;
   const shareText = `Check out ${store.name} on Lokal!`;
@@ -158,6 +183,22 @@ function StoreDetail() {
   const tiktokHref = buildTikTokUrl(store.tiktok_handle);
   const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
   const availableDays = [...(store.store_availability ?? [])].sort((a, b) => a.day_of_week - b.day_of_week);
+  const staffMembers = [...(store.store_staff ?? [])]
+    .filter((m) => m.active)
+    .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  const selectedStaff = staffMembers.find((m) => m.id === bookStaffId) ?? null;
+
+  const staffRatingMap = (() => {
+    const sums: Record<string, { total: number; count: number }> = {};
+    (store.staff_reviews ?? []).forEach((r) => {
+      if (!sums[r.staff_id]) sums[r.staff_id] = { total: 0, count: 0 };
+      sums[r.staff_id].total += r.rating;
+      sums[r.staff_id].count += 1;
+    });
+    const map: Record<string, { avg: number; count: number }> = {};
+    Object.keys(sums).forEach((k) => { map[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count }; });
+    return map;
+  })();
 
   const cartItems = products
     .map((p) => ({ ...p, qty: qty[p.name] ?? 0 }))
@@ -170,6 +211,13 @@ function StoreDetail() {
     const day = new Date(y, m - 1, d).getDay();
     return availableDays.find((a) => a.day_of_week === day) ?? null;
   })();
+  const selectedDayOfWeek = selectedDayAvailability?.day_of_week ?? null;
+  const availableStaffMembers = selectedDayOfWeek == null
+    ? staffMembers
+    : staffMembers.filter((m) => {
+        if (!Array.isArray(m.available_days) || m.available_days.length === 0) return true;
+        return m.available_days.includes(selectedDayOfWeek);
+      });
 
   const freeSlots = selectedDayAvailability
     ? generateTimeSlots(
@@ -189,26 +237,36 @@ function StoreDetail() {
     setLoadingSlots(true);
     (supabase as any)
       .from("store_bookings")
-      .select("slot_start")
+      .select("slot_start, staff_id")
       .eq("store_id", store.id)
       .neq("status", "cancelled")
       .gte("slot_start", `${bookDate}T00:00:00`)
       .lte("slot_start", `${bookDate}T23:59:59`)
-      .then(({ data }: { data: Array<{ slot_start: string }> | null }) => {
+      .then(({ data }: { data: Array<{ slot_start: string; staff_id: string | null }> | null }) => {
         const counts: Record<string, number> = {};
+        const sCounts: Record<string, number> = {};
         (data ?? []).forEach((r) => {
           const time = r.slot_start.slice(11, 16);
           counts[time] = (counts[time] ?? 0) + 1;
+          if (r.staff_id) sCounts[r.staff_id] = (sCounts[r.staff_id] ?? 0) + 1;
         });
         setSlotCounts(counts);
+        setStaffBookingCounts(sCounts);
         setBookTime("");
         setLoadingSlots(false);
       })
       .catch(() => {
         setSlotCounts({});
+        setStaffBookingCounts({});
         setLoadingSlots(false);
       });
   }, [bookDate, store.id]);
+
+  useEffect(() => {
+    if (!bookStaffId) return;
+    if (availableStaffMembers.some((m) => m.id === bookStaffId)) return;
+    setBookStaffId("");
+  }, [bookStaffId, availableStaffMembers]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -295,6 +353,20 @@ function StoreDetail() {
       toast.error("No availability on this day");
       return;
     }
+    if (staffMembers.length > 0 && !selectedStaff) {
+      toast.error("Please choose a team member");
+      return;
+    }
+    if (
+      selectedStaff &&
+      selectedDayOfWeek != null &&
+      Array.isArray(selectedStaff.available_days) &&
+      selectedStaff.available_days.length > 0 &&
+      !selectedStaff.available_days.includes(selectedDayOfWeek)
+    ) {
+      toast.error("Selected team member is unavailable on this day");
+      return;
+    }
 
     const duration = selectedDayAvailability.slot_duration_mins;
     const [th, tm] = bookTime.split(":").map(Number);
@@ -307,7 +379,11 @@ function StoreDetail() {
         store_id: store.id,
         customer_name: bookName.trim(),
         customer_phone: bookPhone.trim(),
+        customer_email: bookEmail.trim() || null,
         service: bookService || null,
+        staff_id: selectedStaff?.id ?? null,
+        staff_name: selectedStaff?.name ?? null,
+        staff_phone: selectedStaff?.phone ?? null,
         slot_start: `${bookDate}T${bookTime}:00`,
         slot_end: slotEnd,
         status: "pending",
@@ -321,11 +397,13 @@ function StoreDetail() {
       });
 
       setBookService("");
+      setBookStaffId("");
       setBookDate("");
       setBookTime("");
       setBookName("");
       setBookPhone("");
       setBookNote("");
+      setBookEmail("");
     } catch (e: any) {
       toast.error(e.message ?? "Could not request booking");
     } finally {
@@ -430,6 +508,33 @@ function StoreDetail() {
                         placeholder="Haircut, line-up, braids..."
                       />
                     </div>
+                    {staffMembers.length > 0 && (
+                      <div className="sm:col-span-2">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Team member *</p>
+                        <select
+                          value={bookStaffId}
+                          onChange={(e) => setBookStaffId(e.target.value)}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Choose who you want to book with</option>
+                          {availableStaffMembers.map((m) => {
+                            const r = staffRatingMap[m.id];
+                            const atCapacity = !!bookDate && m.daily_capacity != null && (staffBookingCounts[m.id] ?? 0) >= m.daily_capacity;
+                            const dayLabel = Array.isArray(m.available_days) && m.available_days.length > 0
+                              ? m.available_days.slice().sort((a, b) => a - b).map((d) => DAY_LABELS[d]).join(",")
+                              : "All days";
+                            return (
+                              <option key={m.id} value={m.id} disabled={atCapacity}>
+                                {m.name}{r ? ` · ★ ${r.avg.toFixed(1)} (${r.count} review${r.count !== 1 ? "s" : ""})` : ""}{` · ${dayLabel}`}{atCapacity ? " · Full on selected day" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {bookDate && availableStaffMembers.length === 0 && (
+                          <p className="mt-1 text-xs text-amber-600">No team members are available on this day. Pick another date.</p>
+                        )}
+                      </div>
+                    )}
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Date *</p>
                       <Input
@@ -452,6 +557,11 @@ function StoreDetail() {
                           setBookDate(val);
                         }}
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Booking days: {availableDays
+                          .map((a) => `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`)
+                          .join(", ")}
+                      </p>
                     </div>
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Time *</p>
@@ -482,13 +592,22 @@ function StoreDetail() {
                       <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="+44..." />
                     </div>
                     <div className="sm:col-span-2">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Email (optional — for rating reminder)</p>
+                      <Input value={bookEmail} onChange={(e) => setBookEmail(e.target.value)} placeholder="you@example.com" type="email" />
+                    </div>
+                    <div className="sm:col-span-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Note (optional)</p>
                       <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} rows={2} placeholder="Anything the merchant should know?" />
                     </div>
+                    {store.deposit_amount && (
+                      <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                        💳 A deposit of <strong>£{Number(store.deposit_amount).toFixed(2)}</strong> is required to confirm this appointment. The merchant will contact you with payment details.
+                      </div>
+                    )}
                     <div className="sm:col-span-2">
                       <Button
                         onClick={handleBook}
-                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim()}
+                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0)))}
                         className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                       >
                         {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}
@@ -496,6 +615,7 @@ function StoreDetail() {
                     </div>
                   </div>
                 )}
+
               </div>
             ) : (
               <div className="space-y-4">

@@ -59,6 +59,7 @@ export type Store = {
   websiteUrl?: string;
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
+  deposit_amount?: number | null;
 };
 
 export const stores: Store[] = [

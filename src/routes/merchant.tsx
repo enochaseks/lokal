@@ -54,6 +54,7 @@ type StoreRow = {
   image_url: string | null; published: boolean; fulfillment: string;
   bank_name: string | null; bank_account_name: string | null;
   bank_account_number: string | null; bank_sort_code: string | null;
+  deposit_amount?: number | null;
 };
 
 type OrderRow = {
@@ -75,9 +76,31 @@ type AvailabilityRow = {
 type BookingRow = {
   id: string; store_id: string; customer_name: string; customer_phone: string;
   customer_email: string | null; service: string | null;
+  staff_id: string | null; staff_name: string | null; staff_phone: string | null;
   slot_start: string; slot_end: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
+  payment_status: string;
   note: string | null; created_at: string;
+};
+
+type StaffRow = {
+  id: string;
+  store_id: string;
+  name: string;
+  phone: string | null;
+  active: boolean;
+  position: number;
+  daily_capacity?: number | null;
+  available_days?: number[] | null;
+};
+
+type StaffDraft = {
+  id?: string;
+  name: string;
+  phone: string;
+  active: boolean;
+  daily_capacity: string;
+  available_days: number[];
 };
 
 type PostRow = {
@@ -87,6 +110,16 @@ type PostRow = {
 type DayDraft = {
   day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number;
 };
+
+const STAFF_DAY_OPTIONS: Array<{ day: number; label: string }> = [
+  { day: 0, label: "Sun" },
+  { day: 1, label: "Mon" },
+  { day: 2, label: "Tue" },
+  { day: 3, label: "Wed" },
+  { day: 4, label: "Thu" },
+  { day: 5, label: "Fri" },
+  { day: 6, label: "Sat" },
+];
 
 function toWhatsAppNumber(input: string) {
   const trimmed = input.trim();
@@ -117,7 +150,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; deposit_amount: string }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
@@ -125,6 +158,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     hours: store.hours ?? "", phone: store.phone ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
+    deposit_amount: store.deposit_amount != null ? String(store.deposit_amount) : "",
   });
   const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -189,6 +223,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
         bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
+        deposit_amount: form.deposit_amount.trim() ? Number(form.deposit_amount) : null,
       }).eq("id", store.id);
       if (storeErr) throw storeErr;
 
@@ -212,7 +247,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code) });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), deposit_amount: form.deposit_amount.trim() ? Number(form.deposit_amount) : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -314,6 +349,24 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           </div>
           {isBookable(form.category) && (
             <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking settings</p>
+              <div>
+                <Label>Deposit amount (£)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.deposit_amount}
+                  onChange={(e) => setForm((f) => ({ ...f, deposit_amount: e.target.value }))}
+                  placeholder="Leave blank if no deposit required"
+                  className="mt-1 font-mono"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Customers will be shown this amount as a required deposit when booking.</p>
+              </div>
+            </div>
+          )}
+          {isBookable(form.category) && (
+            <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
               <div className="space-y-2">
                 {editAvail.map((d, i) => (
@@ -383,8 +436,12 @@ function MerchantPage() {
   const [deleting, setDeleting] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [storeAvailability, setStoreAvailability] = useState<AvailabilityRow[]>([]);
+  const [storeStaff, setStoreStaff] = useState<StaffRow[]>([]);
+  const [staffRatingSummary, setStaffRatingSummary] = useState<Record<string, { avg: number; count: number }>>({}); 
   const [editingAvailStoreId, setEditingAvailStoreId] = useState<string | null>(null);
+  const [editingTeamStoreId, setEditingTeamStoreId] = useState<string | null>(null);
   const [availDraft, setAvailDraft] = useState<DayDraft[]>([]);
+  const [teamDraft, setTeamDraft] = useState<StaffDraft[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [postDraftStoreId, setPostDraftStoreId] = useState<string | null>(null);
   const [postDraftBody, setPostDraftBody] = useState("");
@@ -433,14 +490,26 @@ function MerchantPage() {
       const bookableIds = rows.filter((s) => isBookable(s.category)).map((s) => s.id);
       if (bookableIds.length > 0) {
         try {
-          const [{ data: availData }, { data: bookingsData }] = await Promise.all([
+          const [{ data: availData }, { data: bookingsData }, { data: staffData }, { data: reviewsData }] = await Promise.all([
             db.from("store_availability").select("*").in("store_id", bookableIds),
             db.from("store_bookings").select("*").in("store_id", bookableIds)
               .gte("slot_start", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 19))
               .order("slot_start", { ascending: true }).limit(200),
+            db.from("store_staff").select("*").in("store_id", bookableIds).order("position", { ascending: true }),
+            db.from("staff_reviews").select("staff_id, rating").in("store_id", bookableIds),
           ]);
           setStoreAvailability((availData ?? []) as AvailabilityRow[]);
           setBookings((bookingsData ?? []) as BookingRow[]);
+          setStoreStaff((staffData ?? []) as StaffRow[]);
+          const sums: Record<string, { total: number; count: number }> = {};
+          ((reviewsData ?? []) as Array<{ staff_id: string; rating: number }>).forEach((r) => {
+            if (!sums[r.staff_id]) sums[r.staff_id] = { total: 0, count: 0 };
+            sums[r.staff_id].total += r.rating;
+            sums[r.staff_id].count += 1;
+          });
+          const rmap: Record<string, { avg: number; count: number }> = {};
+          Object.keys(sums).forEach((k) => { rmap[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count }; });
+          setStaffRatingSummary(rmap);
         } catch { /* bookings tables not yet created */ }
       }
 
@@ -537,6 +606,14 @@ function MerchantPage() {
   const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
   const unreadMessages = messages.filter((m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id)).length;
   const storesWithoutPhone = stores.filter((s) => !s.phone);
+  const hasOrderableStore = stores.some((s) => !isBookable(s.category));
+  const hasBookableStore = stores.some((s) => isBookable(s.category));
+
+  useEffect(() => {
+    if (tab === "bookings" && !hasBookableStore) {
+      setTab("stores");
+    }
+  }, [tab, hasBookableStore]);
 
   if (loading || !user) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
 
@@ -551,9 +628,11 @@ function MerchantPage() {
             <h1 className="font-display text-4xl font-bold">Merchant dashboard</h1>
             <p className="mt-1 text-muted-foreground">Manage your stores and incoming orders.</p>
           </div>
-          <Button className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95 gap-2" onClick={() => navigate({ to: "/list-store" })}>
-            <Plus className="h-4 w-4" /> Add a store
-          </Button>
+          {stores.length === 0 && (
+            <Button className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95 gap-2" onClick={() => navigate({ to: "/list-store" })}>
+              <Plus className="h-4 w-4" /> Add a store
+            </Button>
+          )}
         </div>
 
         {/* Tabs */}
@@ -574,17 +653,19 @@ function MerchantPage() {
             >
               Stores
             </button>
-            <button
-              onClick={() => setTab("orders")}
-              className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "orders" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Orders
-              {pendingCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {pendingCount > 9 ? "9+" : pendingCount}
-                </span>
-              )}
-            </button>
+            {hasOrderableStore && (
+              <button
+                onClick={() => setTab("orders")}
+                className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "orders" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Orders
+                {pendingCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    {pendingCount > 9 ? "9+" : pendingCount}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setTab("messages")}
               className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "messages" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
@@ -596,17 +677,19 @@ function MerchantPage() {
                 </span>
               )}
             </button>
-            <button
-              onClick={() => setTab("bookings")}
-              className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "bookings" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Bookings
-              {bookings.filter((b) => b.status === "pending").length > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {bookings.filter((b) => b.status === "pending").length > 9 ? "9+" : bookings.filter((b) => b.status === "pending").length}
-                </span>
-              )}
-            </button>
+            {hasBookableStore && (
+              <button
+                onClick={() => setTab("bookings")}
+                className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "bookings" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Bookings
+                {bookings.filter((b) => b.status === "pending").length > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    {bookings.filter((b) => b.status === "pending").length > 9 ? "9+" : bookings.filter((b) => b.status === "pending").length}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setTab("posts")}
               className={`whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "posts" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
@@ -934,7 +1017,9 @@ function MerchantPage() {
                     const upcomingBookings = storeBookings.filter((b) => b.status !== "cancelled" && b.slot_start >= now);
                     const pendingCount = storeBookings.filter((b) => b.status === "pending").length;
                     const storeAvail = storeAvailability.filter((a) => a.store_id === s.id);
+                    const members = storeStaff.filter((m) => m.store_id === s.id).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
                     const isEditingAvail = editingAvailStoreId === s.id;
+                    const isEditingTeam = editingTeamStoreId === s.id;
                     const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
                     return (
@@ -1052,6 +1137,177 @@ function MerchantPage() {
                             )}
                           </div>
 
+                          {/* Team editor */}
+                          <div>
+                            <div className="mb-3 flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Team members</p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (isEditingTeam) {
+                                    setEditingTeamStoreId(null);
+                                  } else {
+                                    setTeamDraft(
+                                      members.map((m) => ({
+                                        id: m.id,
+                                        name: m.name,
+                                        phone: m.phone ?? "",
+                                        active: m.active,
+                                        daily_capacity: m.daily_capacity != null ? String(m.daily_capacity) : "",
+                                        available_days: Array.isArray(m.available_days) && m.available_days.length > 0
+                                          ? [...m.available_days].sort((a, b) => a - b)
+                                          : STAFF_DAY_OPTIONS.map((d) => d.day),
+                                      }))
+                                    );
+                                    setEditingTeamStoreId(s.id);
+                                  }
+                                }}
+                              >
+                                {isEditingTeam ? "Cancel" : members.length === 0 ? "Add team" : "Edit team"}
+                              </Button>
+                            </div>
+
+                            {isEditingTeam ? (
+                              <div className="space-y-2">
+                                {teamDraft.map((member, idx) => (
+                                  <div key={`${member.id ?? "new"}-${idx}`} className="rounded-lg bg-secondary/50 px-3 py-2">
+                                    <div className="grid grid-cols-12 items-center gap-2">
+                                      <Input
+                                        value={member.name}
+                                        onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, name: e.target.value } : m))}
+                                        placeholder="Name"
+                                        className="col-span-4 h-8 text-xs"
+                                        maxLength={80}
+                                      />
+                                      <Input
+                                        value={member.phone}
+                                        onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, phone: e.target.value } : m))}
+                                        placeholder="Phone"
+                                        className="col-span-3 h-8 text-xs"
+                                        maxLength={40}
+                                      />
+                                      <div className="col-span-2 flex items-center gap-1">
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          max={99}
+                                          value={member.daily_capacity}
+                                          onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, daily_capacity: e.target.value } : m))}
+                                          placeholder="∞"
+                                          title="Max bookings per day (leave blank for unlimited)"
+                                          className="h-8 text-xs w-full font-mono"
+                                        />
+                                      </div>
+                                      <label className="col-span-2 flex items-center gap-1 text-xs text-muted-foreground">
+                                        <input
+                                          type="checkbox"
+                                          checked={member.active}
+                                          onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, active: e.target.checked } : m))}
+                                          className="h-4 w-4 accent-primary"
+                                        />
+                                        Active
+                                      </label>
+                                      <button
+                                        onClick={() => setTeamDraft((prev) => prev.filter((_, i) => i !== idx))}
+                                        className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                      <span className="mr-1 text-[11px] font-medium text-muted-foreground">Available days:</span>
+                                      {STAFF_DAY_OPTIONS.map((d) => {
+                                        const selected = member.available_days.includes(d.day);
+                                        return (
+                                          <button
+                                            key={d.day}
+                                            type="button"
+                                            onClick={() => setTeamDraft((prev) => prev.map((m, i) => {
+                                              if (i !== idx) return m;
+                                              const has = m.available_days.includes(d.day);
+                                              const available_days = has
+                                                ? m.available_days.filter((x) => x !== d.day)
+                                                : [...m.available_days, d.day].sort((a, b) => a - b);
+                                              return { ...m, available_days };
+                                            }))}
+                                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ${selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
+                                          >
+                                            {d.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setTeamDraft((prev) => [...prev, { name: "", phone: "", active: true, daily_capacity: "", available_days: STAFF_DAY_OPTIONS.map((d) => d.day) }])}
+                                  className="gap-1"
+                                >
+                                  <Plus className="h-3 w-3" /> Add member
+                                </Button>
+                                <Button
+                                  className="w-full bg-gradient-primary text-primary-foreground"
+                                  onClick={async () => {
+                                    try {
+                                      const cleaned = teamDraft
+                                        .map((m) => ({ ...m, name: m.name.trim(), phone: m.phone.trim() }))
+                                        .filter((m) => m.name.length > 0);
+                                      await db.from("store_staff").delete().eq("store_id", s.id);
+                                      if (cleaned.length > 0) {
+                                        const { error } = await db.from("store_staff").insert(
+                                          cleaned.map((m, i) => ({
+                                            store_id: s.id,
+                                            name: m.name,
+                                            phone: m.phone || null,
+                                            active: m.active,
+                                            position: i,
+                                            daily_capacity: m.daily_capacity.trim() ? Number(m.daily_capacity) : null,
+                                            available_days: m.available_days,
+                                          }))
+                                        );
+                                        if (error) throw error;
+                                      }
+                                      const { data: fresh } = await db.from("store_staff").select("*").eq("store_id", s.id).order("position", { ascending: true });
+                                      setStoreStaff((prev) => [...prev.filter((m) => m.store_id !== s.id), ...((fresh ?? []) as StaffRow[])]);
+                                      setEditingTeamStoreId(null);
+                                      toast.success("Team saved");
+                                    } catch (e: any) {
+                                      toast.error(e.message ?? "Could not save team");
+                                    }
+                                  }}
+                                >
+                                  Save team
+                                </Button>
+                              </div>
+                            ) : members.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No team added yet. Add members so customers can pick who they book with.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {members.map((m) => {
+                                  const r = staffRatingSummary[m.id];
+                                  const dayLabel = Array.isArray(m.available_days) && m.available_days.length > 0
+                                    ? m.available_days
+                                        .slice()
+                                        .sort((a, b) => a - b)
+                                        .map((d) => STAFF_DAY_OPTIONS.find((x) => x.day === d)?.label ?? d)
+                                        .join(",")
+                                    : "All days";
+                                  return (
+                                    <span key={m.id} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">
+                                      {m.name}{m.phone ? ` · ${m.phone}` : ""}
+                                      {r ? ` · ★ ${r.avg.toFixed(1)} (${r.count})` : ""}
+                                      {` · ${dayLabel}`}
+                                      {m.active ? "" : " (inactive)"}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
                           {/* Bookings list */}
                           <div>
                             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upcoming bookings</p>
@@ -1075,35 +1331,87 @@ function MerchantPage() {
                                         <div className="flex flex-wrap items-center gap-2">
                                           <span className="font-semibold text-sm">{prettyDate} at {timePart.slice(0, 5)}</span>
                                           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>{sm.label}</span>
+                                          {b.payment_status === "deposit_paid" && <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">DEPOSIT RECEIVED</span>}
+                                          {b.payment_status === "paid" && <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-semibold text-green-700">PAID</span>}
                                         </div>
                                         <div className="mt-1 font-medium text-sm">{b.customer_name}</div>
                                         {b.service && <div className="text-xs text-muted-foreground">{b.service}</div>}
+                                        {b.staff_name && <div className="text-xs text-muted-foreground">With {b.staff_name}{b.staff_phone ? ` · ${b.staff_phone}` : ""}</div>}
                                         {b.note && <div className="mt-1 text-xs italic text-muted-foreground">"{b.note}"</div>}
                                         <a href={`tel:${b.customer_phone}`} className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline">
                                           📞 {b.customer_phone}
                                         </a>
                                       </div>
-                                      <div className="flex shrink-0 gap-2">
+                                      <div className="flex shrink-0 flex-col items-end gap-2">
                                         {b.status === "pending" && (
-                                          <>
+                                          <div className="flex gap-2">
                                             <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={async () => {
                                               await db.from("store_bookings").update({ status: "cancelled" }).eq("id", b.id);
                                               setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "cancelled" } : x));
                                               toast.success("Booking cancelled");
                                             }}>Cancel</Button>
                                             <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={async () => {
-                                              await db.from("store_bookings").update({ status: "confirmed" }).eq("id", b.id);
+                                              const { error } = await db.from("store_bookings").update({ status: "confirmed" }).eq("id", b.id);
+                                              if (error) {
+                                                toast.error(error.message);
+                                                return;
+                                              }
                                               setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "confirmed" } : x));
+                                              void supabase.functions.invoke("send-booking-confirmed", {
+                                                body: {
+                                                  booking_id: b.id,
+                                                  store_name: s.name,
+                                                  customer_name: b.customer_name,
+                                                  customer_email: b.customer_email,
+                                                  customer_phone: b.customer_phone,
+                                                  service: b.service,
+                                                  staff_name: b.staff_name,
+                                                  slot_start: b.slot_start,
+                                                },
+                                              });
                                               toast.success("Booking confirmed");
                                             }}>
                                               <Check className="mr-1.5 h-3.5 w-3.5" />Confirm
                                             </Button>
-                                          </>
+                                          </div>
+                                        )}
+                                        {(b.status === "confirmed" || b.status === "completed") && b.payment_status !== "paid" && (
+                                          <div className="flex flex-wrap gap-2">
+                                            {s.deposit_amount && b.payment_status === "unpaid" && (
+                                              <Button size="sm" variant="outline" className="text-blue-600 hover:bg-blue-50" onClick={async () => {
+                                                await db.from("store_bookings").update({ payment_status: "deposit_paid" }).eq("id", b.id);
+                                                setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, payment_status: "deposit_paid" } : x));
+                                                toast.success("Deposit confirmed");
+                                              }}>
+                                                💳 Deposit (£{Number(s.deposit_amount).toFixed(2)})
+                                              </Button>
+                                            )}
+                                            <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50" onClick={async () => {
+                                              await db.from("store_bookings").update({ payment_status: "paid" }).eq("id", b.id);
+                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, payment_status: "paid" } : x));
+                                              toast.success("Payment confirmed");
+                                            }}>
+                                              <Check className="mr-1.5 h-3.5 w-3.5" />Mark paid
+                                            </Button>
+                                          </div>
                                         )}
                                         {b.status === "confirmed" && (
                                           <Button size="sm" variant="outline" onClick={async () => {
-                                            await db.from("store_bookings").update({ status: "completed" }).eq("id", b.id);
+                                            const { error } = await db.from("store_bookings").update({ status: "completed" }).eq("id", b.id);
+                                            if (error) { toast.error(error.message); return; }
                                             setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "completed" } : x));
+                                            void supabase.functions.invoke("send-booking-complete", {
+                                              body: {
+                                                booking_id: b.id,
+                                                store_name: s.name,
+                                                customer_name: b.customer_name,
+                                                customer_email: b.customer_email,
+                                                customer_phone: b.customer_phone,
+                                                service: b.service,
+                                                staff_name: b.staff_name,
+                                                slot_start: b.slot_start,
+                                              },
+                                            });
                                             toast.success("Booking marked complete");
                                           }}>
                                             <Check className="mr-1.5 h-3.5 w-3.5" />Mark done
