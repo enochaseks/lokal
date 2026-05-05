@@ -202,6 +202,9 @@ export type Store = {
   description: string;
   fulfillment: "collection" | "delivery" | "both" | "pay_at_store";
   location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
+  accepts_refunds?: boolean;
+  refund_policy?: string;
+  cancellation_policy?: string;
   selling_mode?: SellingMode | null;
   instagramHandle?: string;
   tiktokHandle?: string;

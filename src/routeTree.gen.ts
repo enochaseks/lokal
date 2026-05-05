@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as RefundsCancellationsRouteImport } from './routes/refunds-cancellations'
 import { Route as RateRouteImport } from './routes/rate'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrderRouteImport } from './routes/order'
@@ -28,6 +29,11 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RefundsCancellationsRoute = RefundsCancellationsRouteImport.update({
+  id: '/refunds-cancellations',
+  path: '/refunds-cancellations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RateRoute = RateRouteImport.update({
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
   '/rate': typeof RateRoute
+  '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
   '/rate': typeof RateRoute
+  '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
   '/rate': typeof RateRoute
+  '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/order'
     | '/privacy'
     | '/rate'
+    | '/refunds-cancellations'
     | '/terms'
     | '/auth/callback'
     | '/customer/dashboard'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/order'
     | '/privacy'
     | '/rate'
+    | '/refunds-cancellations'
     | '/terms'
     | '/auth/callback'
     | '/customer/dashboard'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/order'
     | '/privacy'
     | '/rate'
+    | '/refunds-cancellations'
     | '/terms'
     | '/auth/callback'
     | '/customer/dashboard'
@@ -218,6 +230,7 @@ export interface RootRouteChildren {
   OrderRoute: typeof OrderRoute
   PrivacyRoute: typeof PrivacyRoute
   RateRoute: typeof RateRoute
+  RefundsCancellationsRoute: typeof RefundsCancellationsRoute
   TermsRoute: typeof TermsRoute
   CustomerDashboardRoute: typeof CustomerDashboardRoute
   CustomerProfileRoute: typeof CustomerProfileRoute
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refunds-cancellations': {
+      id: '/refunds-cancellations'
+      path: '/refunds-cancellations'
+      fullPath: '/refunds-cancellations'
+      preLoaderRoute: typeof RefundsCancellationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rate': {
@@ -355,6 +375,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrderRoute: OrderRoute,
   PrivacyRoute: PrivacyRoute,
   RateRoute: RateRoute,
+  RefundsCancellationsRoute: RefundsCancellationsRoute,
   TermsRoute: TermsRoute,
   CustomerDashboardRoute: CustomerDashboardRoute,
   CustomerProfileRoute: CustomerProfileRoute,

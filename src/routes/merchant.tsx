@@ -79,6 +79,9 @@ type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
+  accepts_refunds?: boolean | null;
+  refund_policy?: string | null;
+  cancellation_policy?: string | null;
   instagram_handle: string | null; tiktok_handle: string | null; website_url: string | null;
   image_url: string | null; published: boolean; fulfillment: string;
   bank_name: string | null; bank_account_name: string | null;
@@ -181,12 +184,12 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
-    hours: store.hours ?? "", phone: store.phone ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
+    hours: store.hours ?? "", phone: store.phone ?? "", accepts_refunds: !!store.accepts_refunds, refund_policy: store.refund_policy ?? "", cancellation_policy: store.cancellation_policy ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
     location_type: (store as any).location_type ?? "salon",
@@ -201,6 +204,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
+  const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
 
   useEffect(() => {
     supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
@@ -254,8 +258,13 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
         origin: form.origin, description: n(form.description),
-        address: n(form.address), city: n(form.city), postcode: n(form.postcode),
-        hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
+        address: requiresFixedAddress ? n(form.address) : null,
+        city: requiresFixedAddress ? n(form.city) : null,
+        postcode: requiresFixedAddress ? n(form.postcode) : null,
+        hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url),
+        accepts_refunds: form.accepts_refunds,
+        refund_policy: n(form.refund_policy),
+        cancellation_policy: n(form.cancellation_policy),
         location_type: isServiceStore ? (form.location_type || null) : null,
         selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
         instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
@@ -291,7 +300,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -360,9 +369,17 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location &amp; contact</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
-              <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
-              <div><Label>{(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaLabel}</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} placeholder={(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" /></div>
+              {requiresFixedAddress ? (
+                <>
+                  <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
+                  <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
+                  <div><Label>{(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaLabel}</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} placeholder={(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" /></div>
+                </>
+              ) : (
+                <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  Service location is set to We travel to you, so no fixed customer-facing address will be shown.
+                </div>
+              )}
               <div>
                 <Label>Phone</Label>
                 <div className="mt-1 grid grid-cols-12 gap-2">
@@ -379,26 +396,55 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                 <p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number.</p>
               </div>
               <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
+              <div className="sm:col-span-2 rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
+                <Label>Refunds & cancellation policy</Label>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Do you accept refunds?</Label>
+                  <Select value={form.accepts_refunds ? "yes" : "no"} onValueChange={(v) => setForm((f) => ({ ...f, accepts_refunds: v === "yes" }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes, refunds may be accepted</SelectItem>
+                      <SelectItem value="no">No refunds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Refund policy details (shown to customers)</Label>
+                  <Textarea value={form.refund_policy} onChange={(e) => setForm((f) => ({ ...f, refund_policy: e.target.value }))} rows={2} maxLength={1000} className="mt-1" placeholder="Example: Full refund if cancelled 24+ hours before appointment." />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Cancellation policy details (shown to customers)</Label>
+                  <Textarea value={form.cancellation_policy} onChange={(e) => setForm((f) => ({ ...f, cancellation_policy: e.target.value }))} rows={2} maxLength={1000} className="mt-1" placeholder="Example: Deposit is non-refundable for no-shows." />
+                </div>
+              </div>
               <div><Label>Instagram</Label><Input value={form.instagram_handle} onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
               <div><Label>TikTok</Label><Input value={form.tiktok_handle} onChange={(e) => setForm((f) => ({ ...f, tiktok_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
               <div className="sm:col-span-2"><Label>Website</Label><Input value={form.website_url} onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))} placeholder="https://..." maxLength={200} className="mt-1" /></div>
               <div className="sm:col-span-2">
                 <Label>Fulfilment</Label>
-                <Select value={form.fulfillment} onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="collection">🏪 Collection only</SelectItem>
-                    <SelectItem value="delivery">🚚 Delivery only</SelectItem>
-                    <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
-                    <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
+                {isServiceStore && form.location_type === "travel" ? (
+                  <div className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    🏦 Bank Transfer Only (auto for travel services)
+                  </div>
+                ) : (
+                  <>
+                    <Select value={form.fulfillment} onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="collection">🏪 Collection only</SelectItem>
+                        <SelectItem value="delivery">🚚 Delivery only</SelectItem>
+                        <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                        <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
+                  </>
+                )}
               </div>
               {isServiceStore && (
                 <div className="sm:col-span-2">
                   <Label>Where do you offer services?</Label>
-                  <Select value={form.location_type} onValueChange={(v) => setForm((f) => ({ ...f, location_type: v }))}>
+                  <Select value={form.location_type} onValueChange={(v) => setForm((f) => ({ ...f, location_type: v, fulfillment: v === "travel" ? "pay_at_store" : f.fulfillment }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="salon">🏠 At my salon / premises</SelectItem>

@@ -103,6 +103,9 @@ const storeSchema = z.object({
   instagram_handle: z.string().trim().max(80).optional(),
   tiktok_handle: z.string().trim().max(80).optional(),
   website_url: z.string().trim().max(200).refine((value) => !value || !!normalizeWebsiteUrl(value), "Must be a valid website").optional(),
+  accepts_refunds: z.boolean().default(false),
+  refund_policy: z.string().trim().max(1000).optional(),
+  cancellation_policy: z.string().trim().max(1000).optional(),
 });
 
 const bankSchema = z.object({
@@ -134,6 +137,7 @@ function ListStorePage() {
     description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
     instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
+    accepts_refunds: false, refund_policy: "", cancellation_policy: "",
     selling_mode: "products" as SellingMode,
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
@@ -141,6 +145,7 @@ function ListStorePage() {
   const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
   const [staff, setStaff] = useState<StaffDraft[]>([]);
   const isServiceStore = isStoreBookable(store.category, store.selling_mode);
+  const requiresFixedAddress = !isServiceStore || store.location_type === "salon";
 
   useEffect(() => {
     // route guard handled by beforeLoad
@@ -201,6 +206,10 @@ function ListStorePage() {
     try {
       const slug = `${slugify(store.name)}-${Math.random().toString(36).slice(2, 6)}`;
       const parsedStore = storeSchema.parse(store);
+      const toNullable = (value?: string) => {
+        const trimmed = (value ?? "").trim();
+        return trimmed ? trimmed : null;
+      };
       const payload = {
         ...parsedStore,
         ...bankSchema.parse(bank),
@@ -213,6 +222,10 @@ function ListStorePage() {
         instagram_handle: normalizeInstagramHandle(store.instagram_handle),
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
+        fulfillment: isServiceStore && store.location_type === "travel" ? "pay_at_store" : parsedStore.fulfillment,
+        address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
+        city: requiresFixedAddress ? toNullable(parsedStore.city) : null,
+        postcode: requiresFixedAddress ? toNullable(parsedStore.postcode) : null,
         published: true,
         location_type: isServiceStore ? store.location_type : null,
         selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
@@ -363,34 +376,67 @@ function ListStorePage() {
 
               <div>
                 <Label>Fulfilment</Label>
-                <Select value={store.fulfillment} onValueChange={(v) => setStore({ ...store, fulfillment: v as any })}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="collection">🏪 Collection only</SelectItem>
-                    <SelectItem value="delivery">🚚 Delivery only</SelectItem>
-                    <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
-                    <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="mt-1.5 text-xs text-muted-foreground">How will customers receive their order? You arrange this directly with them.</p>
+                {isServiceStore && store.location_type === "travel" ? (
+                  <div className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    🏦 Bank Transfer Only (auto for travel services)
+                  </div>
+                ) : (
+                  <>
+                    <Select value={store.fulfillment} onValueChange={(v) => setStore({ ...store, fulfillment: v as any })}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="collection">🏪 Collection only</SelectItem>
+                        <SelectItem value="delivery">🚚 Delivery only</SelectItem>
+                        <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                        <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1.5 text-xs text-muted-foreground">How will customers receive their order? You arrange this directly with them.</p>
+                  </>
+                )}
               </div>
 
               {isServiceStore && (
                 <div>
                   <Label>Where do you offer services?</Label>
-                  <Select value={store.location_type} onValueChange={(v) => setStore({ ...store, location_type: v as any })}>
+                  <Select value={store.location_type} onValueChange={(v) => setStore((prev) => ({ ...prev, location_type: v as any, fulfillment: v === "travel" ? "pay_at_store" : prev.fulfillment }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="salon">🏠 At my salon / premises</SelectItem>
                       <SelectItem value="travel">🚗 We travel to you</SelectItem>
                     </SelectContent>
                   </Select>
+                  {store.location_type === "travel" && (
+                    <p className="mt-1.5 text-xs font-medium text-amber-700">🏦 Bank Transfer Only is shown to customers for travel bookings.</p>
+                  )}
                 </div>
               )}
 
               <div>
                 <Label>Description</Label>
                 <Textarea value={store.description} onChange={(e) => setStore({ ...store, description: e.target.value })} placeholder="What makes your store special?" maxLength={500} className="mt-1" rows={3} />
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-3">
+                <Label>Refunds & cancellation policy</Label>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Do you accept refunds?</Label>
+                  <Select value={store.accepts_refunds ? "yes" : "no"} onValueChange={(v) => setStore({ ...store, accepts_refunds: v === "yes" })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes, refunds may be accepted</SelectItem>
+                      <SelectItem value="no">No refunds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Refund policy details (shown to customers)</Label>
+                  <Textarea value={store.refund_policy} onChange={(e) => setStore({ ...store, refund_policy: e.target.value })} placeholder="Example: Full refund if cancelled 24+ hours before appointment." maxLength={1000} className="mt-1" rows={3} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Cancellation policy details (shown to customers)</Label>
+                  <Textarea value={store.cancellation_policy} onChange={(e) => setStore({ ...store, cancellation_policy: e.target.value })} placeholder="Example: Deposit is non-refundable for no-shows." maxLength={1000} className="mt-1" rows={3} />
+                </div>
               </div>
 
               <div>
@@ -425,18 +471,26 @@ function ListStorePage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="sm:col-span-2">
-                  <Label>Address</Label>
-                  <Input value={store.address} onChange={(e) => setStore({ ...store, address: e.target.value })} maxLength={200} className="mt-1" />
-                </div>
-                <div>
-                  <Label>City</Label>
-                  <Input value={store.city} onChange={(e) => setStore({ ...store, city: e.target.value })} maxLength={60} className="mt-1" />
-                </div>
-                <div>
-                  <Label>{(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaLabel}</Label>
-                  <Input value={store.postcode} onChange={(e) => setStore({ ...store, postcode: e.target.value })} placeholder={(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" />
-                </div>
+                {requiresFixedAddress ? (
+                  <>
+                    <div className="sm:col-span-2">
+                      <Label>Address</Label>
+                      <Input value={store.address} onChange={(e) => setStore({ ...store, address: e.target.value })} maxLength={200} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label>City</Label>
+                      <Input value={store.city} onChange={(e) => setStore({ ...store, city: e.target.value })} maxLength={60} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label>{(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaLabel}</Label>
+                      <Input value={store.postcode} onChange={(e) => setStore({ ...store, postcode: e.target.value })} placeholder={(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Service location is set to We travel to you, so no fixed customer-facing address will be shown.
+                  </div>
+                )}
                 <div>
                   <Label>Phone</Label>
                   <div className="mt-1 grid grid-cols-12 gap-2">

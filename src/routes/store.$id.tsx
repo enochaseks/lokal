@@ -101,6 +101,7 @@ type StoreDetails = {
   website_url: string | null;
   image_url: string | null;
   fulfillment: string;
+  location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
   selling_mode?: SellingMode | null;
   published: boolean;
   store_products: ProductRow[] | null;
@@ -113,6 +114,9 @@ type StoreDetails = {
   bank_account_number: string | null;
   bank_sort_code: string | null;
   region: string | null;
+  accepts_refunds?: boolean | null;
+  refund_policy?: string | null;
+  cancellation_policy?: string | null;
 };
 
 const isBookable = (category: string, sellingMode?: string | null) => isStoreBookable(category, sellingMode);
@@ -262,6 +266,8 @@ function StoreDetail() {
     .filter((m) => m.active)
     .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
   const selectedStaff = staffMembers.find((m) => m.id === bookStaffId) ?? null;
+  const isTravelServiceStore = isBookable(store.category, store.selling_mode)
+    && (store.location_type === "travel" || store.location_type === "remote_and_travel");
 
   const staffRatingMap = (() => {
     const sums: Record<string, { total: number; count: number }> = {};
@@ -545,7 +551,9 @@ function StoreDetail() {
       });
 
       toast.success("Booking request sent", {
-        description: `${store.name} will confirm your appointment soon.`,
+        description: isTravelServiceStore
+          ? `${store.name} will confirm your appointment soon and share bank transfer payment details.`
+          : `${store.name} will confirm your appointment soon.`,
         duration: 8000,
       });
 
@@ -940,9 +948,17 @@ function StoreDetail() {
           <div className="grid gap-6 md:grid-cols-2">
             {/* Contact & Location */}
             <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
-              <h2 className="font-display text-xl font-bold">Visit us</h2>
+              <h2 className="font-display text-xl font-bold">{isTravelServiceStore ? "Service details" : "Visit us"}</h2>
               
-              {store.address && (
+              {isTravelServiceStore ? (
+                <div className="flex gap-3">
+                  <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">We travel to you</p>
+                    <p className="text-sm text-muted-foreground">No fixed customer-facing address is shown.</p>
+                  </div>
+                </div>
+              ) : store.address && (
                 <div className="flex gap-3">
                   <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                   <div>
@@ -995,13 +1011,25 @@ function StoreDetail() {
                 <div className="pt-3 border-t border-border">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Service location</p>
                   <div className="flex flex-wrap gap-2">
-                    {((store as any).location_type === "travel" || (store as any).location_type === "remote_and_travel") && (
+                    {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
                       <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">🚗 We travel to you</span>
                     )}
-                    {((store as any).location_type === "remote" || (store as any).location_type === "remote_and_travel") && (
+                    {(store.location_type === "remote" || store.location_type === "remote_and_travel") && (
                       <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">💻 Remote / online</span>
                     )}
+                    {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🏦 Bank transfer only</span>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {(store.refund_policy || store.cancellation_policy || typeof store.accepts_refunds === "boolean") && (
+                <div className="pt-3 border-t border-border">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Refunds & cancellation</p>
+                  <p className="text-sm font-medium">Refunds: {store.accepts_refunds ? "Accepted (subject to merchant policy)" : "Not accepted"}</p>
+                  {store.refund_policy && <p className="mt-1 text-sm text-muted-foreground">{store.refund_policy}</p>}
+                  {store.cancellation_policy && <p className="mt-1 text-sm text-muted-foreground">{store.cancellation_policy}</p>}
                 </div>
               )}
             </div>

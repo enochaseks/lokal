@@ -78,7 +78,10 @@ function HelpPage() {
         </div>
 
         <div className="mt-10 rounded-2xl border border-border/60 bg-secondary/40 p-6 text-sm leading-relaxed text-muted-foreground">
-          For privacy or legal questions, you can also review our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link> and <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>.
+          For privacy or legal questions, you can also review our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>, <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>, and <Link to="/refunds-cancellations" className="text-primary hover:underline">Refund &amp; Cancellation</Link> page.
+          <p className="mt-3">
+            Reminder: Lokal does not hold customer funds and does not process refunds directly. Refund and cancellation disputes are resolved between customer and merchant under the merchant's policy.
+          </p>
         </div>
       </main>
       <Footer />

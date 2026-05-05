@@ -20,6 +20,7 @@ export function Footer() {
             <li><a href="/#stores" className="hover:text-foreground">Browse stores</a></li>
             <li><a href="/#how" className="hover:text-foreground">How it works</a></li>
             <li><Link to="/help" className="hover:text-foreground">Help Center</Link></li>
+            <li><Link to="/refunds-cancellations" className="hover:text-foreground">Refund &amp; Cancellation</Link></li>
           </ul>
         </div>
         <div>
@@ -36,6 +37,8 @@ export function Footer() {
         <Link to="/privacy" className="hover:text-foreground">Privacy Policy</Link>
         <span className="mx-2">·</span>
         <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
+        <span className="mx-2">·</span>
+        <Link to="/refunds-cancellations" className="hover:text-foreground">Refund &amp; Cancellation</Link>
         <span className="mx-2">·</span>
         <Link to="/help" className="hover:text-foreground">Help Center</Link>
       </div>

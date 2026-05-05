@@ -625,11 +625,15 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       const prettyDate = new Date(y, mo - 1, d).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
       const serviceDeposit = bookService ? store!.products?.find((p) => p.name === bookService)?.deposit : undefined;
       const depositAmount = serviceDeposit ?? store!.deposit_amount ?? null;
+      const isTravelServiceStore = isBookable(store!.category, store!.selling_mode)
+        && (store!.location_type === "travel" || store!.location_type === "remote_and_travel");
       if (depositAmount) {
         setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
       } else {
         toast.success("Appointment requested!", {
-          description: `${store!.name} will confirm your ${bookTime} slot on ${prettyDate}.`,
+          description: isTravelServiceStore
+            ? `${store!.name} will confirm your ${bookTime} slot on ${prettyDate} and share bank transfer payment details.`
+            : `${store!.name} will confirm your ${bookTime} slot on ${prettyDate}.`,
           duration: 8000,
         });
       }
@@ -743,7 +747,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-secondary/60 p-4 text-sm sm:grid-cols-3">
             <div className="flex items-start gap-2 text-muted-foreground">
               <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
-              {(store.address || store.city || store.postcode) ? (
+              {isBookable(store.category, store.selling_mode) && (store.location_type === "travel" || store.location_type === "remote_and_travel") ? (
+                <span>We travel to you</span>
+              ) : (store.address || store.city || store.postcode) ? (
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([store.address, store.city, store.postcode].filter(Boolean).join(", "))}`}
                   target="_blank"
@@ -766,7 +772,21 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
               <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">🚚 Delivery available</span>
             )}
+            {isBookable(store.category, store.selling_mode) && (store.location_type === "travel" || store.location_type === "remote_and_travel") && (
+              <span className="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🏦 Bank transfer only</span>
+            )}
           </div>
+
+          {(store.refund_policy || store.cancellation_policy || typeof store.accepts_refunds === "boolean") && (
+            <div className="mt-3 rounded-xl border border-border bg-card p-3 text-xs">
+              <p className="font-semibold uppercase tracking-wider text-muted-foreground">Refunds & cancellation</p>
+              <p className="mt-1 text-foreground">
+                Refunds: {store.accepts_refunds ? "Accepted (subject to merchant policy)" : "Not accepted"}
+              </p>
+              {store.refund_policy && <p className="mt-1 text-muted-foreground">{store.refund_policy}</p>}
+              {store.cancellation_policy && <p className="mt-1 text-muted-foreground">{store.cancellation_policy}</p>}
+            </div>
+          )}
 
           {step === "browse" && (
             <>

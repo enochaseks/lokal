@@ -79,7 +79,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,store_products(name,price,unit,position,image_url)")
+        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,store_products(name,price,unit,position,image_url)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -101,6 +101,9 @@ function Index() {
         phone: r.phone || "—",
         fulfillment: (r.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") || "collection",
         location_type: (r.location_type as Store["location_type"]) ?? null,
+        accepts_refunds: !!r.accepts_refunds,
+        refund_policy: r.refund_policy || undefined,
+        cancellation_policy: r.cancellation_policy || undefined,
         selling_mode: r.selling_mode ?? null,
         image: getImageUrl(r.image_url) || storePlaceholder,
         description: r.description || "A new Lokal merchant.",

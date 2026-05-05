@@ -53,6 +53,7 @@ function TermsPage() {
               <li>You will only use the reservation system to make genuine enquiries and orders.</li>
               <li>Payment is made directly to the merchant by bank transfer. Lokal does not handle or hold your money.</li>
               <li>Orders are reservations — the merchant will confirm availability and provide payment details.</li>
+              <li>Refunds and cancellation outcomes are set by the merchant's policy and must be resolved directly with the merchant.</li>
               <li>Disputes about goods, quality, or fulfilment are between you and the merchant. Lokal will assist in good faith but is not liable for merchant actions.</li>
               <li>You provide accurate contact information (name, phone, email) so the merchant can reach you.</li>
             </ul>
@@ -79,6 +80,11 @@ function TermsPage() {
               All payments are made directly between customers and merchants via bank transfer.
               Lokal does not process, hold, or facilitate any monetary transactions. Lokal accepts
               no responsibility for failed, incorrect, or disputed bank transfers.
+            </p>
+            <p>
+              Lokal does not decide or process refunds and cannot reverse transfers. Refund and
+              cancellation requests must be handled directly with the merchant according to the
+              merchant's stated policy.
             </p>
             <p>
               Listing on Lokal is currently <strong className="text-foreground">free</strong>. We reserve the right
@@ -147,7 +153,7 @@ function TermsPage() {
         </div>
 
         <div className="mt-12 text-sm text-muted-foreground">
-          See also our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+          See also our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link> and <Link to="/refunds-cancellations" className="text-primary hover:underline">Refund &amp; Cancellation policy</Link>.
         </div>
       </main>
       <Footer />
