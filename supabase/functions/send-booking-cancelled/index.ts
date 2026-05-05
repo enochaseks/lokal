@@ -9,6 +9,7 @@ const corsHeaders = {
 
 type BookingCancelledPayload = {
   booking_id: string;
+  store_id?: string | null;
   store_name: string;
   customer_name: string;
   customer_email: string | null;
@@ -16,6 +17,7 @@ type BookingCancelledPayload = {
   service: string | null;
   staff_name: string | null;
   slot_start: string;
+  cancelled_by?: "customer" | "merchant";
 };
 
 function toE164(raw: string | null | undefined): string | null {
@@ -64,6 +66,7 @@ Deno.serve(async (req) => {
 
     let customerEmail = payload.customer_email;
     const customerPhone = toE164(payload.customer_phone);
+    const cancelledBy = payload.cancelled_by ?? "merchant";
 
     // Fallback: resolve customer email from profile if booking row did not capture email.
     if (!customerEmail && payload.customer_phone) {
@@ -160,7 +163,101 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
+    let merchantResult: { ok: boolean; body: string } = { ok: false, body: "merchant notification not required" };
+    if (cancelledBy === "customer") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const smsSenderForMerchant = Deno.env.get("BREVO_SMS_SENDER") ?? "Lokal";
+
+      if (supabaseUrl && serviceRoleKey) {
+        let resolvedStoreId = payload.store_id ?? null;
+        if (!resolvedStoreId) {
+          const bookingRes = await fetch(
+            `${supabaseUrl}/rest/v1/store_bookings?id=eq.${payload.booking_id}&select=store_id`,
+            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+          );
+          const bookingRows = await bookingRes.json();
+          resolvedStoreId = bookingRows?.[0]?.store_id ?? null;
+        }
+
+        if (resolvedStoreId) {
+          const storeRes = await fetch(
+            `${supabaseUrl}/rest/v1/stores?id=eq.${resolvedStoreId}&select=owner_id,phone,name`,
+            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+          );
+          const stores = await storeRes.json();
+          const ownerId = stores?.[0]?.owner_id;
+          const merchantPhone = toE164(stores?.[0]?.phone);
+          const merchantStoreName = stores?.[0]?.name ?? payload.store_name;
+
+          let merchantEmail: string | null = null;
+          if (ownerId) {
+            const userRes = await fetch(
+              `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
+              { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+            );
+            const user = await userRes.json();
+            merchantEmail = user?.email ?? user?.user?.email ?? null;
+          }
+
+          const merchantSmsText = [
+            `Booking cancelled by customer`,
+            `${merchantStoreName} • ${slotStr}`,
+            `${payload.customer_name}${payload.customer_phone ? ` • ${payload.customer_phone}` : ""}`,
+            payload.service ? `Service: ${payload.service}` : null,
+            `Open: https://lokalshops.co.uk/merchant`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const merchantHtml = `
+            <h2>Customer cancelled a booking</h2>
+            <p>A customer cancelled an appointment at <strong>${merchantStoreName}</strong>.</p>
+            <p><strong>Customer:</strong> ${payload.customer_name}</p>
+            ${payload.customer_phone ? `<p><strong>Phone:</strong> ${payload.customer_phone}</p>` : ""}
+            <p><strong>Date and time:</strong> ${slotStr}</p>
+            ${payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : ""}
+            ${payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : ""}
+            <p><a href="https://lokalshops.co.uk/merchant">Open Merchant Dashboard →</a></p>
+          `;
+
+          if (merchantPhone) {
+            const merchantSmsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+              method: "POST",
+              headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sender: smsSenderForMerchant,
+                recipient: merchantPhone,
+                content: merchantSmsText,
+                type: "transactional",
+                tag: "merchant-booking-cancelled-by-customer",
+              }),
+            });
+            merchantResult = { ok: merchantSmsRes.ok, body: await merchantSmsRes.text() };
+          }
+
+          if (!merchantResult.ok && merchantEmail) {
+            const merchantEmailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+              method: "POST",
+              headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sender: { email: emailFrom, name: "Lokal" },
+                to: [{ email: merchantEmail }],
+                subject: `Customer cancelled booking at ${merchantStoreName}`,
+                htmlContent: merchantHtml,
+              }),
+            });
+            merchantResult = { ok: merchantEmailRes.ok, body: await merchantEmailRes.text() };
+          }
+        } else {
+          merchantResult = { ok: false, body: "store not found for booking" };
+        }
+      } else {
+        merchantResult = { ok: false, body: "supabase env missing for merchant lookup" };
+      }
+    }
+
+    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult, merchant: merchantResult }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

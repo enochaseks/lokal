@@ -736,6 +736,22 @@ function MerchantPage() {
         });
       }
     }
+
+    if (status === "transfer_received") {
+      const order = orders.find((o) => o.id === orderId);
+      const store = stores.find((s) => s.id === order?.store_id);
+      if ((order?.customer_email || order?.customer_phone) && store) {
+        void supabase.functions.invoke("send-order-transfer-received", {
+          body: {
+            reference: order.reference,
+            store_name: store.name,
+            customer_email: order.customer_email,
+            customer_phone: order.customer_phone,
+            customer_name: order.customer_name,
+          },
+        });
+      }
+    }
   };
 
   const markOrderPaid = (id: string) => updateOrderStatus(id, "transfer_received");
@@ -1490,6 +1506,7 @@ function MerchantPage() {
                                               const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("send-booking-cancelled", {
                                                 body: {
                                                   booking_id: b.id,
+                                                  store_id: s.id,
                                                   store_name: s.name,
                                                   customer_name: b.customer_name,
                                                   customer_email: b.customer_email,
@@ -1497,6 +1514,7 @@ function MerchantPage() {
                                                   service: b.service,
                                                   staff_name: b.staff_name,
                                                   slot_start: b.slot_start,
+                                                  cancelled_by: "merchant",
                                                 },
                                               });
 

@@ -46,6 +46,18 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
+function getStoredCustomerId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("lokal_customer_profile");
+    if (!raw) return localStorage.getItem("lokal_customer_id");
+    const parsed = JSON.parse(raw) as { id?: string | null };
+    return parsed?.id ?? localStorage.getItem("lokal_customer_id");
+  } catch {
+    return localStorage.getItem("lokal_customer_id");
+  }
+}
+
 type ProductRow = {
   name: string;
   price: number;
@@ -243,6 +255,7 @@ function StoreDetail() {
   const instagramHref = buildInstagramUrl(store.instagram_handle);
   const tiktokHref = buildTikTokUrl(store.tiktok_handle);
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
+  const customerId = getStoredCustomerId();
   const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
   const availableDays = [...(store.store_availability ?? [])].sort((a, b) => a.day_of_week - b.day_of_week);
   const staffMembers = [...(store.store_staff ?? [])]
@@ -413,6 +426,7 @@ function StoreDetail() {
       }
       const { error } = await (supabase as any).from("orders").insert({
         store_id: store.id,
+        customer_id: customerId,
         reference,
         customer_name: customerName.trim(),
         customer_phone: normalizedOrderPhone,
@@ -478,26 +492,32 @@ function StoreDetail() {
 
     setSubmittingBooking(true);
     try {
-      const { error } = await (supabase as any).from("store_bookings").insert({
-        store_id: store.id,
-        customer_name: bookName.trim(),
-        customer_phone: normalizedBookPhone,
-        customer_email: bookEmail.trim() || null,
-        service: bookService || null,
-        staff_id: selectedStaff?.id ?? null,
-        staff_name: selectedStaff?.name ?? null,
-        staff_phone: selectedStaff?.phone ?? null,
-        slot_start: `${bookDate}T${bookTime}:00`,
-        slot_end: slotEnd,
-        status: "pending",
-        note: bookNote.trim() || null,
-      });
+      const { data: bookingRow, error } = await (supabase as any)
+        .from("store_bookings")
+        .insert({
+          store_id: store.id,
+          customer_id: customerId,
+          customer_name: bookName.trim(),
+          customer_phone: normalizedBookPhone,
+          customer_email: bookEmail.trim() || null,
+          service: bookService || null,
+          staff_id: selectedStaff?.id ?? null,
+          staff_name: selectedStaff?.name ?? null,
+          staff_phone: selectedStaff?.phone ?? null,
+          slot_start: `${bookDate}T${bookTime}:00`,
+          slot_end: slotEnd,
+          status: "pending",
+          note: bookNote.trim() || null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
 
       // Send confirmation to customer (fire-and-forget)
       if (bookEmail.trim()) {
         void supabase.functions.invoke("send-booking-customer-confirmation", {
           body: {
+            booking_id: bookingRow?.id ?? null,
             store_name: store.name,
             customer_name: bookName.trim(),
             customer_email: bookEmail.trim(),

@@ -48,6 +48,21 @@ function prettySlot(iso: string): string {
   })} at ${timePart.slice(0, 5)}`;
 }
 
+function normaliseBookingReference(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^BK-/i.test(trimmed)) return trimmed.replace(/^BK-/i, "").trim().toLowerCase();
+  return trimmed.toLowerCase();
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isShortHexRef(value: string): boolean {
+  return /^[0-9a-f]{8}$/i.test(value);
+}
+
 function BookingLookupPage() {
   const [bookingId, setBookingId] = useState("");
   const [phone, setPhone] = useState("");
@@ -68,20 +83,40 @@ function BookingLookupPage() {
   }, []);
 
   const lookup = async () => {
-    const cleanId = bookingId.trim();
+    const cleanRef = normaliseBookingReference(bookingId);
     const cleanPhone = phone.trim().replace(/\s/g, "");
-    if (!cleanId || !cleanPhone) return;
+    if (!cleanRef || !cleanPhone) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const { data, error: err } = await (supabase as any)
-        .from("store_bookings")
-        .select("id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)")
-        .eq("id", cleanId)
-        .maybeSingle();
+      let data: any = null;
+      let err: any = null;
+
+      if (isUuid(cleanRef)) {
+        const res = await (supabase as any)
+          .from("store_bookings")
+          .select("id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)")
+          .eq("id", cleanRef)
+          .maybeSingle();
+        data = res.data;
+        err = res.error;
+      } else if (isShortHexRef(cleanRef)) {
+        const phoneSuffix = cleanPhone.replace(/\D/g, "").slice(-9);
+        const res = await (supabase as any)
+          .from("store_bookings")
+          .select("id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)")
+          .ilike("customer_phone", `%${phoneSuffix}%`)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        err = res.error;
+        data = (res.data ?? []).find((b: any) => String(b.id).toLowerCase().startsWith(cleanRef)) ?? null;
+      } else {
+        setError("Invalid booking reference format. Use the full UUID or BK- reference from your email.");
+        return;
+      }
 
       if (err) throw err;
       if (!data) {
@@ -134,12 +169,15 @@ function BookingLookupPage() {
         void supabase.functions.invoke("send-booking-cancelled", {
           body: {
             booking_id: result.id,
+            store_id: result.store_id,
             store_name: result.store_name,
             customer_name: result.customer_name,
             customer_email: result.customer_email,
+            customer_phone: result.customer_phone,
             service: result.service,
             staff_name: result.staff_name,
             slot_start: result.slot_start,
+            cancelled_by: "customer",
           },
         });
       }
@@ -172,7 +210,7 @@ function BookingLookupPage() {
           <Input
             value={bookingId}
             onChange={(e) => setBookingId(e.target.value.trim())}
-            placeholder="Booking ID (e.g. a1b2c3d4-...)"
+            placeholder="Booking reference (e.g. BK-a1b2c3d4-... or full UUID)"
             className="font-mono text-sm"
           />
           <Input

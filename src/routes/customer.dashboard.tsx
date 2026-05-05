@@ -63,6 +63,8 @@ function CustomerDashboardPage() {
 
       const profile = JSON.parse(storedProfile);
       setProfile(profile);
+      const customerId = profile?.id as string | undefined;
+      const customerPhone = (profile?.phone as string | undefined)?.trim();
 
       // Check if user has a store (if logged in)
       if (user?.id) {
@@ -75,15 +77,36 @@ function CustomerDashboardPage() {
       }
 
       try {
-        // Load bookings
-        const { data: bookingsData, error: bookingsErr } = await (supabase as any)
-          .from("store_bookings")
-          .select("id, store_id, service, slot_start, status, staff_name, stores(name,category)")
-          .eq("customer_phone", profile.phone)
-          .order("slot_start", { ascending: true })
-          .limit(20);
+        // Load bookings by both customer_id and phone, then merge.
+        const [bookingsByIdRes, bookingsByPhoneRes] = await Promise.all([
+          customerId
+            ? (supabase as any)
+                .from("store_bookings")
+                .select("id, store_id, service, slot_start, status, staff_name, stores(name,category)")
+                .eq("customer_id", customerId)
+                .order("slot_start", { ascending: true })
+                .limit(40)
+            : Promise.resolve({ data: [], error: null }),
+          customerPhone
+            ? (supabase as any)
+                .from("store_bookings")
+                .select("id, store_id, service, slot_start, status, staff_name, stores(name,category)")
+                .eq("customer_phone", customerPhone)
+                .order("slot_start", { ascending: true })
+                .limit(40)
+            : Promise.resolve({ data: [], error: null }),
+        ]);
 
+        const bookingsErr = bookingsByIdRes.error ?? bookingsByPhoneRes.error;
         if (bookingsErr) throw bookingsErr;
+
+        const bookingsMap = new Map<string, any>();
+        [...(bookingsByIdRes.data ?? []), ...(bookingsByPhoneRes.data ?? [])].forEach((b: any) => {
+          if (b?.id) bookingsMap.set(b.id, b);
+        });
+        const bookingsData = Array.from(bookingsMap.values())
+          .sort((a: any, b: any) => String(a.slot_start).localeCompare(String(b.slot_start)))
+          .slice(0, 20);
 
         setBookings(
           bookingsData?.map((b: any) => ({
@@ -98,15 +121,36 @@ function CustomerDashboardPage() {
           })) ?? []
         );
 
-        // Load orders
-        const { data: ordersData, error: ordersErr } = await (supabase as any)
-          .from("orders")
-          .select("reference, store_id, total_gbp, status, created_at, items, stores(name,category)")
-          .eq("customer_phone", profile.phone)
-          .order("created_at", { ascending: false })
-          .limit(20);
+        // Load orders by both customer_id and phone, then merge.
+        const [ordersByIdRes, ordersByPhoneRes] = await Promise.all([
+          customerId
+            ? (supabase as any)
+                .from("orders")
+                .select("reference, store_id, total_gbp, status, created_at, items, stores(name,category)")
+                .eq("customer_id", customerId)
+                .order("created_at", { ascending: false })
+                .limit(40)
+            : Promise.resolve({ data: [], error: null }),
+          customerPhone
+            ? (supabase as any)
+                .from("orders")
+                .select("reference, store_id, total_gbp, status, created_at, items, stores(name,category)")
+                .eq("customer_phone", customerPhone)
+                .order("created_at", { ascending: false })
+                .limit(40)
+            : Promise.resolve({ data: [], error: null }),
+        ]);
 
+        const ordersErr = ordersByIdRes.error ?? ordersByPhoneRes.error;
         if (ordersErr) throw ordersErr;
+
+        const ordersMap = new Map<string, any>();
+        [...(ordersByIdRes.data ?? []), ...(ordersByPhoneRes.data ?? [])].forEach((o: any) => {
+          if (o?.reference) ordersMap.set(o.reference, o);
+        });
+        const ordersData = Array.from(ordersMap.values())
+          .sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)))
+          .slice(0, 20);
 
         setOrders(
           ordersData?.map((o: any) => ({
@@ -383,9 +427,18 @@ function CustomerDashboardPage() {
                         {slotDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
-                      {b.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
+                        {b.status}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate({ to: `/store/${b.store_id}` })}
+                      >
+                        Rebook
+                      </Button>
+                    </div>
                   </div>
                 );
               })}

@@ -67,33 +67,49 @@ function CustomerProfilePage() {
 
   const loadMostVisitedStore = async (customer: CustomerProfile) => {
     try {
-      const [ordersRes, bookingsRes] = await Promise.all([
-        customer.phone
+      const customerPhone = customer.phone?.trim();
+      const [ordersByIdRes, ordersByPhoneRes, bookingsByIdRes, bookingsByPhoneRes] = await Promise.all([
+        customer.id
           ? (supabase as any)
               .from("orders")
               .select("store_id, stores(id,name,category)")
-              .eq("customer_phone", customer.phone)
+              .eq("customer_id", customer.id)
               .limit(300)
-          : (supabase as any)
+          : Promise.resolve({ data: [], error: null }),
+        customerPhone
+          ? (supabase as any)
               .from("orders")
               .select("store_id, stores(id,name,category)")
-              .eq("customer_id", customer.id)
-              .limit(300),
-        customer.phone
+              .eq("customer_phone", customerPhone)
+              .limit(300)
+          : Promise.resolve({ data: [], error: null }),
+        customer.id
           ? (supabase as any)
               .from("store_bookings")
               .select("store_id, stores(id,name,category)")
-              .eq("customer_phone", customer.phone)
+              .eq("customer_id", customer.id)
               .limit(300)
-          : (supabase as any)
+          : Promise.resolve({ data: [], error: null }),
+        customerPhone
+          ? (supabase as any)
               .from("store_bookings")
               .select("store_id, stores(id,name,category)")
-              .eq("customer_id", customer.id)
-              .limit(300),
+              .eq("customer_phone", customerPhone)
+              .limit(300)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
+      const queryErr = ordersByIdRes.error ?? ordersByPhoneRes.error ?? bookingsByIdRes.error ?? bookingsByPhoneRes.error;
+      if (queryErr) throw queryErr;
+
+      const allRows = [
+        ...(ordersByIdRes.data ?? []),
+        ...(ordersByPhoneRes.data ?? []),
+        ...(bookingsByIdRes.data ?? []),
+        ...(bookingsByPhoneRes.data ?? []),
+      ] as any[];
+
       const counts = new Map<string, MostVisitedStore>();
-      const allRows = [...(ordersRes.data ?? []), ...(bookingsRes.data ?? [])] as any[];
       allRows.forEach((row) => {
         const storeId = row.store_id as string | null;
         const storeObj = Array.isArray(row.stores) ? row.stores[0] : row.stores;

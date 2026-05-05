@@ -1,9 +1,12 @@
+export {};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 type BookingCustomerConfirmationPayload = {
+  booking_id?: string | null;
   store_name: string;
   customer_name: string;
   customer_email: string;
@@ -48,19 +51,21 @@ Deno.serve(async (req) => {
     }
 
     const prettyTime = prettySlot(payload.slot_start);
+    const bookingReference = payload.booking_id ? `BK-${payload.booking_id}` : null;
 
     const emailBody = `
 Hi ${payload.customer_name},
 
 Your booking request with ${payload.store_name} has been received!
 
-**Booking details:**
+Booking details:
+- Booking reference: ${bookingReference ?? "Will be shared on confirmation"}
 - Service: ${payload.service || "General booking"}
 - Staff: ${payload.staff_name || "Any available"}
 - Date & time: ${prettyTime}
 - Your phone: ${payload.customer_phone}
 
-${payload.service?.toLowerCase().includes("hair") || payload.service?.toLowerCase().includes("beauty") ? `💳 **Important**: If a deposit was quoted, please arrange payment with the merchant before your appointment.` : ""}
+${payload.service?.toLowerCase().includes("hair") || payload.service?.toLowerCase().includes("beauty") ? `Important: If a deposit was quoted, please arrange payment with the merchant before your appointment.` : ""}
 
 ${payload.store_name} will contact you within 24 hours to confirm your appointment.
 
@@ -81,7 +86,9 @@ lokalshops.co.uk
       body: JSON.stringify({
         sender: { name: "Lokal", email: emailFrom },
         to: [{ email: payload.customer_email, name: payload.customer_name }],
-        subject: `Booking request received from ${payload.store_name}`,
+        subject: bookingReference
+          ? `Booking request ${bookingReference} from ${payload.store_name}`
+          : `Booking request from ${payload.store_name}`,
         htmlContent: emailBody.replace(/\n/g, "<br>"),
       }),
     });
