@@ -124,7 +124,10 @@ function TermsPage() {
             <p>
               We may suspend or terminate your access to Lokal at any time for breaches of these Terms
               or for any other reason at our discretion. Merchants may remove their listing at any time
-              by contacting us or through the merchant dashboard.
+              through the merchant dashboard. You may permanently delete your account and all associated
+              data at any time via the <strong className="text-foreground">Delete my account</strong> option
+              in the merchant dashboard. Existing order records are retained for 12 months after deletion
+              in accordance with our Privacy Policy.
             </p>
           </Section>
 

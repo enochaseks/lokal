@@ -105,7 +105,13 @@ function PrivacyPage() {
               <li>Data portability.</li>
             </ul>
             <p>
-              To exercise any of these rights, email <strong className="text-foreground">helplokal@gmail.com</strong>.
+              Merchants can permanently delete their account and all associated store data directly
+              from the <strong className="text-foreground">merchant dashboard</strong> at any time using
+              the <em>Delete my account</em> option. Order records are retained for 12 months after
+              deletion to support dispute resolution.
+            </p>
+            <p>
+              To exercise any other rights, email <strong className="text-foreground">helplokal@gmail.com</strong>.
               We will respond within 30 days. You also have the right to lodge a complaint with the
               <strong className="text-foreground"> Information Commissioner's Office (ICO)</strong> at ico.org.uk.
             </p>

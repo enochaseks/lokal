@@ -12,7 +12,7 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS } from "@/data/stores";
 import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
@@ -69,7 +69,7 @@ const storeSchema = z.object({
   postcode: z.string().trim().max(20).optional(),
   hours: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(40).optional(),
-  fulfillment: z.enum(["collection", "delivery", "both"]).default("collection"),
+  fulfillment: z.enum(["collection", "delivery", "both", "pay_at_store"]).default("collection"),
   image_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid URL").optional().or(z.literal("")),
   instagram_handle: z.string().trim().max(80).optional(),
   tiktok_handle: z.string().trim().max(80).optional(),
@@ -83,8 +83,9 @@ const bankSchema = z.object({
   bank_sort_code: z.string().trim().max(10).optional(),
 });
 
-type Product = { name: string; price: string; unit: string };
+type Product = { name: string; price: string; unit: string; deposit: string };
 type DayDraft = { day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number };
+type StaffDraft = { name: string; phone: string };
 
 function slugify(s: string) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) || "store";
@@ -96,16 +97,18 @@ function ListStorePage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [region, setRegion] = useState<"GB" | "NG" | "JM">("GB");
 
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
     description: "", address: "", city: "", postcode: "",
-    hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both", image_url: "",
-    instagram_handle: "", tiktok_handle: "", website_url: "",
+    hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
+    instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
-  const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "" }]);
+  const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "", deposit: "" }]);
   const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
+  const [staff, setStaff] = useState<StaffDraft[]>([]);
 
   useEffect(() => {
     // route guard handled by beforeLoad
@@ -131,7 +134,7 @@ function ListStorePage() {
     }
   };
 
-  const addProduct = () => setProducts((p) => [...p, { name: "", price: "", unit: "" }]);
+  const addProduct = () => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "" }]);
   const removeProduct = (i: number) => setProducts((p) => p.filter((_, idx) => idx !== i));
   const updateProduct = (i: number, key: keyof Product, value: string) =>
     setProducts((p) => p.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
@@ -151,7 +154,7 @@ function ListStorePage() {
     if (!user) return;
     const isBarber = isBookable(store.category);
     const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
-    if (!isBarber && validProducts.length === 0) { toast.error("Add at least one product"); return; }
+    if (validProducts.length === 0) { toast.error(`Add at least one ${isBarber ? "service" : "product"} before going live`); return; }
 
     setSubmitting(true);
     try {
@@ -161,11 +164,14 @@ function ListStorePage() {
         ...bankSchema.parse(bank),
         owner_id: user.id,
         slug,
+        region,
+        currency: REGIONS[region].currency,
         image_url: store.image_url || null,
         instagram_handle: normalizeInstagramHandle(store.instagram_handle),
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
         published: true,
+        location_type: isBookable(store.category) ? store.location_type : null,
       };
 
       const { data: newStore, error: storeErr } = await (supabase as any)
@@ -178,10 +184,25 @@ function ListStorePage() {
           name: p.name.trim().slice(0, 80),
           price: Number(p.price),
           unit: p.unit.trim() || null,
+          deposit: p.deposit.trim() ? Number(p.deposit) : null,
           position: i,
         }));
-        const { error: prodErr } = await supabase.from("store_products").insert(productRows);
+        const { error: prodErr } = await (supabase as any).from("store_products").insert(productRows);
         if (prodErr) throw prodErr;
+      }
+
+      if (isBarber) {
+        const validStaff = staff.filter((m) => m.name.trim());
+        if (validStaff.length > 0) {
+          const staffRows = validStaff.map((m, i) => ({
+            store_id: newStore.id,
+            name: m.name.trim(),
+            phone: m.phone.trim() || null,
+            active: true,
+            position: i,
+          }));
+          await (supabase as any).from("store_staff").insert(staffRows);
+        }
       }
 
       if (isBarber) {
@@ -247,6 +268,17 @@ function ListStorePage() {
               <h2 className="font-display text-2xl font-bold">Tell us about your store</h2>
 
               <div>
+                <Label>Your region *</Label>
+                <Select value={region} onValueChange={(v) => setRegion(v as "GB" | "NG" | "JM")}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(REGIONS).map(([code, info]) => <SelectItem key={code} value={code}>{info.name} ({info.symbol})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">This determines your currency and payment methods. Cannot be changed later.</p>
+              </div>
+
+              <div>
                 <Label>Store name *</Label>
                 <Input value={store.name} onChange={(e) => setStore({ ...store, name: e.target.value })} placeholder="Mama Adwoa's Pantry" maxLength={80} className="mt-1" />
               </div>
@@ -280,10 +312,24 @@ function ListStorePage() {
                     <SelectItem value="collection">🏪 Collection only</SelectItem>
                     <SelectItem value="delivery">🚚 Delivery only</SelectItem>
                     <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                    <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="mt-1.5 text-xs text-muted-foreground">How will customers receive their order? You arrange this directly with them.</p>
               </div>
+
+              {isBookable(store.category) && (
+                <div>
+                  <Label>Where do you offer services?</Label>
+                  <Select value={store.location_type} onValueChange={(v) => setStore({ ...store, location_type: v as any })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="salon">🏠 At my salon / premises</SelectItem>
+                      <SelectItem value="travel">🚗 We travel to you</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
                 <Label>Description</Label>
@@ -360,8 +406,15 @@ function ListStorePage() {
           {step === 2 && (
             <div className="space-y-4">
               <div>
-                <h2 className="font-display text-2xl font-bold">Where should customers pay?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Customers send payment directly to this account. Lokal never holds your money.</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display text-2xl font-bold">Where should customers pay?</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Customers send payment directly to this account. Lokal never holds your money.</p>
+                  </div>
+                  <div className="rounded-lg bg-secondary px-3 py-2 text-sm font-medium">
+                    {REGIONS[region].symbol} {REGIONS[region].currency}
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm">
@@ -370,21 +423,35 @@ function ListStorePage() {
 
               <div>
                 <Label>Bank name *</Label>
-                <Input value={bank.bank_name} onChange={(e) => setBank({ ...bank, bank_name: e.target.value })} placeholder="Barclays" maxLength={60} className="mt-1" />
+                <Input value={bank.bank_name} onChange={(e) => setBank({ ...bank, bank_name: e.target.value })} placeholder={region === "NG" ? "First Bank" : "Barclays"} maxLength={60} className="mt-1" />
               </div>
               <div>
                 <Label>Account name *</Label>
-                <Input value={bank.bank_account_name} onChange={(e) => setBank({ ...bank, bank_account_name: e.target.value })} placeholder="Adwoa Mensah Ltd" maxLength={80} className="mt-1" />
+                <Input value={bank.bank_account_name} onChange={(e) => setBank({ ...bank, bank_account_name: e.target.value })} placeholder="Business Name Ltd" maxLength={80} className="mt-1" />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label>Account number *</Label>
-                  <Input value={bank.bank_account_number} onChange={(e) => setBank({ ...bank, bank_account_number: e.target.value.replace(/\D/g, "") })} placeholder="20451887" inputMode="numeric" maxLength={20} className="mt-1 font-mono" />
+                  <Input value={bank.bank_account_number} onChange={(e) => setBank({ ...bank, bank_account_number: e.target.value.replace(/\D/g, "") })} placeholder={region === "NG" ? "1234567890" : "20451887"} inputMode="numeric" maxLength={20} className="mt-1 font-mono" />
                 </div>
-                <div>
-                  <Label>Sort code</Label>
-                  <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="20-00-00" maxLength={10} className="mt-1 font-mono" />
-                </div>
+                {region === "GB" && (
+                  <div>
+                    <Label>Sort code</Label>
+                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="20-00-00" maxLength={10} className="mt-1 font-mono" />
+                  </div>
+                )}
+                {region === "NG" && (
+                  <div>
+                    <Label>Bank code (SWIFT)</Label>
+                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="WEMA code" maxLength={10} className="mt-1 font-mono" />
+                  </div>
+                )}
+                {region === "JM" && (
+                  <div>
+                    <Label>Branch / Routing number</Label>
+                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="Branch code" maxLength={10} className="mt-1 font-mono" />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -409,13 +476,25 @@ function ListStorePage() {
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Services</p>
                     <div className="space-y-3">
                       {products.map((p, i) => (
-                        <div key={i} className="grid grid-cols-12 gap-2">
-                          <Input className="col-span-6" placeholder="Service name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
-                          <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
-                          <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
-                          <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                    <div key={i} className="space-y-1">
+                          <div className="grid grid-cols-12 gap-2">
+                            <Input className="col-span-6" placeholder="Service name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
+                            <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
+                            <Input className="col-span-2" placeholder="e.g. 30 min" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
+                            <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {store.category === "Hair & Beauty" && (
+                            <div className="flex items-center gap-2 pl-1">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
+                              <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => updateProduct(i, "deposit", e.target.value.replace(/[^0-9.]/g, ""))} />
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 pl-1">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
+                            <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => updateProduct(i, "deposit", e.target.value.replace(/[^0-9.]/g, ""))} />
+                          </div>
                         </div>
                       ))}
                       <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">
@@ -482,6 +561,30 @@ function ListStorePage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Team members</p>
+                      <Button size="sm" variant="outline" onClick={() => setStaff((s) => [...s, { name: "", phone: "" }])} className="gap-1">
+                        <Plus className="h-3 w-3" /> Add member
+                      </Button>
+                    </div>
+                    {staff.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Optional — add team members to allow per-staff bookings.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {staff.map((m, i) => (
+                          <div key={i} className="flex gap-2">
+                            <Input placeholder="Name" value={m.name} onChange={(e) => setStaff((s) => s.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={60} className="flex-1" />
+                            <Input placeholder="Phone (optional)" value={m.phone} onChange={(e) => setStaff((s) => s.map((x, idx) => idx === i ? { ...x, phone: e.target.value } : x))} maxLength={40} className="flex-1" />
+                            <Button variant="ghost" size="icon" className="text-muted-foreground shrink-0" onClick={() => setStaff((s) => s.filter((_, idx) => idx !== i))}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (

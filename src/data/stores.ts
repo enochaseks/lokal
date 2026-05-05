@@ -6,6 +6,13 @@ export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & 
 
 /** Categories that use the booking/schedule system instead of an order basket */
 export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
+
+export const REGIONS = {
+  GB: { name: "United Kingdom", currency: "GBP", symbol: "£" },
+  NG: { name: "Nigeria", currency: "NGN", symbol: "₦" },
+  JM: { name: "Jamaica", currency: "JMD", symbol: "J$" },
+} as const;
+export type Region = keyof typeof REGIONS;
 export type LiveCategory = (typeof LIVE_CATEGORIES)[number];
 
 export const LIVE_ORIGINS = [
@@ -36,6 +43,7 @@ export type Product = {
   name: string;
   price: number;
   unit?: string;
+  deposit?: number | null;
 };
 
 export type Store = {
@@ -53,10 +61,12 @@ export type Store = {
   phone: string;
   image: string;
   description: string;
-  fulfillment: "collection" | "delivery" | "both";
+  fulfillment: "collection" | "delivery" | "both" | "pay_at_store";
+  location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
   instagramHandle?: string;
   tiktokHandle?: string;
   websiteUrl?: string;
+  region?: Region;
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
   deposit_amount?: number | null;

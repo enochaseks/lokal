@@ -78,3 +78,29 @@ export function buildTikTokUrl(handle: string | null | undefined): string | null
   const normalized = normalizeTikTokHandle(handle);
   return normalized ? `https://www.tiktok.com/@${normalized}` : null;
 }
+
+export function formatCurrency(amount: number, currency: string = 'USD'): string {
+  const currencyMap: Record<string, { symbol: string; locale: string }> = {
+    'USD': { symbol: '$', locale: 'en-US' },
+    'EUR': { symbol: '€', locale: 'en-DE' },
+    'GBP': { symbol: '£', locale: 'en-GB' },
+    'INR': { symbol: '₹', locale: 'en-IN' },
+    'JPY': { symbol: '¥', locale: 'ja-JP' },
+    'CNY': { symbol: '¥', locale: 'zh-CN' },
+    'KRW': { symbol: '₩', locale: 'ko-KR' },
+  };
+
+  const config = currencyMap[currency] || { symbol: currency, locale: 'en-US' };
+  
+  try {
+    return new Intl.NumberFormat(config.locale, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Fallback if currency is not recognized by Intl
+    return `${config.symbol}${amount.toLocaleString()}`;
+  }
+}

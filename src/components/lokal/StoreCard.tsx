@@ -30,11 +30,30 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
         <div className="mt-auto flex items-center gap-1.5 pt-2 text-[11px]">
-          {(store.fulfillment === "collection" || store.fulfillment === "both") && (
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">🏪 Collection</span>
+          {store.location_type === "travel" && (
+            <span className="rounded-full bg-purple-100 px-2 py-0.5 font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">🚗 Travels to you</span>
           )}
-          {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">🚚 Delivery</span>
+          {store.location_type === "remote" && (
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">💻 Remote</span>
+          )}
+          {store.location_type === "remote_and_travel" && (
+            <>
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">💻 Remote</span>
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">🚗 Travels to you</span>
+            </>
+          )}
+          {(!store.location_type || store.location_type === "salon") && (
+            <>
+              {(store.fulfillment === "collection" || store.fulfillment === "both") && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">🏪 Collection</span>
+              )}
+              {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
+                <span className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">🚚 Delivery</span>
+              )}
+              {store.fulfillment === "pay_at_store" && (
+                <span className="rounded-full bg-yellow-100 px-2 py-0.5 font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">💰 Pay at store</span>
+              )}
+            </>
           )}
         </div>
         <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">

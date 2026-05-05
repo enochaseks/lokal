@@ -99,6 +99,7 @@ function generateTimeSlots(startTime: string, endTime: string, durationMins: num
 
 export function StoreDialog({ store, open, onOpenChange }: { store: Store | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const [step, setStep] = useState<"browse" | "arrange" | "transfer">("browse");
+  const [bookingDepositDue, setBookingDepositDue] = useState<{ amount: number; service: string | null } | null>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -554,6 +555,21 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       });
       if (error) throw error;
 
+      // Send confirmation to customer (fire-and-forget)
+      if (bookEmail.trim()) {
+        void supabase.functions.invoke("send-booking-customer-confirmation", {
+          body: {
+            store_name: store!.name,
+            customer_name: bookName.trim(),
+            customer_email: bookEmail.trim(),
+            service: bookService || null,
+            staff_name: selectedStaff?.name ?? null,
+            slot_start: `${bookDate}T${bookTime}:00`,
+            customer_phone: normalizedBookPhone,
+          },
+        });
+      }
+
       // Notify the merchant by email + SMS (fire-and-forget)
       void supabase.functions.invoke("send-booking-alert", {
         body: {
@@ -570,11 +586,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       });
 
       const prettyDate = new Date(y, mo - 1, d).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-      toast.success("Appointment requested!", {
-        description: `${store!.name} will confirm your ${bookTime} slot on ${prettyDate}.`,
-        duration: 8000,
-      });
+      const serviceDeposit = bookService ? store!.products?.find((p) => p.name === bookService)?.deposit : undefined;
+      const depositAmount = serviceDeposit ?? store!.deposit_amount ?? null;
+      if (depositAmount) {
+        setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
+      } else {
+        toast.success("Appointment requested!", {
+          description: `${store!.name} will confirm your ${bookTime} slot on ${prettyDate}.`,
+          duration: 8000,
+        });
+      }
       setShowBookingForm(false);
+      if (bookingDepositDue) {
+        // keep dialog open — deposit panel shows
+      }
       setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
       setSlotCounts((prev) => ({ ...prev, [bookTime]: (prev[bookTime] ?? 0) + 1 }));
       if (selectedStaff?.id) {
@@ -710,6 +735,24 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             <>
               {isBookable(store.category) ? (
                 <>
+                  {bookingDepositDue && (
+                    <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+                      <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
+                      <p className="mt-1 text-sm text-amber-800">
+                        To confirm your appointment, send a deposit of <strong>£{bookingDepositDue.amount.toFixed(2)}</strong>
+                        {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""} to:
+                      </p>
+                      <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
+                        <div><span className="text-amber-600 not-italic">Bank: </span>{store.bank.name}</div>
+                        <div><span className="text-amber-600 not-italic">Name: </span>{store.bank.accountName}</div>
+                        <div><span className="text-amber-600 not-italic">Account: </span>{store.bank.accountNumber}</div>
+                        {store.bank.sortCode && <div><span className="text-amber-600 not-italic">Sort code: </span>{store.bank.sortCode}</div>}
+                      </div>
+                      <Button size="sm" variant="outline" className="mt-3 border-amber-300 text-amber-800 hover:bg-amber-100" onClick={() => setBookingDepositDue(null)}>
+                        Book another appointment
+                      </Button>
+                    </div>
+                  )}
                   {store.products.length > 0 && (
                     <>
                       <h4 className="mt-6 font-display text-xl font-bold">Services</h4>
@@ -800,16 +843,40 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                               <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading slots…</div>
                             ) : (() => {
                               const [yr, mo, dy] = bookDate.split("-").map(Number);
-                              const avail = bookAvailability.find((a) => a.day_of_week === new Date(yr, mo - 1, dy).getDay());
+                              const dayOfWeek = new Date(yr, mo - 1, dy).getDay();
+                              const avail = bookAvailability.find((a) => a.day_of_week === dayOfWeek);
                               if (!avail) return null;
                               const allSlots = generateTimeSlots(avail.start_time.slice(0, 5), avail.end_time.slice(0, 5), avail.slot_duration_mins);
-                              const freeSlots = allSlots.filter((s) => (slotCounts[s] ?? 0) < (avail.max_bookings_per_slot ?? 1));
-                              if (freeSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No slots left on this day — try another date.</p>;
+                              
+                              // Check if date is today
+                              const now = new Date();
+                              const today = now.toISOString().split("T")[0];
+                              const isToday = bookDate === today;
+                              const currentHour = now.getHours();
+                              const currentMinute = now.getMinutes();
+
+                              // Mark slots as disabled if full or in the past
+                              const slotDisabled = (s: string) => {
+                                const isFull = (slotCounts[s] ?? 0) >= (avail.max_bookings_per_slot ?? 1);
+                                const isPast = isToday && s < `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+                                return isFull || isPast;
+                              };
+                              
+                              const availableSlots = allSlots.filter((s) => !slotDisabled(s));
+                              if (availableSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No available slots on this day — try another date.</p>;
                               return (
                                 <Select value={bookTime} onValueChange={setBookTime}>
                                   <SelectTrigger className="mt-1"><SelectValue placeholder="Pick a time" /></SelectTrigger>
                                   <SelectContent>
-                                    {freeSlots.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                    {allSlots.map((s) => {
+                                      const isFull = (slotCounts[s] ?? 0) >= (avail.max_bookings_per_slot ?? 1);
+                                      const isPast = isToday && s < `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+                                      return (
+                                        <SelectItem key={s} value={s} disabled={isFull || isPast}>
+                                          {s}{isFull && " (Full)"}{isPast && " (Passed)"}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                               );
@@ -842,11 +909,23 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                           <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
                           <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} placeholder="Any special requests?" rows={2} className="mt-1" />
                         </div>
-                        {store.deposit_amount && (
-                          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                            💳 A deposit of <strong>£{Number(store.deposit_amount).toFixed(2)}</strong> is required. The merchant will contact you with payment details.
-                          </div>
-                        )}
+                        {(() => {
+                            const serviceDeposit = bookService
+                              ? store.products?.find((p) => p.name === bookService)?.deposit
+                              : undefined;
+                            const depositAmount = serviceDeposit ?? store.deposit_amount;
+                            return depositAmount ? (
+                              <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                                💳 A deposit of <strong>£{Number(depositAmount).toFixed(2)}</strong> is required. Please send it to:
+                                <div className="mt-2 space-y-1 text-xs font-mono">
+                                  <div><span className="text-amber-600">Bank: </span>{store.bank.name}</div>
+                                  <div><span className="text-amber-600">Name: </span>{store.bank.accountName}</div>
+                                  <div><span className="text-amber-600">Account: </span>{store.bank.accountNumber}</div>
+                                  {store.bank.sortCode && <div><span className="text-amber-600">Sort code: </span>{store.bank.sortCode}</div>}
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
                         <Button
                           size="sm"
                           disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0)))}

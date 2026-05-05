@@ -20,6 +20,7 @@ type ProductRow = {
   price: number;
   unit: string | null;
   position: number;
+  deposit?: number | null;
 };
 
 type AvailabilityRow = {
@@ -62,6 +63,10 @@ type StoreDetails = {
   store_staff: StaffRow[] | null;
   staff_reviews: Array<{ staff_id: string; rating: number }> | null;
   deposit_amount?: number | null;
+  bank_name: string | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
+  bank_sort_code: string | null;
 };
 
 const isBookable = (category: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(category);
@@ -114,7 +119,7 @@ export const Route = createFileRoute("/store/$id")({
   loader: async ({ params }) => {
     const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*, store_products(name,price,unit,position), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
+      .select("*, store_products(name,price,unit,position,deposit), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
       .eq("id", params.id)
       .limit(1);
 
@@ -170,6 +175,7 @@ function StoreDetail() {
   const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [bookingDepositDue, setBookingDepositDue] = useState<{ amount: number; service: string | null } | null>(null);
 
   // Email for post-appointment rating link
   const [bookEmail, setBookEmail] = useState("");
@@ -224,8 +230,26 @@ function StoreDetail() {
         selectedDayAvailability.start_time.slice(0, 5),
         selectedDayAvailability.end_time.slice(0, 5),
         selectedDayAvailability.slot_duration_mins,
-      ).filter((slot) => (slotCounts[slot] ?? 0) < (selectedDayAvailability.max_bookings_per_slot ?? 1))
+      )
     : [];
+
+  // Check if date is today
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const isToday = bookDate === today;
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+
+  // Mark slots as disabled if full or in the past
+  const slotStatus = freeSlots.reduce(
+    (acc, slot) => {
+      const isFull = (slotCounts[slot] ?? 0) >= (selectedDayAvailability?.max_bookings_per_slot ?? 1);
+      const isPast = isToday && slot < `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+      acc[slot] = { disabled: isFull || isPast, reason: isFull ? "full" : isPast ? "past" : "" };
+      return acc;
+    },
+    {} as Record<string, { disabled: boolean; reason: string }>
+  );
 
   useEffect(() => {
     if (!bookDate) {
@@ -391,10 +415,31 @@ function StoreDetail() {
       });
       if (error) throw error;
 
+      // Send confirmation to customer (fire-and-forget)
+      if (bookEmail.trim()) {
+        void supabase.functions.invoke("send-booking-customer-confirmation", {
+          body: {
+            store_name: store.name,
+            customer_name: bookName.trim(),
+            customer_email: bookEmail.trim(),
+            service: bookService || null,
+            staff_name: selectedStaff?.name ?? null,
+            slot_start: `${bookDate}T${bookTime}:00`,
+            customer_phone: bookPhone.trim(),
+          },
+        });
+      }
+
       toast.success("Booking request sent", {
         description: `${store.name} will confirm your appointment soon.`,
         duration: 8000,
       });
+
+      const serviceDeposit = bookService ? store.store_products?.find((p) => p.name === bookService)?.deposit : undefined;
+      const depositAmount = serviceDeposit ?? store.deposit_amount ?? null;
+      if (depositAmount) {
+        setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
+      }
 
       setBookService("");
       setBookStaffId("");
@@ -482,6 +527,24 @@ function StoreDetail() {
             {isBookable(store.category) ? (
               <div className="space-y-4">
                 <h2 className="font-display text-2xl font-bold">Book with this store</h2>
+                {bookingDepositDue && (
+                  <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+                    <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
+                    <p className="mt-1 text-sm text-amber-800">
+                      To confirm your appointment, send a deposit of <strong>£{bookingDepositDue.amount.toFixed(2)}</strong>
+                      {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""} to:
+                    </p>
+                    <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
+                      <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
+                      <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
+                      <div><span className="text-amber-600">Account: </span>{store.bank_account_number ?? "—"}</div>
+                      {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
+                    </div>
+                    <button className="mt-3 text-sm text-amber-800 underline" onClick={() => setBookingDepositDue(null)}>
+                      Book another appointment
+                    </button>
+                  </div>
+                )}
                 {products.length > 0 && (
                   <div>
                     <p className="mb-2 text-sm font-medium">Services</p>
@@ -574,12 +637,17 @@ function StoreDetail() {
                         <select
                           value={bookTime}
                           onChange={(e) => setBookTime(e.target.value)}
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
                         >
                           <option value="">Choose a slot</option>
-                          {freeSlots.map((slot) => (
-                            <option key={slot} value={slot}>{slot}</option>
-                          ))}
+                          {freeSlots.map((slot) => {
+                            const status = slotStatus[slot];
+                            return (
+                              <option key={slot} value={slot} disabled={status.disabled}>
+                                {slot}{status.disabled && status.reason === "full" ? " (Full)" : ""}{status.disabled && status.reason === "past" ? " (Passed)" : ""}
+                              </option>
+                            );
+                          })}
                         </select>
                       )}
                     </div>
@@ -599,11 +667,23 @@ function StoreDetail() {
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Note (optional)</p>
                       <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} rows={2} placeholder="Anything the merchant should know?" />
                     </div>
-                    {store.deposit_amount && (
-                      <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                        💳 A deposit of <strong>£{Number(store.deposit_amount).toFixed(2)}</strong> is required to confirm this appointment. The merchant will contact you with payment details.
-                      </div>
-                    )}
+                    {(() => {
+                        const serviceDeposit = bookService
+                          ? store.store_products?.find((p) => p.name === bookService)?.deposit
+                          : undefined;
+                        const depositAmount = serviceDeposit ?? store.deposit_amount;
+                        return depositAmount ? (
+                          <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                            💳 A deposit of <strong>£{Number(depositAmount).toFixed(2)}</strong> is required to confirm this appointment. Please send it to:
+                            <div className="mt-2 space-y-1 text-xs font-mono">
+                              <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
+                              <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
+                              <div><span className="text-amber-600">Account: </span>{store.bank_account_number ?? "—"}</div>
+                              {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
                     <div className="sm:col-span-2">
                       <Button
                         onClick={handleBook}
@@ -713,7 +793,7 @@ function StoreDetail() {
                 </div>
               )}
 
-              {store.fulfillment && (
+              {store.fulfillment && !isBookable(store.category) && (
                 <div className="pt-3 border-t border-border">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fulfilment</p>
                   <div className="flex flex-wrap gap-2">
@@ -726,6 +806,19 @@ function StoreDetail() {
                       <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
                         🚚 Delivery
                       </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {isBookable(store.category) && (store as any).location_type && (store as any).location_type !== "salon" && (
+                <div className="pt-3 border-t border-border">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Service location</p>
+                  <div className="flex flex-wrap gap-2">
+                    {((store as any).location_type === "travel" || (store as any).location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">🚗 We travel to you</span>
+                    )}
+                    {((store as any).location_type === "remote" || (store as any).location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">💻 Remote / online</span>
                     )}
                   </div>
                 </div>

@@ -81,7 +81,7 @@ function FollowingPage() {
         supabase
           .from("stores")
           .select(
-            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)",
+            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)",
           )
           .in("id", ids)
           .eq("published", true),
@@ -109,7 +109,8 @@ function FollowingPage() {
             address: [row.address, row.city].filter(Boolean).join(", ") || "Address on request",
             hours: row.hours || "Hours on request",
             phone: row.phone || "—",
-            fulfillment: (row.fulfillment as "collection" | "delivery" | "both") || "collection",
+            fulfillment: (row.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") || "collection",
+            location_type: (row.location_type as Store["location_type"]) ?? null,
             image: getImageUrl(row.image_url) || storePlaceholder,
             description: row.description || "A new Lokal merchant.",
             instagramHandle: row.instagram_handle || undefined,

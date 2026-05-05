@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate, Link, redirect, useRouter } from "@tansta
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
-import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
+import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS } from "@/data/stores";
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
@@ -55,6 +55,7 @@ type StoreRow = {
   bank_name: string | null; bank_account_name: string | null;
   bank_account_number: string | null; bank_sort_code: string | null;
   deposit_amount?: number | null;
+  region: string | null; currency: string | null;
 };
 
 type OrderRow = {
@@ -150,7 +151,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; deposit_amount: string }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
@@ -158,18 +159,20 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     hours: store.hours ?? "", phone: store.phone ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
-    deposit_amount: store.deposit_amount != null ? String(store.deposit_amount) : "",
+    location_type: (store as any).location_type ?? "salon",
+    region: store.region ?? "GB",
+    currency: store.currency ?? "GBP",
   });
-  const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string }>>([]);
+  const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    supabase.from("store_products").select("id,name,price,unit").eq("store_id", store.id).order("position")
+    supabase.from("store_products").select("id,name,price,unit,deposit").eq("store_id", store.id).order("position")
       .then(({ data }) => {
-        setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "" })));
+        setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "" })));
         setLoadingProducts(false);
       });
     if (isBookable(store.category)) {
@@ -220,20 +223,27 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         origin: form.origin, description: n(form.description),
         address: n(form.address), city: n(form.city), postcode: n(form.postcode),
         hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
+        location_type: isBookable(form.category) ? (form.location_type || null) : null,
         instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
         bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
-        deposit_amount: form.deposit_amount.trim() ? Number(form.deposit_amount) : null,
+        region: form.region, currency: form.currency,
       }).eq("id", store.id);
       if (storeErr) throw storeErr;
 
       const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
       await supabase.from("store_products").delete().eq("store_id", store.id);
       if (validProducts.length > 0) {
-        const { error: prodErr } = await supabase.from("store_products").insert(
-          validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, position: i }))
+        const { error: prodErr } = await (supabase as any).from("store_products").insert(
+          validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, deposit: p.deposit.trim() ? Number(p.deposit) : null, position: i }))
         );
         if (prodErr) throw prodErr;
+
+        // Auto-publish if adding products to unpublished store
+        if (!store.published) {
+          const { error: pubErr } = await supabase.from("stores").update({ published: true }).eq("id", store.id);
+          if (pubErr) throw pubErr;
+        }
       }
 
       if (isBookable(form.category)) {
@@ -247,7 +257,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), deposit_amount: form.deposit_amount.trim() ? Number(form.deposit_amount) : null });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -312,9 +322,43 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                     <SelectItem value="collection">🏪 Collection only</SelectItem>
                     <SelectItem value="delivery">🚚 Delivery only</SelectItem>
                     <SelectItem value="both">🏪🚚 Collection &amp; Delivery</SelectItem>
+                    <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
+              </div>
+              {isBookable(form.category) && (
+                <div className="sm:col-span-2">
+                  <Label>Where do you offer services?</Label>
+                  <Select value={form.location_type} onValueChange={(v) => setForm((f) => ({ ...f, location_type: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="salon">🏠 At my salon / premises</SelectItem>
+                      <SelectItem value="travel">🚗 We travel to you</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Region &amp; currency</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><Label>Region</Label>
+                <Select value={form.region} onValueChange={(v) => setForm((f) => ({ ...f, region: v, currency: REGIONS[v as keyof typeof REGIONS]?.currency || f.currency }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(REGIONS).map(([key, region]) => (
+                      <SelectItem key={key} value={key}>{region.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Currency</Label>
+                <div className="mt-1 flex items-center justify-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">{REGIONS[form.region as keyof typeof REGIONS]?.symbol || "£"} {form.currency}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -322,49 +366,46 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bank details</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><Label>Bank name</Label><Input value={form.bank_name} onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))} maxLength={60} className="mt-1" /></div>
-              <div><Label>Account name</Label><Input value={form.bank_account_name} onChange={(e) => setForm((f) => ({ ...f, bank_account_name: e.target.value }))} maxLength={80} className="mt-1" /></div>
-              <div><Label>Account number</Label><Input value={form.bank_account_number} onChange={(e) => setForm((f) => ({ ...f, bank_account_number: e.target.value.replace(/\D/g, "") }))} inputMode="numeric" maxLength={20} className="mt-1 font-mono" /></div>
-              <div><Label>Sort code</Label><Input value={form.bank_sort_code} onChange={(e) => setForm((f) => ({ ...f, bank_sort_code: e.target.value }))} maxLength={10} className="mt-1 font-mono" /></div>
+              <div><Label>Bank name</Label><Input value={form.bank_name} onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))} placeholder={form.region === "NG" ? "First Bank" : form.region === "JM" ? "NCB" : "Barclays"} maxLength={60} className="mt-1" /></div>
+              <div><Label>Account name</Label><Input value={form.bank_account_name} onChange={(e) => setForm((f) => ({ ...f, bank_account_name: e.target.value }))} placeholder="Business Name" maxLength={80} className="mt-1" /></div>
+              <div><Label>Account number</Label><Input value={form.bank_account_number} onChange={(e) => setForm((f) => ({ ...f, bank_account_number: e.target.value.replace(/\D/g, "") }))} inputMode="numeric" placeholder={form.region === "NG" ? "1234567890" : form.region === "JM" ? "00012345678" : "20451887"} maxLength={20} className="mt-1 font-mono" /></div>
+              <div>
+                <Label>{form.region === "NG" ? "Bank code (SWIFT)" : form.region === "JM" ? "Branch / Routing number" : "Sort code"}</Label>
+                <Input value={form.bank_sort_code} onChange={(e) => setForm((f) => ({ ...f, bank_sort_code: e.target.value }))} placeholder={form.region === "NG" ? "WEMA code" : form.region === "JM" ? "Branch code" : "20-00-00"} maxLength={10} className="mt-1 font-mono" />
+              </div>
             </div>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isBookable(form.category) ? "Services" : "Products"}</p>
-              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isBookable(form.category) ? "Add service" : "Add"}</Button>
+              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isBookable(form.category) ? "Add service" : "Add"}</Button>
             </div>
             {loadingProducts ? <p className="text-sm text-muted-foreground">Loading…</p> : (
               <div className="space-y-2">
                 {products.map((p, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-5" placeholder={isBookable(form.category) ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
-                    <Input className="col-span-3 font-mono" placeholder="£0.00" value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
-                    <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
-                    <button onClick={() => setProducts((prev) => prev.filter((_, idx) => idx !== i))} className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                  <div key={i} className="space-y-1">
+                    <div className="grid grid-cols-12 gap-2">
+                      <Input className={isBookable(form.category) ? "col-span-6" : "col-span-5"} placeholder={isBookable(form.category) ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
+                      <Input className="col-span-3 font-mono" placeholder="£0.00" value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
+                      {isBookable(form.category)
+                        ? <Input className="col-span-2" placeholder="e.g. 30 min" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
+                        : <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
+                      }
+                      <button onClick={() => setProducts((prev) => prev.filter((_, idx) => idx !== i))} className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    {form.category === "Hair & Beauty" && (
+                      <div className="flex items-center gap-2 pl-1">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
+                        <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, deposit: e.target.value.replace(/[^0-9.]/g, "") } : x))} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
-          {isBookable(form.category) && (
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking settings</p>
-              <div>
-                <Label>Deposit amount (£)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={form.deposit_amount}
-                  onChange={(e) => setForm((f) => ({ ...f, deposit_amount: e.target.value }))}
-                  placeholder="Leave blank if no deposit required"
-                  className="mt-1 font-mono"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">Customers will be shown this amount as a required deposit when booking.</p>
-              </div>
-            </div>
-          )}
+
           {isBookable(form.category) && (
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
@@ -434,6 +475,7 @@ function MerchantPage() {
   const [editingStore, setEditingStore] = useState<StoreRow | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [storeAvailability, setStoreAvailability] = useState<AvailabilityRow[]>([]);
   const [storeStaff, setStoreStaff] = useState<StaffRow[]>([]);
@@ -518,7 +560,7 @@ function MerchantPage() {
         .channel("merchant-realtime")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
           setOrders((prev) => [payload.new as OrderRow, ...prev]);
-          toast("New order received!", { description: `${(payload.new as OrderRow).reference} — £${Number((payload.new as OrderRow).total_gbp).toFixed(2)}` });
+          toast("New order received!", { description: `${(payload.new as OrderRow).reference} — ${formatCurrency(Number((payload.new as OrderRow).total_gbp), getOrderCurrency((payload.new as OrderRow).store_id))}` });
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
           setOrders((prev) => prev.map((o) => o.id === (payload.new as OrderRow).id ? payload.new as OrderRow : o));
@@ -549,25 +591,40 @@ function MerchantPage() {
   }, [tab, messages]);
 
   const togglePublish = async (s: StoreRow) => {
+    if (!s.published) {
+      const { count } = await supabase.from("store_products").select("id", { count: "exact", head: true }).eq("store_id", s.id);
+      if (!count || count === 0) {
+        toast.error("Add at least one product or service before publishing");
+        return;
+      }
+    }
     const { error } = await supabase.from("stores").update({ published: !s.published }).eq("id", s.id);
     if (error) return toast.error(error.message);
     setStores((prev) => prev.map((x) => (x.id === s.id ? { ...x, published: !s.published } : x)));
-    toast.success(s.published ? "Store hidden" : "Store published");
+    if (!s.published) {
+      toast.success(`🎉 CONGRATULATIONS! ${s.name} is now live on Lokal!`, {
+        description: "Customers can now find and order from your store.",
+        duration: 6000,
+      });
+    } else {
+      toast.success("Store hidden");
+    }
   };
 
-  const deleteStore = async (id: string) => {
+  const deleteAccount = async () => {
     setDeleting(true);
     try {
-      const { error } = await supabase.from("stores").delete().eq("id", id);
+      await supabase.auth.signOut();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabaseAny = supabase as any;
+      const { error } = await supabaseAny.rpc("delete_user_account");
       if (error) throw error;
-      setStores((prev) => prev.filter((x) => x.id !== id));
-      setOrders((prev) => prev.filter((o) => o.store_id !== id));
-      toast.success("Store deleted");
+      window.location.href = "/";
     } catch (e: any) {
-      toast.error(e.message ?? "Could not delete store");
+      toast.error(e.message ?? "Could not delete account. Please email helplokal@gmail.com");
     } finally {
       setDeleting(false);
-      setConfirmDeleteId(null);
+      setConfirmDeleteAccount(false);
     }
   };
 
@@ -602,6 +659,9 @@ function MerchantPage() {
 
   const markOrderPaid = (id: string) => updateOrderStatus(id, "transfer_received");
   const cancelOrder = (id: string) => updateOrderStatus(id, "cancelled");
+
+  const storeCurrencyMap = Object.fromEntries(stores.map((s) => [s.id, s.currency || "GBP"]));
+  const getOrderCurrency = (storeId: string) => storeCurrencyMap[storeId] || "GBP";
 
   const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
   const unreadMessages = messages.filter((m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id)).length;
@@ -735,6 +795,7 @@ function MerchantPage() {
                     </div>
                     {s.description && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description}</p>}
                     <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      {s.region && REGIONS[s.region as keyof typeof REGIONS] && <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{REGIONS[s.region as keyof typeof REGIONS].name}{s.currency ? ` · ${REGIONS[s.region as keyof typeof REGIONS].symbol}${s.currency}` : ""}</div>}
                       {s.address && <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{s.address}{s.city ? `, ${s.city}` : ""}</div>}
                       {s.bank_name && <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3" />{s.bank_name} ····{(s.bank_account_number || "").slice(-4)}</div>}
                     </div>
@@ -750,9 +811,6 @@ function MerchantPage() {
                       </Button>
                       <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1 gap-1.5" onClick={() => handleShareStore(s.id)} title="Copy shareable link">
                         {sharedStoreId === s.id ? <><Check className="h-3 w-3" /> Done</> : <><Share2 className="h-3 w-3" /> Share</>}
-                      </Button>
-                      <Button size="sm" variant="outline" className="shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setConfirmDeleteId(s.id)}>
-                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                     {/* Orders for this store */}
@@ -833,7 +891,7 @@ function MerchantPage() {
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {o.items.map((it, i) => (
                               <span key={i} className="rounded-md bg-secondary px-2 py-0.5 text-xs">
-                                {it.qty}× {it.name}{it.unit ? ` (${it.unit})` : ""} — £{(it.price * it.qty).toFixed(2)}
+                                {it.qty}× {it.name}{it.unit ? ` (${it.unit})` : ""} — {formatCurrency(it.price * it.qty, getOrderCurrency(o.store_id))}
                               </span>
                             ))}
                           </div>
@@ -845,7 +903,7 @@ function MerchantPage() {
 
                         {/* Amount + actions */}
                         <div className="flex flex-col items-end gap-2">
-                          <div className="font-display text-2xl font-bold">£{Number(o.total_gbp).toFixed(2)}</div>
+                          <div className="font-display text-2xl font-bold">{formatCurrency(Number(o.total_gbp), getOrderCurrency(o.store_id))}</div>
                           <div className="flex gap-2 flex-wrap">
                             {["pending_transfer"].includes(o.status) && (
                               <>
@@ -1348,6 +1406,19 @@ function MerchantPage() {
                                             <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={async () => {
                                               await db.from("store_bookings").update({ status: "cancelled" }).eq("id", b.id);
                                               setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "cancelled" } : x));
+                                              if (b.customer_email) {
+                                                void supabase.functions.invoke("send-booking-cancelled", {
+                                                  body: {
+                                                    booking_id: b.id,
+                                                    store_name: s.name,
+                                                    customer_name: b.customer_name,
+                                                    customer_email: b.customer_email,
+                                                    service: b.service,
+                                                    staff_name: b.staff_name,
+                                                    slot_start: b.slot_start,
+                                                  },
+                                                });
+                                              }
                                               toast.success("Booking cancelled");
                                             }}>Cancel</Button>
                                             <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={async () => {
@@ -1587,6 +1658,15 @@ function MerchantPage() {
           </div>
         )}
 
+        {/* Danger zone */}
+        <div className="mt-16 border-t border-border pt-8">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Account</p>
+          <p className="text-sm text-muted-foreground mb-3">Deleting your account will permanently remove all your stores, services, and listings from Lokal.</p>
+          <Button variant="outline" size="sm" className="text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200" onClick={() => setConfirmDeleteAccount(true)}>
+            Delete my account
+          </Button>
+        </div>
+
       </main>
 
       {editingStore && (
@@ -1600,20 +1680,21 @@ function MerchantPage() {
         />
       )}
 
-      {/* Confirm delete dialog */}
-      {confirmDeleteId && (
-        <Dialog open onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteId(null); }}>
+      {/* Confirm delete account dialog */}
+      {confirmDeleteAccount && (
+        <Dialog open onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteAccount(false); }}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Delete store?</DialogTitle>
+              <DialogTitle>Delete your account?</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              This will permanently delete <strong>{stores.find((s) => s.id === confirmDeleteId)?.name}</strong> and all its products. Orders will remain in your records. This cannot be undone.
+              This will permanently delete your Lokal account and all your stores, products, and listings. Existing order records are retained for 12 months as per our{" "}
+              <a href="/privacy" className="underline" target="_blank">Privacy Policy</a>. This cannot be undone.
             </p>
             <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setConfirmDeleteId(null)} disabled={deleting}>Cancel</Button>
-              <Button variant="destructive" onClick={() => deleteStore(confirmDeleteId)} disabled={deleting}>
-                {deleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</> : "Delete store"}
+              <Button variant="outline" onClick={() => setConfirmDeleteAccount(false)} disabled={deleting}>Cancel</Button>
+              <Button variant="destructive" onClick={deleteAccount} disabled={deleting}>
+                {deleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</> : "Delete my account"}
               </Button>
             </DialogFooter>
           </DialogContent>
