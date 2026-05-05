@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store, Heart } from "lucide-react";
+import { MapPin, LogOut, Store, Heart, User } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,26 +10,34 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@/assets/logo.jpg";
 
 export function Navbar() {
-  const { user, isMerchant, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { city, loading } = useLocation();
   const [storeName, setStoreName] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [hasNewFollowingPosts, setHasNewFollowingPosts] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
       setStoreName(null);
+      setStoreId(null);
       return;
     }
 
     void supabase
       .from("stores")
-      .select("name")
+      .select("id, name")
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .then(({ data }) => {
-        setStoreName(data?.[0]?.name ?? null);
+        if (data?.[0]) {
+          setStoreName(data[0].name);
+          setStoreId(data[0].id);
+        } else {
+          setStoreName(null);
+          setStoreId(null);
+        }
       });
   }, [user?.id]);
 
@@ -92,8 +100,7 @@ export function Navbar() {
           <a href="/#how" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">How it works</a>
           <Link to="/help" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Help</Link>
           {user && (
-            <Link
-              to="/following"
+            <Link to="/following"
               onClick={markFollowingSeen}
               className="relative text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
@@ -103,7 +110,7 @@ export function Navbar() {
               )}
             </Link>
           )}
-          {user && (
+          {storeId && (
             <Link to="/merchant" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">My store</Link>
           )}
         </nav>
@@ -115,12 +122,7 @@ export function Navbar() {
           </Button>
 
           {!user ? (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth", search: { redirect: "/" } })}>Sign in</Button>
-              <Button size="sm" className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => navigate({ to: "/list-store" })}>
-                List your store
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth", search: { redirect: "/" } })}>Sign in</Button>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -139,13 +141,24 @@ export function Navbar() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate({ to: "/merchant" })}>
-                  <Store className="mr-2 h-4 w-4" /> My store
+                <DropdownMenuItem onClick={() => navigate({ to: "/customer/dashboard" })}>
+                  <User className="mr-2 h-4 w-4" /> My profile
                 </DropdownMenuItem>
-                {!isMerchant && (
-                  <DropdownMenuItem onClick={() => navigate({ to: "/list-store" })}>
-                    <Store className="mr-2 h-4 w-4" /> List your store
-                  </DropdownMenuItem>
+                {!storeId && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate({ to: "/list-store" })}>
+                      <Store className="mr-2 h-4 w-4" /> List your store
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {storeId && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate({ to: `/store/${storeId}` })}>
+                      <Store className="mr-2 h-4 w-4" /> Show store
+                    </DropdownMenuItem>
+                  </>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { markFollowingSeen(); navigate({ to: "/following" }); }}>

@@ -154,10 +154,29 @@ export const Route = createFileRoute("/store/$id")({
   ),
 });
 
+function checkRateLimit(phone: string): { allowed: boolean; waitMins: number } {
+  const key = `lokal_orders_${phone.replace(/\D/g, "").slice(-10)}`;
+  const raw = localStorage.getItem(key);
+  const timestamps: number[] = raw ? JSON.parse(raw) : [];
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000; // 1 hour
+  const recent = timestamps.filter((t) => now - t < windowMs);
+  if (recent.length >= 5) {
+    const oldest = Math.min(...recent);
+    const waitMins = Math.ceil((oldest + windowMs - now) / 60000);
+    return { allowed: false, waitMins };
+  }
+  recent.push(now);
+  localStorage.setItem(key, JSON.stringify(recent));
+  return { allowed: true, waitMins: 0 };
+}
+
 function StoreDetail() {
   const store = Route.useLoaderData() as StoreDetails;
   const [copied, setCopied] = useState(false);
   const [reference, setReference] = useState(() => makeRef());
+  const [storePublished, setStorePublished] = useState(store.published);
+  const [revealBankDetails, setRevealBankDetails] = useState(false);
 
   const [qty, setQty] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
@@ -336,8 +355,23 @@ function StoreDetail() {
       return;
     }
 
+    // Rate limit: max 5 orders per phone per hour
+    const rateCheck = checkRateLimit(customerPhone.trim());
+    if (!rateCheck.allowed) {
+      toast.error(`Too many orders. Please wait ${rateCheck.waitMins} min${rateCheck.waitMins !== 1 ? "s" : ""} before trying again.`);
+      return;
+    }
+
+    // Re-check store is still published before submitting
     setPlacingOrder(true);
     try {
+      const { data: publishedCheck } = await (supabase as any).from("stores").select("published").eq("id", store.id).single();
+      if (!publishedCheck?.published) {
+        setStorePublished(false);
+        toast.error("This store is currently unavailable. Your order was not placed.");
+        setPlacingOrder(false);
+        return;
+      }
       const { error } = await (supabase as any).from("orders").insert({
         store_id: store.id,
         reference,
@@ -355,6 +389,7 @@ function StoreDetail() {
         description: `Reference ${reference}. The merchant will confirm next steps.`,
         duration: 8000,
       });
+      setRevealBankDetails(true);
 
       setQty({});
       setCustomerName("");
@@ -462,7 +497,17 @@ function StoreDetail() {
       
       <main className="flex-1 py-8">
         <div className="container mx-auto max-w-3xl px-4">
-          {/* Store image */}
+
+          {/* Store closed banner */}
+          {!storePublished && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+              <span className="text-lg">🔒</span>
+              <div>
+                <p className="font-semibold text-destructive">This store is currently closed</p>
+                <p className="text-xs text-muted-foreground mt-0.5">The merchant has temporarily hidden this store. Ordering and booking are disabled.</p>
+              </div>
+            </div>
+          )}
           {store.image_url && (
             <div className="mb-8 overflow-hidden rounded-2xl">
               <img
@@ -537,7 +582,11 @@ function StoreDetail() {
                     <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
                       <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
                       <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
-                      <div><span className="text-amber-600">Account: </span>{store.bank_account_number ?? "—"}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-600">Account: </span>
+                        <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
+                        {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-xs text-amber-700 underline">Reveal</button>}
+                      </div>
                       {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
                     </div>
                     <button className="mt-3 text-sm text-amber-800 underline" onClick={() => setBookingDepositDue(null)}>
@@ -678,7 +727,11 @@ function StoreDetail() {
                             <div className="mt-2 space-y-1 text-xs font-mono">
                               <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
                               <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
-                              <div><span className="text-amber-600">Account: </span>{store.bank_account_number ?? "—"}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-amber-600">Account: </span>
+                                <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
+                                {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-amber-700 underline">Reveal</button>}
+                              </div>
                               {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
                             </div>
                           </div>
@@ -687,11 +740,12 @@ function StoreDetail() {
                     <div className="sm:col-span-2">
                       <Button
                         onClick={handleBook}
-                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0)))}
+                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) || !storePublished}
                         className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                       >
                         {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}
                       </Button>
+                      {!storePublished && <p className="mt-2 text-xs text-center text-destructive">This store is currently closed.</p>}
                     </div>
                   </div>
                 )}
@@ -739,14 +793,27 @@ function StoreDetail() {
                       <div className="sm:col-span-2 rounded-md bg-secondary px-3 py-2 text-sm">
                         Total: <span className="font-semibold">£{orderTotal.toFixed(2)}</span>
                       </div>
+                      {revealBankDetails && store.bank_account_name && (
+                        <div className="sm:col-span-2 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm">
+                          <p className="font-semibold text-green-800 mb-2">✅ Order placed — please send your transfer to:</p>
+                          <div className="space-y-1 font-mono text-green-900">
+                            <div><span className="text-green-600">Bank: </span>{store.bank_name ?? "—"}</div>
+                            <div><span className="text-green-600">Name: </span>{store.bank_account_name}</div>
+                            <div><span className="text-green-600">Account: </span>{store.bank_account_number}</div>
+                            {store.bank_sort_code && <div><span className="text-green-600">Sort code: </span>{store.bank_sort_code}</div>}
+                          </div>
+                          <p className="mt-2 text-xs text-green-700">Use reference <span className="font-mono font-bold">{reference}</span> as the payment reference.</p>
+                        </div>
+                      )}
                       <div className="sm:col-span-2">
                         <Button
                           onClick={handlePlaceOrder}
-                          disabled={placingOrder || cartItems.length === 0 || !customerName.trim() || !customerPhone.trim()}
+                          disabled={placingOrder || cartItems.length === 0 || !customerName.trim() || !customerPhone.trim() || !storePublished}
                           className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                         >
                           {placingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : `Place order (${reference})`}
                         </Button>
+                        {!storePublished && <p className="mt-2 text-xs text-center text-destructive">This store is currently closed.</p>}
                       </div>
                     </div>
                   </>

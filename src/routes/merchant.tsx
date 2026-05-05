@@ -560,7 +560,7 @@ function MerchantPage() {
         .channel("merchant-realtime")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
           setOrders((prev) => [payload.new as OrderRow, ...prev]);
-          toast("New order received!", { description: `${(payload.new as OrderRow).reference} — ${formatCurrency(Number((payload.new as OrderRow).total_gbp), getOrderCurrency((payload.new as OrderRow).store_id))}` });
+          toast("New order received!", { description: `${(payload.new as OrderRow).reference} — ${formatCurrency(Number((payload.new as OrderRow).total_gbp), getOrderCurrency((payload.new as OrderRow).store_id))} · ${stores.find((s) => s.id === (payload.new as OrderRow).store_id)?.name ?? ""}` });
         })
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
           setOrders((prev) => prev.map((o) => o.id === (payload.new as OrderRow).id ? payload.new as OrderRow : o));
@@ -1406,20 +1406,26 @@ function MerchantPage() {
                                             <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={async () => {
                                               await db.from("store_bookings").update({ status: "cancelled" }).eq("id", b.id);
                                               setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "cancelled" } : x));
-                                              if (b.customer_email) {
-                                                void supabase.functions.invoke("send-booking-cancelled", {
-                                                  body: {
-                                                    booking_id: b.id,
-                                                    store_name: s.name,
-                                                    customer_name: b.customer_name,
-                                                    customer_email: b.customer_email,
-                                                    service: b.service,
-                                                    staff_name: b.staff_name,
-                                                    slot_start: b.slot_start,
-                                                  },
-                                                });
+                                              const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("send-booking-cancelled", {
+                                                body: {
+                                                  booking_id: b.id,
+                                                  store_name: s.name,
+                                                  customer_name: b.customer_name,
+                                                  customer_email: b.customer_email,
+                                                  customer_phone: b.customer_phone,
+                                                  service: b.service,
+                                                  staff_name: b.staff_name,
+                                                  slot_start: b.slot_start,
+                                                },
+                                              });
+
+                                              if (notifyError) {
+                                                toast.error("Booking cancelled, but customer notification failed");
+                                              } else if (!notifyResult?.sent) {
+                                                toast.warning("Booking cancelled, but no customer contact method was available");
+                                              } else {
+                                                toast.success("Booking cancelled and customer notified");
                                               }
-                                              toast.success("Booking cancelled");
                                             }}>Cancel</Button>
                                             <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={async () => {
                                               const { error } = await db.from("store_bookings").update({ status: "confirmed" }).eq("id", b.id);

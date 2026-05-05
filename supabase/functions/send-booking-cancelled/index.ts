@@ -1,5 +1,7 @@
 export {};
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -10,10 +12,24 @@ type BookingCancelledPayload = {
   store_name: string;
   customer_name: string;
   customer_email: string | null;
+  customer_phone?: string | null;
   service: string | null;
   staff_name: string | null;
   slot_start: string;
 };
+
+function toE164(raw: string | null | undefined): string | null {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+  if (/^07\d{9}$/.test(digits)) return `+44${digits.slice(1)}`;
+  if (digits.startsWith("0")) return null;
+  if (digits.length < 8 || digits.length > 15) return null;
+  return `+${digits}`;
+}
 
 function prettySlot(iso: string): string {
   const [datePart, timePart] = iso.split("T");
@@ -46,11 +62,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!payload.customer_email) {
-      return new Response(JSON.stringify({ skipped: true, reason: "no customer email" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let customerEmail = payload.customer_email;
+    const customerPhone = toE164(payload.customer_phone);
+
+    // Fallback: resolve customer email from profile if booking row did not capture email.
+    if (!customerEmail && payload.customer_phone) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseServiceKey) {
+        const admin = createClient(supabaseUrl, supabaseServiceKey);
+        const exact = await admin
+          .from("customers")
+          .select("email")
+          .eq("phone", payload.customer_phone)
+          .not("email", "is", null)
+          .maybeSingle();
+
+        if (!exact.error && exact.data?.email) {
+          customerEmail = exact.data.email;
+        } else {
+          const phoneDigits = payload.customer_phone.replace(/\D/g, "");
+          const tail = phoneDigits.slice(-9);
+          if (tail) {
+            const fallback = await admin
+              .from("customers")
+              .select("email")
+              .ilike("phone", `%${tail}`)
+              .not("email", "is", null)
+              .limit(1)
+              .maybeSingle();
+            if (!fallback.error && fallback.data?.email) {
+              customerEmail = fallback.data.email;
+            }
+          }
+        }
+      }
     }
 
     const slotStr = prettySlot(payload.slot_start);
@@ -67,29 +113,52 @@ Deno.serve(async (req) => {
       <p><a href="https://lokalshops.co.uk">Find another store on Lokal</a></p>
     `;
 
-    const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "api-key": brevoKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sender: { email: emailFrom, name: "Lokal" },
-        to: [{ email: payload.customer_email, name: payload.customer_name }],
-        subject: `Your booking at ${payload.store_name} has been cancelled`,
-        htmlContent: html,
-      }),
-    });
+    const smsSender = Deno.env.get("BREVO_SMS_SENDER") ?? "Lokal";
+    const smsContent = [
+      `Hi ${payload.customer_name}, your booking has been cancelled.`,
+      `${payload.store_name} - ${slotStr}`,
+      payload.service ? `Service: ${payload.service}` : null,
+      payload.staff_name ? `With: ${payload.staff_name}` : null,
+      `https://lokalshops.co.uk`,
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-    if (!emailRes.ok) {
-      const errBody = await emailRes.text();
-      return new Response(JSON.stringify({ error: "email failed", detail: errBody }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const [emailResult, smsResult] = await Promise.all([
+      customerEmail
+        ? fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+              "api-key": brevoKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sender: { email: emailFrom, name: "Lokal" },
+              to: [{ email: customerEmail, name: payload.customer_name }],
+              subject: `Your booking at ${payload.store_name} has been cancelled`,
+              htmlContent: html,
+            }),
+          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
+        : Promise.resolve({ ok: false, body: "customer email missing" }),
+      customerPhone
+        ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+            method: "POST",
+            headers: {
+              "api-key": brevoKey,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sender: smsSender,
+              recipient: customerPhone,
+              content: smsContent,
+              type: "transactional",
+              tag: "customer-booking-cancelled",
+            }),
+          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
+        : Promise.resolve({ ok: false, body: "customer phone missing" }),
+    ]);
 
-    return new Response(JSON.stringify({ sent: true }), {
+    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -17,9 +17,12 @@ import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ListStoreRouteImport } from './routes/list-store'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as FollowingRouteImport } from './routes/following'
+import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StoreIdRouteImport } from './routes/store.$id'
+import { Route as CustomerProfileRouteImport } from './routes/customer.profile'
+import { Route as CustomerDashboardRouteImport } from './routes/customer.dashboard'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 
 const TermsRoute = TermsRouteImport.update({
@@ -62,6 +65,11 @@ const FollowingRoute = FollowingRouteImport.update({
   path: '/following',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BookingRoute = BookingRouteImport.update({
+  id: '/booking',
+  path: '/booking',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -77,6 +85,16 @@ const StoreIdRoute = StoreIdRouteImport.update({
   path: '/store/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CustomerProfileRoute = CustomerProfileRouteImport.update({
+  id: '/customer/profile',
+  path: '/customer/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomerDashboardRoute = CustomerDashboardRouteImport.update({
+  id: '/customer/dashboard',
+  path: '/customer/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -86,6 +104,7 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/booking': typeof BookingRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -95,11 +114,14 @@ export interface FileRoutesByFullPath {
   '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/customer/dashboard': typeof CustomerDashboardRoute
+  '/customer/profile': typeof CustomerProfileRoute
   '/store/$id': typeof StoreIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/booking': typeof BookingRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -109,12 +131,15 @@ export interface FileRoutesByTo {
   '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/customer/dashboard': typeof CustomerDashboardRoute
+  '/customer/profile': typeof CustomerProfileRoute
   '/store/$id': typeof StoreIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/booking': typeof BookingRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -124,6 +149,8 @@ export interface FileRoutesById {
   '/rate': typeof RateRoute
   '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/customer/dashboard': typeof CustomerDashboardRoute
+  '/customer/profile': typeof CustomerProfileRoute
   '/store/$id': typeof StoreIdRoute
 }
 export interface FileRouteTypes {
@@ -131,6 +158,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/booking'
     | '/following'
     | '/help'
     | '/list-store'
@@ -140,11 +168,14 @@ export interface FileRouteTypes {
     | '/rate'
     | '/terms'
     | '/auth/callback'
+    | '/customer/dashboard'
+    | '/customer/profile'
     | '/store/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/booking'
     | '/following'
     | '/help'
     | '/list-store'
@@ -154,11 +185,14 @@ export interface FileRouteTypes {
     | '/rate'
     | '/terms'
     | '/auth/callback'
+    | '/customer/dashboard'
+    | '/customer/profile'
     | '/store/$id'
   id:
     | '__root__'
     | '/'
     | '/auth'
+    | '/booking'
     | '/following'
     | '/help'
     | '/list-store'
@@ -168,12 +202,15 @@ export interface FileRouteTypes {
     | '/rate'
     | '/terms'
     | '/auth/callback'
+    | '/customer/dashboard'
+    | '/customer/profile'
     | '/store/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRouteWithChildren
+  BookingRoute: typeof BookingRoute
   FollowingRoute: typeof FollowingRoute
   HelpRoute: typeof HelpRoute
   ListStoreRoute: typeof ListStoreRoute
@@ -182,6 +219,8 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   RateRoute: typeof RateRoute
   TermsRoute: typeof TermsRoute
+  CustomerDashboardRoute: typeof CustomerDashboardRoute
+  CustomerProfileRoute: typeof CustomerProfileRoute
   StoreIdRoute: typeof StoreIdRoute
 }
 
@@ -243,6 +282,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FollowingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/booking': {
+      id: '/booking'
+      path: '/booking'
+      fullPath: '/booking'
+      preLoaderRoute: typeof BookingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -262,6 +308,20 @@ declare module '@tanstack/react-router' {
       path: '/store/$id'
       fullPath: '/store/$id'
       preLoaderRoute: typeof StoreIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customer/profile': {
+      id: '/customer/profile'
+      path: '/customer/profile'
+      fullPath: '/customer/profile'
+      preLoaderRoute: typeof CustomerProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customer/dashboard': {
+      id: '/customer/dashboard'
+      path: '/customer/dashboard'
+      fullPath: '/customer/dashboard'
+      preLoaderRoute: typeof CustomerDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -287,6 +347,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
+  BookingRoute: BookingRoute,
   FollowingRoute: FollowingRoute,
   HelpRoute: HelpRoute,
   ListStoreRoute: ListStoreRoute,
@@ -295,6 +356,8 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   RateRoute: RateRoute,
   TermsRoute: TermsRoute,
+  CustomerDashboardRoute: CustomerDashboardRoute,
+  CustomerProfileRoute: CustomerProfileRoute,
   StoreIdRoute: StoreIdRoute,
 }
 export const routeTree = rootRouteImport
