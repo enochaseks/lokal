@@ -10,10 +10,41 @@ import { Footer } from "@/components/lokal/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { BOOKABLE_CATEGORIES } from "@/data/stores";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BOOKABLE_CATEGORIES, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
+import type { Region } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl, normalizeWebsiteUrl } from "@/lib/utils";
 import { toast } from "sonner";
+import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
+
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+const COUNTRY_OPTIONS = getCountries()
+  .map((country) => {
+    const code = getCountryCallingCode(country);
+    const name = regionNames?.of(country) ?? country;
+    return { value: country, label: `${name} (+${code})`, code };
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function normalizePhoneForAlerts(raw: string, country: CountryCode): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+  const countryCode = getCountryCallingCode(country);
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) return `+${digits}`;
+  const localDigits = digits.replace(/^0+/, "");
+  if (!localDigits) return null;
+  if (localDigits.length < 6 || localDigits.length > 14) return null;
+  return `+${countryCode}${localDigits}`;
+}
 
 type ProductRow = {
   name: string;
@@ -67,6 +98,7 @@ type StoreDetails = {
   bank_account_name: string | null;
   bank_account_number: string | null;
   bank_sort_code: string | null;
+  region: string | null;
 };
 
 const isBookable = (category: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(category);
@@ -190,6 +222,7 @@ function StoreDetail() {
   const [bookTime, setBookTime] = useState("");
   const [bookName, setBookName] = useState("");
   const [bookPhone, setBookPhone] = useState("");
+  const [bookPhoneCountry, setBookPhoneCountry] = useState<CountryCode>("GB");
   const [bookNote, setBookNote] = useState("");
   const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -404,7 +437,12 @@ function StoreDetail() {
   };
 
   const handleBook = async () => {
-    if (!bookDate || !bookTime || !bookName.trim() || !bookPhone.trim()) {
+    const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
+    if (!normalizedBookPhone) {
+      toast.error("Enter phone in international format", { description: "Choose a country and enter your local mobile number." });
+      return;
+    }
+    if (!bookDate || !bookTime || !bookName.trim()) {
       toast.error("Please fill in all required booking fields");
       return;
     }
@@ -437,7 +475,7 @@ function StoreDetail() {
       const { error } = await (supabase as any).from("store_bookings").insert({
         store_id: store.id,
         customer_name: bookName.trim(),
-        customer_phone: bookPhone.trim(),
+        customer_phone: normalizedBookPhone,
         customer_email: bookEmail.trim() || null,
         service: bookService || null,
         staff_id: selectedStaff?.id ?? null,
@@ -460,10 +498,25 @@ function StoreDetail() {
             service: bookService || null,
             staff_name: selectedStaff?.name ?? null,
             slot_start: `${bookDate}T${bookTime}:00`,
-            customer_phone: bookPhone.trim(),
+            customer_phone: normalizedBookPhone,
           },
         });
       }
+
+      // Notify the merchant (fire-and-forget)
+      void supabase.functions.invoke("send-booking-alert", {
+        body: {
+          store_id: store.id,
+          store_name: store.name,
+          customer_name: bookName.trim(),
+          customer_phone: normalizedBookPhone,
+          service: bookService || null,
+          staff_name: selectedStaff?.name ?? null,
+          staff_phone: selectedStaff?.phone ?? null,
+          slot_start: `${bookDate}T${bookTime}:00`,
+          note: bookNote.trim() || null,
+        },
+      });
 
       toast.success("Booking request sent", {
         description: `${store.name} will confirm your appointment soon.`,
@@ -482,6 +535,7 @@ function StoreDetail() {
       setBookTime("");
       setBookName("");
       setBookPhone("");
+      setBookPhoneCountry("GB");
       setBookNote("");
       setBookEmail("");
     } catch (e: any) {
@@ -587,7 +641,7 @@ function StoreDetail() {
                         <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
                         {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-xs text-amber-700 underline">Reveal</button>}
                       </div>
-                      {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
+                      {store.bank_sort_code && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
                     </div>
                     <button className="mt-3 text-sm text-amber-800 underline" onClick={() => setBookingDepositDue(null)}>
                       Book another appointment
@@ -612,14 +666,19 @@ function StoreDetail() {
                   <p className="text-sm text-muted-foreground">Online booking is not enabled yet. Use phone or social links above.</p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">Service</p>
-                      <Input
-                        value={bookService}
-                        onChange={(e) => setBookService(e.target.value)}
-                        placeholder="Haircut, line-up, braids..."
-                      />
-                    </div>
+                    {products.length > 0 && (
+                      <div className="sm:col-span-2">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Service</p>
+                        <Select value={bookService} onValueChange={setBookService}>
+                          <SelectTrigger><SelectValue placeholder="Choose a service" /></SelectTrigger>
+                          <SelectContent>
+                            {products.map((p) => (
+                              <SelectItem key={p.name} value={p.name}>{p.name} — £{p.price.toFixed(2)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     {staffMembers.length > 0 && (
                       <div className="sm:col-span-2">
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Team member *</p>
@@ -675,38 +734,51 @@ function StoreDetail() {
                           .join(", ")}
                       </p>
                     </div>
-                    <div>
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">Time *</p>
-                      {loadingSlots ? (
-                        <div className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Loading slots...
-                        </div>
-                      ) : (
-                        <select
-                          value={bookTime}
-                          onChange={(e) => setBookTime(e.target.value)}
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
-                        >
-                          <option value="">Choose a slot</option>
-                          {freeSlots.map((slot) => {
-                            const status = slotStatus[slot];
-                            return (
-                              <option key={slot} value={slot} disabled={status.disabled}>
-                                {slot}{status.disabled && status.reason === "full" ? " (Full)" : ""}{status.disabled && status.reason === "past" ? " (Passed)" : ""}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      )}
-                    </div>
+                    {bookDate && (
+                      <div>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">Time slot *</p>
+                        {loadingSlots ? (
+                          <div className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Loading slots…
+                          </div>
+                        ) : (() => {
+                          const availableSlots = freeSlots.filter((s) => !slotStatus[s]?.disabled);
+                          if (availableSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No available slots on this day — try another date.</p>;
+                          return (
+                            <Select value={bookTime} onValueChange={setBookTime}>
+                              <SelectTrigger><SelectValue placeholder="Pick a time" /></SelectTrigger>
+                              <SelectContent>
+                                {freeSlots.map((slot) => {
+                                  const status = slotStatus[slot];
+                                  return (
+                                    <SelectItem key={slot} value={slot} disabled={status.disabled}>
+                                      {slot}{status.disabled && status.reason === "full" ? " (Full)" : ""}{status.disabled && status.reason === "past" ? " (Passed)" : ""}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          );
+                        })()}
+                      </div>
+                    )}
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Your name *</p>
                       <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="Your full name" />
                     </div>
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
-                      <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="+44..." />
+                      <div className="mt-1 grid grid-cols-12 gap-2">
+                        <div className="col-span-5 sm:col-span-4">
+                          <Select value={bookPhoneCountry} onValueChange={(v) => setBookPhoneCountry(v as CountryCode)}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-7 sm:col-span-8">
+                          <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="Local number" />
+                        </div>
+                      </div>
                     </div>
                     <div className="sm:col-span-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Email (optional — for rating reminder)</p>
@@ -732,7 +804,7 @@ function StoreDetail() {
                                 <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
                                 {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-amber-700 underline">Reveal</button>}
                               </div>
-                              {store.bank_sort_code && <div><span className="text-amber-600">Sort code: </span>{store.bank_sort_code}</div>}
+                              {store.bank_sort_code && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
                             </div>
                           </div>
                         ) : null;
@@ -800,7 +872,7 @@ function StoreDetail() {
                             <div><span className="text-green-600">Bank: </span>{store.bank_name ?? "—"}</div>
                             <div><span className="text-green-600">Name: </span>{store.bank_account_name}</div>
                             <div><span className="text-green-600">Account: </span>{store.bank_account_number}</div>
-                            {store.bank_sort_code && <div><span className="text-green-600">Sort code: </span>{store.bank_sort_code}</div>}
+                            {store.bank_sort_code && <div><span className="text-green-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
                           </div>
                           <p className="mt-2 text-xs text-green-700">Use reference <span className="font-mono font-bold">{reference}</span> as the payment reference.</p>
                         </div>

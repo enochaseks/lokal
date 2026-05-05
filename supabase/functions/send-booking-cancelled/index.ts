@@ -124,39 +124,41 @@ Deno.serve(async (req) => {
       .filter(Boolean)
       .join("\n");
 
-    const [emailResult, smsResult] = await Promise.all([
-      customerEmail
-        ? fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: {
-              "api-key": brevoKey,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              sender: { email: emailFrom, name: "Lokal" },
-              to: [{ email: customerEmail, name: payload.customer_name }],
-              subject: `Your booking at ${payload.store_name} has been cancelled`,
-              htmlContent: html,
-            }),
-          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "customer email missing" }),
-      customerPhone
-        ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
-            method: "POST",
-            headers: {
-              "api-key": brevoKey,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              sender: smsSender,
-              recipient: customerPhone,
-              content: smsContent,
-              type: "transactional",
-              tag: "customer-booking-cancelled",
-            }),
-          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "customer phone missing" }),
-    ]);
+    // Try SMS first; fall back to email if SMS is unavailable or fails.
+    let smsResult: { ok: boolean; body: string } = { ok: false, body: "customer phone missing" };
+    if (customerPhone) {
+      const smsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+        method: "POST",
+        headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: smsSender,
+          recipient: customerPhone,
+          content: smsContent,
+          type: "transactional",
+          tag: "customer-booking-cancelled",
+        }),
+      });
+      smsResult = { ok: smsRes.ok, body: await smsRes.text() };
+    }
+
+    let emailResult: { ok: boolean; body: string } = { ok: false, body: "sms succeeded" };
+    if (!smsResult.ok) {
+      if (customerEmail) {
+        const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: { email: emailFrom, name: "Lokal" },
+            to: [{ email: customerEmail, name: payload.customer_name }],
+            subject: `Your booking at ${payload.store_name} has been cancelled`,
+            htmlContent: html,
+          }),
+        });
+        emailResult = { ok: emailRes.ok, body: await emailRes.text() };
+      } else {
+        emailResult = { ok: false, body: "customer email missing" };
+      }
+    }
 
     return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
       status: 200,

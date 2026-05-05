@@ -102,33 +102,41 @@ Deno.serve(async (req) => {
       `Manage: lokalshops.co.uk`,
     ].filter(Boolean).join("\n");
 
-    const [emailResult, smsResult] = await Promise.all([
-      merchantEmail
-        ? fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: { "api-key": brevoKey, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sender: { email: emailFrom, name: "Lokal" },
-              to: [{ email: merchantEmail }],
-              subject: `New booking: ${payload.customer_name} – ${slotStr}`,
-              htmlContent: html,
-            }),
-          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant email not found" }),
-      merchantPhone
-        ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
-            method: "POST",
-            headers: { "api-key": brevoKey, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sender: smsSender,
-              recipient: merchantPhone,
-              content: smsLines,
-              type: "transactional",
-              tag: "merchant-new-booking",
-            }),
-          }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant phone not found" }),
-    ]);
+    // Try SMS first; fall back to email if SMS is unavailable or fails.
+    let smsResult: { ok: boolean; body: string } = { ok: false, body: "merchant phone not found" };
+    if (merchantPhone) {
+      const smsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+        method: "POST",
+        headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: smsSender,
+          recipient: merchantPhone,
+          content: smsLines,
+          type: "transactional",
+          tag: "merchant-new-booking",
+        }),
+      });
+      smsResult = { ok: smsRes.ok, body: await smsRes.text() };
+    }
+
+    let emailResult: { ok: boolean; body: string } = { ok: false, body: "sms succeeded" };
+    if (!smsResult.ok) {
+      if (merchantEmail) {
+        const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: { email: emailFrom, name: "Lokal" },
+            to: [{ email: merchantEmail }],
+            subject: `New booking: ${payload.customer_name} – ${slotStr}`,
+            htmlContent: html,
+          }),
+        });
+        emailResult = { ok: emailRes.ok, body: await emailRes.text() };
+      } else {
+        emailResult = { ok: false, body: "merchant email not found" };
+      }
+    }
 
     return new Response(
       JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }),

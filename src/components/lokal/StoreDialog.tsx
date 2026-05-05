@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
-import { BOOKABLE_CATEGORIES } from "@/data/stores";
+import { BOOKABLE_CATEGORIES, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
+import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
@@ -746,7 +747,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                         <div><span className="text-amber-600 not-italic">Bank: </span>{store.bank.name}</div>
                         <div><span className="text-amber-600 not-italic">Name: </span>{store.bank.accountName}</div>
                         <div><span className="text-amber-600 not-italic">Account: </span>{store.bank.accountNumber}</div>
-                        {store.bank.sortCode && <div><span className="text-amber-600 not-italic">Sort code: </span>{store.bank.sortCode}</div>}
+                        {store.bank.sortCode && <div><span className="text-amber-600 not-italic">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank.sortCode}</div>}
                       </div>
                       <Button size="sm" variant="outline" className="mt-3 border-amber-300 text-amber-800 hover:bg-amber-100" onClick={() => setBookingDepositDue(null)}>
                         Book another appointment
@@ -921,7 +922,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                                   <div><span className="text-amber-600">Bank: </span>{store.bank.name}</div>
                                   <div><span className="text-amber-600">Name: </span>{store.bank.accountName}</div>
                                   <div><span className="text-amber-600">Account: </span>{store.bank.accountNumber}</div>
-                                  {store.bank.sortCode && <div><span className="text-amber-600">Sort code: </span>{store.bank.sortCode}</div>}
+                                  {store.bank.sortCode && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank.sortCode}</div>}
                                 </div>
                               </div>
                             ) : null;
@@ -1226,7 +1227,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     { label: "Bank", value: store.bank.name },
                     { label: "Account name", value: store.bank.accountName },
                     { label: "Account number", value: store.bank.accountNumber },
-                    ...(store.bank.sortCode ? [{ label: "Sort code", value: store.bank.sortCode }] : []),
+                    ...(store.bank.sortCode ? [{ label: (REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel, value: store.bank.sortCode }] : []),
                     { label: "Reference", value: reference },
                     { label: "Amount", value: `£${total.toFixed(2)}` },
                   ].map((row) => (

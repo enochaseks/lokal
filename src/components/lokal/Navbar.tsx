@@ -122,7 +122,10 @@ export function Navbar() {
           </Button>
 
           {!user ? (
-            <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth", search: { redirect: "/" } })}>Sign in</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate({ to: "/list-store" })}>List your store</Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/auth", search: { redirect: "/" } })}>Sign in</Button>
+            </div>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -155,6 +158,9 @@ export function Navbar() {
                 {storeId && (
                   <>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate({ to: "/merchant" })}>
+                      <Store className="mr-2 h-4 w-4" /> My store dashboard
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate({ to: `/store/${storeId}` })}>
                       <Store className="mr-2 h-4 w-4" /> Show store
                     </DropdownMenuItem>

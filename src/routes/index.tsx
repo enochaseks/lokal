@@ -79,7 +79,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,store_products(name,price,unit,position)")
+        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,store_products(name,price,unit,position)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -106,6 +106,7 @@ function Index() {
         instagramHandle: r.instagram_handle || undefined,
         tiktokHandle: r.tiktok_handle || undefined,
         websiteUrl: r.website_url || undefined,
+        region: r.region || undefined,
         bank: {
           name: r.bank_name || "—",
           accountName: r.bank_account_name || "—",
@@ -178,14 +179,6 @@ function Index() {
                 <span className="text-xs font-semibold uppercase tracking-widest text-primary">
                   {locationFilter ? `Near you · ${locationFilter}` : locationLoading ? "Detecting location…" : "All locations"}
                 </span>
-                {locationFilter && (
-                  <button
-                    onClick={() => { setLocationFilter(null); setCityManuallySet(true); setShowCityInput(false); }}
-                    className="text-[10px] font-medium text-muted-foreground hover:text-foreground border border-border rounded-full px-2 py-0.5"
-                  >
-                    Show all
-                  </button>
-                )}
                 <button
                   onClick={() => setShowCityInput((v) => !v)}
                   className="text-[10px] font-medium text-primary hover:underline"
@@ -261,23 +254,16 @@ function Index() {
                     </h3>
                     <p className="mt-2 text-sm text-muted-foreground max-w-sm">
                       {search
-                        ? "Try a different search term or browse all stores."
+                        ? "Try a different search term or change the category filter."
                         : locationFilter
-                        ? "No stores in this area yet — try a different city or show all."
+                        ? "No stores in this area yet — try searching a nearby city using \"Change city\"."
                         : "We're growing — check back soon, or be the first to list your store."}
                     </p>
-                    {(search || locationFilter) && (
-                      <div className="mt-4 flex gap-3">
-                        {search && (
-                          <button onClick={() => setSearch("")} className="text-sm text-primary hover:underline">
-                            Clear search
-                          </button>
-                        )}
-                        {locationFilter && (
-                          <button onClick={() => { setLocationFilter(null); setCityManuallySet(true); }} className="text-sm text-primary hover:underline">
-                            Show all cities
-                          </button>
-                        )}
+                    {search && (
+                      <div className="mt-4">
+                        <button onClick={() => setSearch("")} className="text-sm text-primary hover:underline">
+                          Clear search
+                        </button>
                       </div>
                     )}
                   </div>

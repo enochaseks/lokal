@@ -13,7 +13,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS, REGION_ADDRESS, DEFAULT_AREA } from "@/data/stores";
+import type { Region } from "@/data/stores";
+import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
+
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+const COUNTRY_OPTIONS = getCountries()
+  .map((country) => {
+    const code = getCountryCallingCode(country);
+    const name = regionNames?.of(country) ?? country;
+    return { value: country, label: `${name} (+${code})`, code };
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function normalizePhoneForAlerts(raw: string, country: CountryCode): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+  const countryCode = getCountryCallingCode(country);
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) return `+${digits}`;
+  const localDigits = digits.replace(/^0+/, "");
+  if (!localDigits) return null;
+  if (localDigits.length < 6 || localDigits.length > 14) return null;
+  return `+${countryCode}${localDigits}`;
+}
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
@@ -166,6 +196,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>((store.region ?? "GB") as CountryCode);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -222,7 +253,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         name: form.name.trim(), category: form.category,
         origin: form.origin, description: n(form.description),
         address: n(form.address), city: n(form.city), postcode: n(form.postcode),
-        hours: n(form.hours), phone: n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
+        hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
         location_type: isBookable(form.category) ? (form.location_type || null) : null,
         instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
@@ -308,8 +339,22 @@ function EditStoreDialog({ store, onClose, onSaved }: {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
               <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
-              <div><Label>Postcode</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} maxLength={20} className="mt-1" /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} maxLength={40} className="mt-1" /><p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number. Use international format (e.g. +1, +44, +234).</p></div>
+              <div><Label>{(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaLabel}</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} placeholder={(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" /></div>
+              <div>
+                <Label>Phone</Label>
+                <div className="mt-1 grid grid-cols-12 gap-2">
+                  <div className="col-span-5 sm:col-span-4">
+                    <Select value={phoneCountry} onValueChange={(v) => setPhoneCountry(v as CountryCode)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-7 sm:col-span-8">
+                    <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Local number" maxLength={40} />
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number.</p>
+              </div>
               <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
               <div><Label>Instagram</Label><Input value={form.instagram_handle} onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
               <div><Label>TikTok</Label><Input value={form.tiktok_handle} onChange={(e) => setForm((f) => ({ ...f, tiktok_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>

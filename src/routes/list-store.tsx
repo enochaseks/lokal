@@ -12,8 +12,38 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
+import type { Region } from "@/data/stores";
 import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
+import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
+
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+const COUNTRY_OPTIONS = getCountries()
+  .map((country) => {
+    const code = getCountryCallingCode(country);
+    const name = regionNames?.of(country) ?? country;
+    return { value: country, label: `${name} (+${code})`, code };
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function normalizePhoneForAlerts(raw: string, country: CountryCode): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+  const countryCode = getCountryCallingCode(country);
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
+  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) return `+${digits}`;
+  const localDigits = digits.replace(/^0+/, "");
+  if (!localDigits) return null;
+  if (localDigits.length < 6 || localDigits.length > 14) return null;
+  return `+${countryCode}${localDigits}`;
+}
 
 const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
@@ -97,7 +127,8 @@ function ListStorePage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [region, setRegion] = useState<"GB" | "NG" | "JM">("GB");
+  const [region, setRegion] = useState<Region>("GB");
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>("GB");
 
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
@@ -159,13 +190,15 @@ function ListStorePage() {
     setSubmitting(true);
     try {
       const slug = `${slugify(store.name)}-${Math.random().toString(36).slice(2, 6)}`;
+      const parsedStore = storeSchema.parse(store);
       const payload = {
-        ...storeSchema.parse(store),
+        ...parsedStore,
         ...bankSchema.parse(bank),
         owner_id: user.id,
         slug,
         region,
         currency: REGIONS[region].currency,
+        phone: normalizePhoneForAlerts(store.phone, phoneCountry) ?? parsedStore.phone ?? null,
         image_url: store.image_url || null,
         instagram_handle: normalizeInstagramHandle(store.instagram_handle),
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
@@ -268,17 +301,6 @@ function ListStorePage() {
               <h2 className="font-display text-2xl font-bold">Tell us about your store</h2>
 
               <div>
-                <Label>Your region *</Label>
-                <Select value={region} onValueChange={(v) => setRegion(v as "GB" | "NG" | "JM")}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(REGIONS).map(([code, info]) => <SelectItem key={code} value={code}>{info.name} ({info.symbol})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-xs text-muted-foreground">This determines your currency and payment methods. Cannot be changed later.</p>
-              </div>
-
-              <div>
                 <Label>Store name *</Label>
                 <Input value={store.name} onChange={(e) => setStore({ ...store, name: e.target.value })} placeholder="Mama Adwoa's Pantry" maxLength={80} className="mt-1" />
               </div>
@@ -357,7 +379,18 @@ function ListStorePage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div>
+                <div className="sm:col-span-2">
+                  <Label>Country *</Label>
+                  <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(REGIONS).map(([code, info]) => (
+                        <SelectItem key={code} value={code}>{info.name} — {info.symbol} {info.currency}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="sm:col-span-2">
                   <Label>Address</Label>
                   <Input value={store.address} onChange={(e) => setStore({ ...store, address: e.target.value })} maxLength={200} className="mt-1" />
                 </div>
@@ -366,13 +399,23 @@ function ListStorePage() {
                   <Input value={store.city} onChange={(e) => setStore({ ...store, city: e.target.value })} maxLength={60} className="mt-1" />
                 </div>
                 <div>
-                  <Label>Postcode</Label>
-                  <Input value={store.postcode} onChange={(e) => setStore({ ...store, postcode: e.target.value })} maxLength={20} className="mt-1" />
+                  <Label>{(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaLabel}</Label>
+                  <Input value={store.postcode} onChange={(e) => setStore({ ...store, postcode: e.target.value })} placeholder={(REGION_ADDRESS[region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" />
                 </div>
                 <div>
                   <Label>Phone</Label>
-                  <Input value={store.phone} onChange={(e) => setStore({ ...store, phone: e.target.value })} maxLength={40} className="mt-1" />
-                  <p className="mt-1.5 text-xs text-muted-foreground">You'll receive order alerts by email and SMS to the phone number on your store.</p>
+                  <div className="mt-1 grid grid-cols-12 gap-2">
+                    <div className="col-span-5 sm:col-span-4">
+                      <Select value={phoneCountry} onValueChange={(v) => setPhoneCountry(v as CountryCode)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-7 sm:col-span-8">
+                      <Input value={store.phone} onChange={(e) => setStore({ ...store, phone: e.target.value })} placeholder="Local number" maxLength={40} />
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">You'll receive order alerts by email and SMS to this number.</p>
                 </div>
               </div>
 
@@ -423,7 +466,7 @@ function ListStorePage() {
 
               <div>
                 <Label>Bank name *</Label>
-                <Input value={bank.bank_name} onChange={(e) => setBank({ ...bank, bank_name: e.target.value })} placeholder={region === "NG" ? "First Bank" : "Barclays"} maxLength={60} className="mt-1" />
+                <Input value={bank.bank_name} onChange={(e) => setBank({ ...bank, bank_name: e.target.value })} placeholder={(REGION_BANK[region] ?? DEFAULT_BANK).bankPlaceholder} maxLength={60} className="mt-1" />
               </div>
               <div>
                 <Label>Account name *</Label>
@@ -432,26 +475,12 @@ function ListStorePage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label>Account number *</Label>
-                  <Input value={bank.bank_account_number} onChange={(e) => setBank({ ...bank, bank_account_number: e.target.value.replace(/\D/g, "") })} placeholder={region === "NG" ? "1234567890" : "20451887"} inputMode="numeric" maxLength={20} className="mt-1 font-mono" />
+                  <Input value={bank.bank_account_number} onChange={(e) => setBank({ ...bank, bank_account_number: e.target.value.replace(/\D/g, "") })} placeholder={(REGION_BANK[region] ?? DEFAULT_BANK).accountPlaceholder} inputMode="numeric" maxLength={20} className="mt-1 font-mono" />
                 </div>
-                {region === "GB" && (
-                  <div>
-                    <Label>Sort code</Label>
-                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="20-00-00" maxLength={10} className="mt-1 font-mono" />
-                  </div>
-                )}
-                {region === "NG" && (
-                  <div>
-                    <Label>Bank code (SWIFT)</Label>
-                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="WEMA code" maxLength={10} className="mt-1 font-mono" />
-                  </div>
-                )}
-                {region === "JM" && (
-                  <div>
-                    <Label>Branch / Routing number</Label>
-                    <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder="Branch code" maxLength={10} className="mt-1 font-mono" />
-                  </div>
-                )}
+                <div>
+                  <Label>{(REGION_BANK[region] ?? DEFAULT_BANK).routingLabel}</Label>
+                  <Input value={bank.bank_sort_code} onChange={(e) => setBank({ ...bank, bank_sort_code: e.target.value })} placeholder={(REGION_BANK[region] ?? DEFAULT_BANK).routingPlaceholder} maxLength={30} className="mt-1 font-mono" />
+                </div>
               </div>
 
               <div className="flex gap-2">
