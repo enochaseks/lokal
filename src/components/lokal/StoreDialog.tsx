@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
-import { REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
+import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 
@@ -306,6 +306,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   if (!store) return null;
 
+  const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
+
   const socialLinks = [
     store.instagramHandle ? { label: "Instagram", href: buildInstagramUrl(store.instagramHandle) } : null,
     store.tiktokHandle ? { label: "TikTok", href: buildTikTokUrl(store.tiktokHandle) } : null,
@@ -380,6 +382,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         body: {
           reference,
           total_gbp: total,
+          currency_symbol: currencySymbol,
           customer_name: name.trim(),
           store_name: store.name,
           store_id: store.id,
@@ -739,7 +742,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
                       <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
                       <p className="mt-1 text-sm text-amber-800">
-                        To confirm your appointment, send a deposit of <strong>£{bookingDepositDue.amount.toFixed(2)}</strong>
+                        To confirm your appointment, send a deposit of <strong>{currencySymbol}{bookingDepositDue.amount.toFixed(2)}</strong>
                         {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""} to:
                       </p>
                       <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
@@ -763,7 +766,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                               {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
                               <div className="font-medium">{p.name}</div>
                             </div>
-                            <div className="text-sm font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                            <div className="text-sm font-semibold">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
                           </div>
                         ))}
                       </div>
@@ -782,7 +785,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                               <SelectTrigger className="mt-1"><SelectValue placeholder="Choose a service" /></SelectTrigger>
                               <SelectContent>
                                 {store.products.map((p) => (
-                                  <SelectItem key={p.name} value={p.name}>{p.name} — £{p.price.toFixed(2)}</SelectItem>
+                                  <SelectItem key={p.name} value={p.name}>{p.name} — {currencySymbol}{p.price.toFixed(2)}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -919,7 +922,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                             const depositAmount = serviceDeposit ?? store.deposit_amount;
                             return depositAmount ? (
                               <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                                💳 A deposit of <strong>£{Number(depositAmount).toFixed(2)}</strong> is required. Please send it to:
+                                💳 A deposit of <strong>{currencySymbol}{Number(depositAmount).toFixed(2)}</strong> is required. Please send it to:
                                 <div className="mt-2 space-y-1 text-xs font-mono">
                                   <div><span className="text-amber-600">Bank: </span>{store.bank.name}</div>
                                   <div><span className="text-amber-600">Name: </span>{store.bank.accountName}</div>
@@ -953,7 +956,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                             {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
                             <div>
                               <div className="font-medium">{p.name}</div>
-                              <div className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                              <div className="text-sm text-muted-foreground">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1131,7 +1134,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
                   <div>
                     <div className="text-xs uppercase tracking-wider text-muted-foreground">Total</div>
-                    <div className="font-display text-2xl font-bold">£{total.toFixed(2)}</div>
+                    <div className="font-display text-2xl font-bold">{currencySymbol}{total.toFixed(2)}</div>
                   </div>
                   <Button
                     size="lg"
@@ -1192,11 +1195,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 {items.filter((i) => i.qty > 0).map((i) => (
                   <div key={i.name} className="flex justify-between text-muted-foreground">
                     <span>{i.qty} × {i.name}</span>
-                    <span>£{(i.price * i.qty).toFixed(2)}</span>
+                    <span>{currencySymbol}{(i.price * i.qty).toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="mt-2 flex justify-between border-t border-border pt-2 font-semibold">
-                  <span>Total</span><span>£{total.toFixed(2)}</span>
+                  <span>Total</span><span>{currencySymbol}{total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1222,7 +1225,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                   <Landmark className="h-5 w-5" />
                   <span className="text-sm font-semibold uppercase tracking-wider">Bank transfer only</span>
                 </div>
-                <h4 className="font-display text-2xl font-bold">Send £{total.toFixed(2)} to {store.name}</h4>
+                <h4 className="font-display text-2xl font-bold">Send {currencySymbol}{total.toFixed(2)} to {store.name}</h4>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Lokal connects you directly with the merchant — no card fees, no middleman. Use the reference below so they can match your order instantly.
                 </p>
@@ -1234,7 +1237,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     { label: "Account number", value: store.bank.accountNumber },
                     ...(store.bank.sortCode ? [{ label: (REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel, value: store.bank.sortCode }] : []),
                     { label: "Reference", value: reference },
-                    { label: "Amount", value: `£${total.toFixed(2)}` },
+                    { label: "Amount", value: `${currencySymbol}${total.toFixed(2)}` },
                   ].map((row) => (
                     <div key={row.label} className="flex items-center justify-between rounded-lg bg-card px-4 py-3">
                       <div>

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
+import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl, normalizeWebsiteUrl } from "@/lib/utils";
@@ -242,6 +242,7 @@ function StoreDetail() {
   const websiteHref = normalizeWebsiteUrl(store.website_url);
   const instagramHref = buildInstagramUrl(store.instagram_handle);
   const tiktokHref = buildTikTokUrl(store.tiktok_handle);
+  const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
   const availableDays = [...(store.store_availability ?? [])].sort((a, b) => a.day_of_week - b.day_of_week);
   const staffMembers = [...(store.store_staff ?? [])]
@@ -635,7 +636,7 @@ function StoreDetail() {
                   <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
                     <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
                     <p className="mt-1 text-sm text-amber-800">
-                      To confirm your appointment, send a deposit of <strong>£{bookingDepositDue.amount.toFixed(2)}</strong>
+                      To confirm your appointment, send a deposit of <strong>{currencySymbol}{bookingDepositDue.amount.toFixed(2)}</strong>
                       {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""} to:
                     </p>
                     <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
@@ -663,7 +664,7 @@ function StoreDetail() {
                             {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-9 w-9 rounded-md object-cover shrink-0" />}
                             {p.name}
                           </span>
-                          <span className="font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</span>
+                          <span className="font-semibold">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</span>
                         </div>
                       ))}
                     </div>
@@ -681,7 +682,7 @@ function StoreDetail() {
                           <SelectTrigger><SelectValue placeholder="Choose a service" /></SelectTrigger>
                           <SelectContent>
                             {products.map((p) => (
-                              <SelectItem key={p.name} value={p.name}>{p.name} — £{p.price.toFixed(2)}</SelectItem>
+                              <SelectItem key={p.name} value={p.name}>{p.name} — {currencySymbol}{p.price.toFixed(2)}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -803,7 +804,7 @@ function StoreDetail() {
                         const depositAmount = serviceDeposit ?? store.deposit_amount;
                         return depositAmount ? (
                           <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                            💳 A deposit of <strong>£{Number(depositAmount).toFixed(2)}</strong> is required to confirm this appointment. Please send it to:
+                            💳 A deposit of <strong>{currencySymbol}{Number(depositAmount).toFixed(2)}</strong> is required to confirm this appointment. Please send it to:
                             <div className="mt-2 space-y-1 text-xs font-mono">
                               <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
                               <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
@@ -847,7 +848,7 @@ function StoreDetail() {
                               {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
                               <div>
                                 <p className="text-sm font-medium">{p.name}</p>
-                                <p className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
+                                <p className="text-sm text-muted-foreground">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -884,7 +885,7 @@ function StoreDetail() {
                         <Textarea value={orderNote} onChange={(e) => setOrderNote(e.target.value)} rows={2} placeholder="Any substitutions or notes?" />
                       </div>
                       <div className="sm:col-span-2 rounded-md bg-secondary px-3 py-2 text-sm">
-                        Total: <span className="font-semibold">£{orderTotal.toFixed(2)}</span>
+                        Total: <span className="font-semibold">{currencySymbol}{orderTotal.toFixed(2)}</span>
                       </div>
                       {revealBankDetails && store.bank_account_name && (
                         <div className="sm:col-span-2 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm">

@@ -6,6 +6,7 @@ const corsHeaders = {
 type AlertPayload = {
   reference: string;
   total_gbp: number;
+  currency_symbol?: string;
   customer_name: string;
   store_name: string;
   store_id: string;
@@ -32,6 +33,7 @@ Deno.serve(async (req) => {
 
   try {
     const payload = (await req.json()) as AlertPayload;
+    const currencySymbol = payload.currency_symbol ?? "£";
 
     const brevoKey = Deno.env.get("BREVO_API_KEY");
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
@@ -78,13 +80,13 @@ Deno.serve(async (req) => {
       <p><strong>Customer:</strong> ${payload.customer_name}</p>
       <p><strong>Items (${itemCount} total):</strong></p>
       <ul>${itemLines}</ul>
-      <p><strong>Total:</strong> £${Number(payload.total_gbp).toFixed(2)}</p>
+      <p><strong>Total:</strong> ${currencySymbol}${Number(payload.total_gbp).toFixed(2)}</p>
       <p><a href="https://lokalshops.co.uk">Open Lokal →</a></p>
     `;
 
     const smsText = [
       `New Lokal order: ${payload.reference}`,
-      `${payload.store_name} • £${Number(payload.total_gbp).toFixed(2)}`,
+      `${payload.store_name} • ${currencySymbol}${Number(payload.total_gbp).toFixed(2)}`,
       `Customer: ${payload.customer_name}`,
       `Open: https://lokalshops.co.uk`,
     ].join("\n");

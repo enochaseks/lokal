@@ -455,7 +455,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <div key={i} className="space-y-1">
                     <div className="grid grid-cols-12 gap-2">
                       <Input className={isServiceStore ? "col-span-6" : "col-span-5"} placeholder={isServiceStore ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
-                      <Input className="col-span-3 font-mono" placeholder="£0.00" value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
+                      <Input className="col-span-3 font-mono" placeholder={`${REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}0.00`} value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
                       {isServiceStore
                         ? <Input className="col-span-2" placeholder="e.g. 30 min" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
                         : <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
@@ -464,7 +464,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                     </div>
                     {form.category === "Hair & Beauty" && (
                       <div className="flex items-center gap-2 pl-1">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit {REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}</span>
                         <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, deposit: e.target.value.replace(/[^0-9.]/g, "") } : x))} />
                       </div>
                     )}
