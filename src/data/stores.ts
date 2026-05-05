@@ -1,10 +1,10 @@
-import grocery from "@/assets/store-grocery.jpg";
+﻿import grocery from "@/assets/store-grocery.jpg";
 import beauty from "@/assets/store-beauty.jpg";
 import barber from "@/assets/store-fashion.jpg";
 
-export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & Beauty"] as const;
+export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & Beauty", "Clothes & Fashion"] as const;
 
-/** Categories that use the booking/schedule system instead of an order basket */
+/** Categories that are always service/booking based. */
 export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
 
 export const REGIONS = {
@@ -80,21 +80,82 @@ export const REGION_BANK: Partial<Record<Region, { routingLabel: string; routing
 /** Generic fallback for countries not in REGION_BANK */
 export const DEFAULT_BANK = { routingLabel: "Routing / Branch code", routingPlaceholder: "Routing or branch code", accountPlaceholder: "Account number", bankPlaceholder: "Bank name" };
 export type LiveCategory = (typeof LIVE_CATEGORIES)[number];
+export type SellingMode = "products" | "services";
+
+export function resolveStoreMode(category: string, sellingMode?: string | null): SellingMode {
+  if (category === "Clothes & Fashion") {
+    return sellingMode === "services" ? "services" : "products";
+  }
+  if ((BOOKABLE_CATEGORIES as readonly string[]).includes(category)) {
+    return "services";
+  }
+  return "products";
+}
+
+export function isStoreBookable(category: string, sellingMode?: string | null): boolean {
+  return resolveStoreMode(category, sellingMode) === "services";
+}
 
 export const LIVE_ORIGINS = [
+  // Diaspora identities
+  "✊ African American / Black American",
+  "🇬🇧 Black British",
+  "🇬🇧 Afro-Caribbean British",
+  "🌍 African Diaspora",
+  "🌎 Caribbean Diaspora",
   "🌍 Pan-African",
-  "🇬🇭 Ghanaian",
+  // West Africa
   "🇳🇬 Nigerian",
-  "🇰🇪 Kenyan",
-  "🇪🇹 Ethiopian",
-  "🇸🇴 Somali",
-  "🇪🇷 Eritrean",
-  "🇿🇦 South African",
-  "🇿🇼 Zimbabwean",
-  "🇨🇩 Congolese",
+  "🇬🇭 Ghanaian",
   "🇸🇳 Senegalese",
   "🇨🇮 Ivorian",
-  "🏝️ Caribbean mixed",
+  "🇨🇲 Cameroonian",
+  "🇸🇱 Sierra Leonean",
+  "🇬🇳 Guinean",
+  "🇬🇲 Gambian",
+  "🇱🇷 Liberian",
+  "🇹🇬 Togolese",
+  "🇧🇯 Beninese",
+  "🇲🇱 Malian",
+  "🇧🇫 Burkinabe",
+  "🇳🇪 Nigerien",
+  "🇲🇷 Mauritanian",
+  // East Africa
+  "🇰🇪 Kenyan",
+  "🇪🇹 Ethiopian",
+  "🇹🇿 Tanzanian",
+  "🇺🇬 Ugandan",
+  "🇸🇴 Somali",
+  "🇪🇷 Eritrean",
+  "🇷🇼 Rwandan",
+  "🇧🇮 Burundian",
+  "🇸🇩 Sudanese",
+  "🇸🇸 South Sudanese",
+  "🇲🇬 Malagasy",
+  // Central Africa
+  "🇨🇩 Congolese (DRC)",
+  "🇨🇬 Congolese (Rep.)",
+  "🇨🇫 Central African",
+  "🇬🇦 Gabonese",
+  "🇹🇩 Chadian",
+  // Southern Africa
+  "🇿🇦 South African",
+  "🇿🇼 Zimbabwean",
+  "🇿🇲 Zambian",
+  "🇲🇿 Mozambican",
+  "🇲🇼 Malawian",
+  "🇧🇼 Motswana",
+  "🇳🇦 Namibian",
+  "🇸🇿 Swati",
+  "🇱🇸 Basotho",
+  "🇦🇴 Angolan",
+  // North Africa
+  "🇲🇦 Moroccan",
+  "🇩🇿 Algerian",
+  "🇹🇳 Tunisian",
+  "🇱🇾 Libyan",
+  "🇪🇬 Egyptian",
+  // Caribbean
   "🇯🇲 Jamaican",
   "🇹🇹 Trinidadian & Tobagonian",
   "🇧🇧 Barbadian",
@@ -102,6 +163,17 @@ export const LIVE_ORIGINS = [
   "🇭🇹 Haitian",
   "🇩🇴 Dominican",
   "🇨🇺 Cuban",
+  "🇵🇷 Puerto Rican",
+  "🇦🇬 Antiguan & Barbudan",
+  "🇱🇨 Saint Lucian",
+  "🇬🇩 Grenadian",
+  "🇩🇲 Dominican (Commonwealth)",
+  "🇻🇨 Vincentian",
+  "🇰🇳 Kittitian & Nevisian",
+  "🇧🇸 Bahamian",
+  "🇸🇷 Surinamese",
+  "🇦🇼 Aruban",
+  "🇧🇲 Bermudian",
 ] as const;
 export type LiveOrigin = (typeof LIVE_ORIGINS)[number];
 
@@ -110,6 +182,7 @@ export type Product = {
   price: number;
   unit?: string;
   deposit?: number | null;
+  image_url?: string | null;
 };
 
 export type Store = {
@@ -129,6 +202,7 @@ export type Store = {
   description: string;
   fulfillment: "collection" | "delivery" | "both" | "pay_at_store";
   location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
+  selling_mode?: SellingMode | null;
   instagramHandle?: string;
   tiktokHandle?: string;
   websiteUrl?: string;
@@ -214,4 +288,5 @@ export const categories = [
   { name: "Beauty Store", emoji: "✨" },
   { name: "Barbers", emoji: "💈" },
   { name: "Hair & Beauty", emoji: "💅" },
+  { name: "Clothes & Fashion", emoji: "🧵" },
 ] as const;

@@ -12,8 +12,8 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
-import type { Region } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
+import type { Region, SellingMode } from "@/data/stores";
 import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -45,7 +45,6 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
-const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -113,7 +112,7 @@ const bankSchema = z.object({
   bank_sort_code: z.string().trim().max(10).optional(),
 });
 
-type Product = { name: string; price: string; unit: string; deposit: string };
+type Product = { name: string; price: string; unit: string; deposit: string; image_url: string };
 type DayDraft = { day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number };
 type StaffDraft = { name: string; phone: string };
 
@@ -135,11 +134,13 @@ function ListStorePage() {
     description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
     instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
+    selling_mode: "products" as SellingMode,
   });
   const [bank, setBank] = useState({ bank_name: "", bank_account_name: "", bank_account_number: "", bank_sort_code: "" });
-  const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "", deposit: "" }]);
+  const [products, setProducts] = useState<Product[]>([{ name: "", price: "", unit: "", deposit: "", image_url: "" }]);
   const [schedule, setSchedule] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
   const [staff, setStaff] = useState<StaffDraft[]>([]);
+  const isServiceStore = isStoreBookable(store.category, store.selling_mode);
 
   useEffect(() => {
     // route guard handled by beforeLoad
@@ -165,10 +166,19 @@ function ListStorePage() {
     }
   };
 
-  const addProduct = () => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "" }]);
+  const addProduct = () => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "", image_url: "" }]);
   const removeProduct = (i: number) => setProducts((p) => p.filter((_, idx) => idx !== i));
   const updateProduct = (i: number, key: keyof Product, value: string) =>
     setProducts((p) => p.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
+
+  const uploadProductImage = async (i: number, file: File) => {
+    if (!user) return;
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/products/${Date.now()}-${i}.${ext}`;
+    const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: true });
+    if (error) { toast.error("Photo upload failed"); return; }
+    updateProduct(i, "image_url", path);
+  };
 
   const validateStep1 = () => {
     const r = storeSchema.safeParse(store);
@@ -183,7 +193,7 @@ function ListStorePage() {
 
   const handleSubmit = async () => {
     if (!user) return;
-    const isBarber = isBookable(store.category);
+    const isBarber = isServiceStore;
     const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
     if (validProducts.length === 0) { toast.error(`Add at least one ${isBarber ? "service" : "product"} before going live`); return; }
 
@@ -204,7 +214,8 @@ function ListStorePage() {
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
         published: true,
-        location_type: isBookable(store.category) ? store.location_type : null,
+        location_type: isServiceStore ? store.location_type : null,
+        selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
       };
 
       const { data: newStore, error: storeErr } = await (supabase as any)
@@ -218,6 +229,7 @@ function ListStorePage() {
           price: Number(p.price),
           unit: p.unit.trim() || null,
           deposit: p.deposit.trim() ? Number(p.deposit) : null,
+          image_url: p.image_url || null,
           position: i,
         }));
         const { error: prodErr } = await (supabase as any).from("store_products").insert(productRows);
@@ -281,7 +293,7 @@ function ListStorePage() {
           {[
             { n: 1, label: "About your store", icon: StoreIcon },
             { n: 2, label: "Bank details", icon: Landmark },
-            { n: 3, label: isBookable(store.category) ? "Schedule" : "Products", icon: isBookable(store.category) ? Calendar : Package },
+            { n: 3, label: isServiceStore ? "Schedule" : "Products", icon: isServiceStore ? Calendar : Package },
           ].map((s, i) => (
             <div key={s.n} className="flex flex-1 items-center gap-2">
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
@@ -308,7 +320,16 @@ function ListStorePage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label>Category *</Label>
-                  <Select value={store.category} onValueChange={(v) => setStore({ ...store, category: v as any })}>
+                  <Select
+                    value={store.category}
+                    onValueChange={(v) => setStore((prev) => {
+                      const nextCategory = v as (typeof CATEGORIES)[number];
+                      const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
+                        ? prev.selling_mode
+                        : (isStoreBookable(nextCategory) ? "services" : "products");
+                      return { ...prev, category: nextCategory, selling_mode: nextMode };
+                    })}
+                  >
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -326,6 +347,20 @@ function ListStorePage() {
                 </div>
               </div>
 
+              {store.category === "Clothes & Fashion" && (
+                <div>
+                  <Label>How do you want to sell?</Label>
+                  <Select value={store.selling_mode} onValueChange={(v) => setStore((s) => ({ ...s, selling_mode: v as SellingMode }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="products">Product store (ready-made items)</SelectItem>
+                      <SelectItem value="services">Service store (custom-made / made-to-order)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-xs text-muted-foreground">Choose products for ready stock, or services for custom manufacturing and bookings.</p>
+                </div>
+              )}
+
               <div>
                 <Label>Fulfilment</Label>
                 <Select value={store.fulfillment} onValueChange={(v) => setStore({ ...store, fulfillment: v as any })}>
@@ -340,7 +375,7 @@ function ListStorePage() {
                 <p className="mt-1.5 text-xs text-muted-foreground">How will customers receive their order? You arrange this directly with them.</p>
               </div>
 
-              {isBookable(store.category) && (
+              {isServiceStore && (
                 <div>
                   <Label>Where do you offer services?</Label>
                   <Select value={store.location_type} onValueChange={(v) => setStore({ ...store, location_type: v as any })}>
@@ -494,7 +529,7 @@ function ListStorePage() {
 
           {step === 3 && (
             <div className="space-y-4">
-              {isBookable(store.category) ? (
+              {isServiceStore ? (
                 <>
                   <div>
                     <h2 className="font-display text-2xl font-bold">Services &amp; schedule</h2>
@@ -514,15 +549,17 @@ function ListStorePage() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                          {store.category === "Hair & Beauty" && (
-                            <div className="flex items-center gap-2 pl-1">
+                          <div className="flex flex-wrap items-center gap-3 pl-1">
+                            <div className="flex items-center gap-2">
                               <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
                               <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => updateProduct(i, "deposit", e.target.value.replace(/[^0-9.]/g, ""))} />
                             </div>
-                          )}
-                          <div className="flex items-center gap-2 pl-1">
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit £</span>
-                            <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => updateProduct(i, "deposit", e.target.value.replace(/[^0-9.]/g, ""))} />
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                              {p.image_url
+                                ? <span className="text-primary">✓ Photo added</span>
+                                : <><span className="text-base">📷</span> Add photo</>}
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProductImage(i, f); }} />
+                            </label>
                           </div>
                         </div>
                       ))}
@@ -625,13 +662,21 @@ function ListStorePage() {
 
                   <div className="space-y-3">
                     {products.map((p, i) => (
-                      <div key={i} className="grid grid-cols-12 gap-2">
-                        <Input className="col-span-6" placeholder="Product name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
-                        <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
-                        <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
-                        <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <div key={i} className="space-y-1">
+                        <div className="grid grid-cols-12 gap-2">
+                          <Input className="col-span-6" placeholder="Product name" value={p.name} onChange={(e) => updateProduct(i, "name", e.target.value)} maxLength={80} />
+                          <Input className="col-span-3 font-mono" placeholder="Price" inputMode="decimal" value={p.price} onChange={(e) => updateProduct(i, "price", e.target.value.replace(/[^0-9.]/g, ""))} />
+                          <Input className="col-span-2" placeholder="Unit" value={p.unit} onChange={(e) => updateProduct(i, "unit", e.target.value)} maxLength={20} />
+                          <Button variant="ghost" size="icon" className="col-span-1 text-muted-foreground" onClick={() => removeProduct(i)} disabled={products.length === 1}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <label className="flex cursor-pointer items-center gap-1.5 pl-1 text-xs text-muted-foreground hover:text-foreground">
+                          {p.image_url
+                            ? <span className="text-primary">✓ Photo added</span>
+                            : <><span className="text-base">📷</span> Add photo</>}
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProductImage(i, f); }} />
+                        </label>
                       </div>
                     ))}
                     <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">

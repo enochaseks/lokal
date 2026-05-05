@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, BOOKABLE_CATEGORIES, REGIONS, REGION_ADDRESS, DEFAULT_AREA } from "@/data/stores";
-import type { Region } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable } from "@/data/stores";
+import type { Region, SellingMode } from "@/data/stores";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
 const regionNames =
@@ -45,7 +45,6 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
-const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -86,6 +85,7 @@ type StoreRow = {
   bank_account_number: string | null; bank_sort_code: string | null;
   deposit_amount?: number | null;
   region: string | null; currency: string | null;
+  selling_mode?: SellingMode | null;
 };
 
 type OrderRow = {
@@ -181,7 +181,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string }>({
+  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
@@ -192,21 +192,23 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     location_type: (store as any).location_type ?? "salon",
     region: store.region ?? "GB",
     currency: store.currency ?? "GBP",
+    selling_mode: store.selling_mode === "services" ? "services" : "products",
   });
-  const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string }>>([]);
+  const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string; image_url: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>((store.region ?? "GB") as CountryCode);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const isServiceStore = isStoreBookable(form.category, form.selling_mode);
 
   useEffect(() => {
-    supabase.from("store_products").select("id,name,price,unit,deposit").eq("store_id", store.id).order("position")
+    supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
       .then(({ data }) => {
-        setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "" })));
+        setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "", image_url: p.image_url ?? "" })));
         setLoadingProducts(false);
       });
-    if (isBookable(store.category)) {
+    if (isStoreBookable(store.category, store.selling_mode)) {
       (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
         .then((result: any) => {
           const data: any[] | null = result.data;
@@ -254,7 +256,8 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         origin: form.origin, description: n(form.description),
         address: n(form.address), city: n(form.city), postcode: n(form.postcode),
         hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: form.fulfillment, image_url: n(form.image_url),
-        location_type: isBookable(form.category) ? (form.location_type || null) : null,
+        location_type: isServiceStore ? (form.location_type || null) : null,
+        selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
         instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
         bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
         bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
@@ -266,7 +269,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       await supabase.from("store_products").delete().eq("store_id", store.id);
       if (validProducts.length > 0) {
         const { error: prodErr } = await (supabase as any).from("store_products").insert(
-          validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, deposit: p.deposit.trim() ? Number(p.deposit) : null, position: i }))
+          validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, deposit: p.deposit.trim() ? Number(p.deposit) : null, image_url: p.image_url || null, position: i }))
         );
         if (prodErr) throw prodErr;
 
@@ -277,7 +280,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      if (isBookable(form.category)) {
+      if (isServiceStore) {
         await (supabase as any).from("store_availability").delete().eq("store_id", store.id);
         const activeDays = editAvail.filter((d) => d.active);
         if (activeDays.length > 0) {
@@ -288,7 +291,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency });
+      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: n(form.address), city: n(form.city), postcode: n(form.postcode), hours: n(form.hours), phone: n(form.phone), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -308,7 +311,16 @@ function EditStoreDialog({ store, onClose, onSaved }: {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2"><Label>Store name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} maxLength={80} className="mt-1" /></div>
               <div><Label>Category</Label>
-                <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v as Category }))}>
+                <Select
+                  value={form.category}
+                  onValueChange={(v) => setForm((f) => {
+                    const nextCategory = v as Category;
+                    const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
+                      ? f.selling_mode
+                      : (isStoreBookable(nextCategory) ? "services" : "products");
+                    return { ...f, category: nextCategory, selling_mode: nextMode };
+                  })}
+                >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
@@ -319,6 +331,17 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <SelectContent>{ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              {form.category === "Clothes & Fashion" && (
+                <div className="sm:col-span-2"><Label>How do you want to sell?</Label>
+                  <Select value={form.selling_mode} onValueChange={(v) => setForm((f) => ({ ...f, selling_mode: v as SellingMode }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="products">Product store (ready-made items)</SelectItem>
+                      <SelectItem value="services">Service store (custom-made / made-to-order)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="sm:col-span-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} maxLength={500} rows={3} className="mt-1" /></div>
             </div>
           </div>
@@ -372,7 +395,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                 </Select>
                 <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
               </div>
-              {isBookable(form.category) && (
+              {isServiceStore && (
                 <div className="sm:col-span-2">
                   <Label>Where do you offer services?</Label>
                   <Select value={form.location_type} onValueChange={(v) => setForm((f) => ({ ...f, location_type: v }))}>
@@ -423,17 +446,17 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isBookable(form.category) ? "Services" : "Products"}</p>
-              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isBookable(form.category) ? "Add service" : "Add"}</Button>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isServiceStore ? "Services" : "Products"}</p>
+              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "", image_url: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isServiceStore ? "Add service" : "Add"}</Button>
             </div>
             {loadingProducts ? <p className="text-sm text-muted-foreground">Loading…</p> : (
               <div className="space-y-2">
                 {products.map((p, i) => (
                   <div key={i} className="space-y-1">
                     <div className="grid grid-cols-12 gap-2">
-                      <Input className={isBookable(form.category) ? "col-span-6" : "col-span-5"} placeholder={isBookable(form.category) ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
+                      <Input className={isServiceStore ? "col-span-6" : "col-span-5"} placeholder={isServiceStore ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
                       <Input className="col-span-3 font-mono" placeholder="£0.00" value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
-                      {isBookable(form.category)
+                      {isServiceStore
                         ? <Input className="col-span-2" placeholder="e.g. 30 min" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
                         : <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
                       }
@@ -445,13 +468,26 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                         <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, deposit: e.target.value.replace(/[^0-9.]/g, "") } : x))} />
                       </div>
                     )}
+                    <label className="flex cursor-pointer items-center gap-1.5 pl-1 text-xs text-muted-foreground hover:text-foreground">
+                      {p.image_url
+                        ? <span className="text-primary">✓ Photo added</span>
+                        : <><span className="text-base">📷</span> Add photo</>}
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        const ext = f.name.split(".").pop();
+                        const path = `${store.owner_id}/${store.id}/products/${Date.now()}.${ext}`;
+                        const { error } = await supabase.storage.from("store-images").upload(path, f, { upsert: true });
+                        if (error) { toast.error("Photo upload failed"); return; }
+                        setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, image_url: path } : x));
+                      }} />
+                    </label>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {isBookable(form.category) && (
+          {isServiceStore && (
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
               <div className="space-y-2">
@@ -574,7 +610,7 @@ function MerchantPage() {
       } catch { /* posts table may not exist yet */ }
 
       // Load bookings and availability for Barbers/Beauty stores
-      const bookableIds = rows.filter((s) => isBookable(s.category)).map((s) => s.id);
+      const bookableIds = rows.filter((s) => isStoreBookable(s.category, s.selling_mode)).map((s) => s.id);
       if (bookableIds.length > 0) {
         try {
           const [{ data: availData }, { data: bookingsData }, { data: staffData }, { data: reviewsData }] = await Promise.all([
@@ -711,8 +747,8 @@ function MerchantPage() {
   const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
   const unreadMessages = messages.filter((m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id)).length;
   const storesWithoutPhone = stores.filter((s) => !s.phone);
-  const hasOrderableStore = stores.some((s) => !isBookable(s.category));
-  const hasBookableStore = stores.some((s) => isBookable(s.category));
+  const hasOrderableStore = stores.some((s) => !isStoreBookable(s.category, s.selling_mode));
+  const hasBookableStore = stores.some((s) => isStoreBookable(s.category, s.selling_mode));
 
   useEffect(() => {
     if (tab === "bookings" && !hasBookableStore) {
@@ -1102,7 +1138,7 @@ function MerchantPage() {
         {tab === "bookings" && (
           <div className="mt-8">
             {(() => {
-              const bookableStores = stores.filter((s) => isBookable(s.category));
+              const bookableStores = stores.filter((s) => isStoreBookable(s.category, s.selling_mode));
               if (bookableStores.length === 0) {
                 return (
                   <div className="rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">

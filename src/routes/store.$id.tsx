@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BOOKABLE_CATEGORIES, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
-import type { Region } from "@/data/stores";
+import { REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
+import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl, normalizeWebsiteUrl } from "@/lib/utils";
 import { toast } from "sonner";
@@ -52,6 +52,7 @@ type ProductRow = {
   unit: string | null;
   position: number;
   deposit?: number | null;
+  image_url?: string | null;
 };
 
 type AvailabilityRow = {
@@ -88,6 +89,7 @@ type StoreDetails = {
   website_url: string | null;
   image_url: string | null;
   fulfillment: string;
+  selling_mode?: SellingMode | null;
   published: boolean;
   store_products: ProductRow[] | null;
   store_availability: AvailabilityRow[] | null;
@@ -101,7 +103,7 @@ type StoreDetails = {
   region: string | null;
 };
 
-const isBookable = (category: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(category);
+const isBookable = (category: string, sellingMode?: string | null) => isStoreBookable(category, sellingMode);
 
 function makeRef() {
   const buf = new Uint8Array(4);
@@ -151,7 +153,7 @@ export const Route = createFileRoute("/store/$id")({
   loader: async ({ params }) => {
     const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*, store_products(name,price,unit,position,deposit), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
+      .select("*, store_products(name,price,unit,position,deposit,image_url), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
       .eq("id", params.id)
       .limit(1);
 
@@ -213,6 +215,7 @@ function StoreDetail() {
   const [qty, setQty] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [orderPhoneCountry, setOrderPhoneCountry] = useState<CountryCode>("GB");
   const [orderNote, setOrderNote] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
 
@@ -395,6 +398,8 @@ function StoreDetail() {
       return;
     }
 
+    const normalizedOrderPhone = normalizePhoneForAlerts(customerPhone, orderPhoneCountry) ?? customerPhone.trim();
+
     // Re-check store is still published before submitting
     setPlacingOrder(true);
     try {
@@ -409,7 +414,7 @@ function StoreDetail() {
         store_id: store.id,
         reference,
         customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
+        customer_phone: normalizedOrderPhone,
         customer_email: null,
         note: orderNote.trim() || null,
         items: cartItems.map((item) => ({ name: item.name, price: item.price, qty: item.qty, unit: item.unit ?? undefined })),
@@ -623,7 +628,7 @@ function StoreDetail() {
 
           {/* Buy / book section */}
           <div className="mb-8 rounded-2xl border border-border bg-card p-6">
-            {isBookable(store.category) ? (
+            {isBookable(store.category, store.selling_mode) ? (
               <div className="space-y-4">
                 <h2 className="font-display text-2xl font-bold">Book with this store</h2>
                 {bookingDepositDue && (
@@ -654,7 +659,10 @@ function StoreDetail() {
                     <div className="space-y-2 rounded-lg border border-border p-3">
                       {products.map((p) => (
                         <div key={p.name} className="flex items-center justify-between text-sm">
-                          <span>{p.name}</span>
+                          <span className="flex items-center gap-2">
+                            {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-9 w-9 rounded-md object-cover shrink-0" />}
+                            {p.name}
+                          </span>
                           <span className="font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</span>
                         </div>
                       ))}
@@ -835,9 +843,12 @@ function StoreDetail() {
                         const count = qty[p.name] ?? 0;
                         return (
                           <div key={p.name} className="flex items-center justify-between gap-4 p-3">
-                            <div>
-                              <p className="text-sm font-medium">{p.name}</p>
-                              <p className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
+                            <div className="flex items-center gap-3">
+                              {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
+                              <div>
+                                <p className="text-sm font-medium">{p.name}</p>
+                                <p className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button variant="outline" size="sm" onClick={() => setQty((prev) => ({ ...prev, [p.name]: Math.max(0, count - 1) }))}>-</Button>
@@ -856,7 +867,17 @@ function StoreDetail() {
                       </div>
                       <div>
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
-                        <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="+44..." />
+                        <div className="grid grid-cols-12 gap-2">
+                          <div className="col-span-5 sm:col-span-4">
+                            <Select value={orderPhoneCountry} onValueChange={(v) => setOrderPhoneCountry(v as CountryCode)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                          <div className="col-span-7 sm:col-span-8">
+                            <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Local number" />
+                          </div>
+                        </div>
                       </div>
                       <div className="sm:col-span-2">
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Order note (optional)</p>
@@ -932,7 +953,7 @@ function StoreDetail() {
                 </div>
               )}
 
-              {store.fulfillment && !isBookable(store.category) && (
+              {store.fulfillment && !isBookable(store.category, store.selling_mode) && (
                 <div className="pt-3 border-t border-border">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fulfilment</p>
                   <div className="flex flex-wrap gap-2">
@@ -949,7 +970,7 @@ function StoreDetail() {
                   </div>
                 </div>
               )}
-              {isBookable(store.category) && (store as any).location_type && (store as any).location_type !== "salon" && (
+              {isBookable(store.category, store.selling_mode) && (store as any).location_type && (store as any).location_type !== "salon" && (
                 <div className="pt-3 border-t border-border">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Service location</p>
                   <div className="flex flex-wrap gap-2">

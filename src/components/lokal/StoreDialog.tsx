@@ -9,11 +9,11 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 import type { Store } from "@/data/stores";
-import { BOOKABLE_CATEGORIES, REGION_BANK, DEFAULT_BANK } from "@/data/stores";
+import { REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
 import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 
-const isBookable = (cat: string) => (BOOKABLE_CATEGORIES as readonly string[]).includes(cat);
+const isBookable = (cat: string, sellingMode?: string | null) => isStoreBookable(cat, sellingMode);
 
 const regionNames =
   typeof Intl !== "undefined" && "DisplayNames" in Intl
@@ -80,7 +80,6 @@ type StaffRow = {
   available_days?: number[] | null;
 };
 
-const BOOKING_CATEGORIES: string[] = [...BOOKABLE_CATEGORIES];
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
@@ -220,7 +219,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   // Load weekly availability for bookable stores
   useEffect(() => {
-    if (!open || !store || !BOOKING_CATEGORIES.includes(store.category)) return;
+    if (!open || !store || !isBookable(store.category, store.selling_mode)) return;
     (supabase as any)
       .from("store_availability")
       .select("*")
@@ -734,7 +733,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
           {step === "browse" && (
             <>
-              {isBookable(store.category) ? (
+              {isBookable(store.category, store.selling_mode) ? (
                 <>
                   {bookingDepositDue && (
                     <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
@@ -760,7 +759,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                       <div className="mt-3 divide-y divide-border rounded-xl border border-border">
                         {store.products.map((p) => (
                           <div key={p.name} className="flex items-center justify-between gap-4 p-4">
-                            <div className="font-medium">{p.name}</div>
+                            <div className="flex items-center gap-3">
+                              {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
+                              <div className="font-medium">{p.name}</div>
+                            </div>
                             <div className="text-sm font-semibold">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
                           </div>
                         ))}
@@ -947,9 +949,12 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                       const q = qty[p.name] ?? 0;
                       return (
                         <div key={p.name} className="flex items-center justify-between gap-4 p-4">
-                          <div>
-                            <div className="font-medium">{p.name}</div>
-                            <div className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                          <div className="flex items-center gap-3">
+                            {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
+                            <div>
+                              <div className="font-medium">{p.name}</div>
+                              <div className="text-sm text-muted-foreground">£{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</div>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setQty({ ...qty, [p.name]: Math.max(0, q - 1) })}>−</Button>
@@ -1122,7 +1127,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 </div>
               )}
 
-              {!isBookable(store.category) && (
+              {!isBookable(store.category, store.selling_mode) && (
                 <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
                   <div>
                     <div className="text-xs uppercase tracking-wider text-muted-foreground">Total</div>
