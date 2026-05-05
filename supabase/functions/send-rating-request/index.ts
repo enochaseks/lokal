@@ -81,8 +81,34 @@ Deno.serve(async (req) => {
     });
 
     const body = await result.text();
+    let ratingUpdate: { ok: boolean; status: number; body: string } | null = null;
+    if (result.ok) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceRoleKey) {
+        const updateRes = await fetch(
+          `${supabaseUrl}/rest/v1/store_bookings?id=eq.${payload.booking_id}`,
+          {
+            method: "PATCH",
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({ rating_sent: true }),
+          }
+        );
+        ratingUpdate = {
+          ok: updateRes.ok,
+          status: updateRes.status,
+          body: await updateRes.text(),
+        };
+      }
+    }
+
     return new Response(
-      JSON.stringify({ sent: result.ok, status: result.status, body }),
+      JSON.stringify({ sent: result.ok, status: result.status, body, rating_update: ratingUpdate }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
