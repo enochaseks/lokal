@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, Calendar, ShoppingBag, Settings, Store } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -466,7 +466,6 @@ function CustomerDashboardPage() {
           </div>
         )}
       </main>
-      <Footer />
       <Toaster />
     </div>
   );

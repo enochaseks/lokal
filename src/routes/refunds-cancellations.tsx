@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 
 export const Route = createFileRoute("/refunds-cancellations")({
   component: RefundsAndCancellationsPage,
@@ -63,7 +63,6 @@ function RefundsAndCancellationsPage() {
           </Section>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Trash2, Plus, CheckCircle2, LogOut, Store } from "lucide-react";
@@ -406,7 +406,6 @@ function CustomerProfilePage() {
             </Button>
           </div>
         </main>
-        <Footer />
         <Toaster />
       </div>
     );
@@ -568,7 +567,6 @@ function CustomerProfilePage() {
           </div>
         </div>
       </main>
-      <Footer />
       <Toaster />
     </div>
   );

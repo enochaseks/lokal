@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 
 export const Route = createFileRoute("/terms")({
   component: TermsPage,
@@ -180,7 +180,6 @@ function TermsPage() {
           See also our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link> and <Link to="/refunds-cancellations" className="text-primary hover:underline">Refund &amp; Cancellation policy</Link>.
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

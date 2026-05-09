@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Lock, Sprout, Globe2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 
 export const Route = createFileRoute("/farmers-market")({
   component: FarmersMarketPage,
@@ -55,7 +55,6 @@ function FarmersMarketPage() {
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

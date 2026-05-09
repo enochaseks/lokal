@@ -8,23 +8,22 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how" className="border-y border-border/60 bg-gradient-soft py-20">
+    <section id="how" className="border-y border-border/60 py-14">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-2xl text-center">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">How Lokal works</span>
-          <h2 className="mt-3 font-display text-4xl font-bold md:text-5xl text-balance">
+          <h2 className="mt-3 font-display text-3xl font-bold md:text-4xl text-balance">
             Three steps from craving to <span className="bg-gradient-primary bg-clip-text text-transparent">collection.</span>
           </h2>
         </div>
 
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {steps.map((s, i) => (
-            <div key={s.title} className="relative rounded-2xl border border-border/60 bg-card p-7 shadow-card transition-shadow hover:shadow-warm">
-              <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-warm">
+        <div className="mt-12 grid gap-6 md:grid-cols-3 max-w-4xl mx-auto">
+          {steps.map((s) => (
+            <div key={s.title} className="flex flex-col items-center text-center p-6 rounded-2xl border border-border/60 bg-card">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground">
                 <s.icon className="h-5 w-5" />
               </div>
-              <div className="absolute right-6 top-6 font-display text-5xl font-bold text-primary/10">0{i + 1}</div>
-              <h3 className="font-display text-xl font-bold">{s.title}</h3>
+              <h3 className="font-display text-base font-bold">{s.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{s.text}</p>
             </div>
           ))}

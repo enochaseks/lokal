@@ -30,3 +30,8 @@ verify_jwt = false
 
 [functions.waitlist-signup]
 verify_jwt = false
+
+[functions.fraud-check]
+verify_jwt = false
+[functions.fraud-review-action]
+verify_jwt = false

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ShieldCheck, LogOut } from "lucide-react";
+import { ShieldCheck, LogOut, AlertTriangle } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { StoreVerificationAdmin } from "@/components/admin/StoreVerificationAdmin";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -37,6 +37,16 @@ type VerificationRequest = {
   admin_notes?: string | null;
 };
 
+type FraudQueueItem = {
+  id: string;
+  entity_id: string;
+  risk_score: number;
+  fraud_flags: string[];
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  stores?: { name: string } | null;
+};
+
 function AdminDashboard() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -44,6 +54,8 @@ function AdminDashboard() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [notifications, setNotifications] = useState<ReviewNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [fraudQueue, setFraudQueue] = useState<FraudQueueItem[]>([]);
+  const [fraudQueueLoading, setFraudQueueLoading] = useState(true);
 
   // Check admin access
   useEffect(() => {
@@ -59,6 +71,7 @@ function AdminDashboard() {
     async function loadRequests() {
       setRequestsLoading(true);
       setNotificationsLoading(true);
+      setFraudQueueLoading(true);
       try {
         const { data, error } = await supabase.functions.invoke("get-admin-verification-feed");
         if (!error) {
@@ -72,7 +85,7 @@ function AdminDashboard() {
           return;
         }
 
-        const [{ data: reqData, error: reqError }, { data: notifData, error: notifError }] = await Promise.all([
+        const [{ data: reqData, error: reqError }, { data: notifData, error: notifError }, { data: fraudData, error: fraudErr }] = await Promise.all([
           (supabase as any)
             .from("store_verification_requests")
             .select("id, store_id, status, business_name, owner_name, verification_method, online_presence_url, business_registration_number, manual_review_details, supporting_links, submission_reason, submitted_at, admin_notes")
@@ -81,6 +94,12 @@ function AdminDashboard() {
             .from("review_notifications")
             .select("id, title, body, store_id, recipient_role, is_read, created_at")
             .eq("recipient_role", "admin")
+            .order("created_at", { ascending: false })
+            .limit(10),
+          (supabase as any)
+            .from("fraud_review_queue")
+            .select("id, entity_id, risk_score, fraud_flags, status, created_at")
+            .eq("status", "pending")
             .order("created_at", { ascending: false })
             .limit(10),
         ]);
@@ -130,13 +149,43 @@ function AdminDashboard() {
             stores: { name: storeNameById[row.store_id] ?? "Unknown store" },
           })));
         }
+
+        if (fraudErr) {
+          setFraudQueue([]);
+        } else {
+          const fraudStoreIds = Array.from(new Set(((fraudData ?? []) as any[]).map((row) => row.entity_id).filter(Boolean)));
+          let fraudStoreNameById: Record<string, string> = {};
+
+          if (fraudStoreIds.length > 0) {
+            const { data: fraudStores } = await (supabase as any)
+              .from("stores")
+              .select("id,name")
+              .in("id", fraudStoreIds);
+
+            for (const row of (fraudStores ?? []) as Array<{ id: string; name: string }>) {
+              fraudStoreNameById[row.id] = row.name;
+            }
+          }
+
+          setFraudQueue(((fraudData ?? []) as any[]).map((row) => ({
+            id: row.id,
+            entity_id: row.entity_id,
+            risk_score: row.risk_score,
+            fraud_flags: row.fraud_flags ?? [],
+            status: row.status,
+            created_at: row.created_at,
+            stores: { name: fraudStoreNameById[row.entity_id] ?? "Unknown store" },
+          })));
+        }
       } catch (err) {
         console.error("Failed to load admin feed:", err);
         setRequests([]);
         setNotifications([]);
+        setFraudQueue([]);
       } finally {
         setRequestsLoading(false);
         setNotificationsLoading(false);
+        setFraudQueueLoading(false);
       }
     }
 
@@ -150,7 +199,6 @@ function AdminDashboard() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-muted-foreground">Loading...</div>
         </div>
-        <Footer />
       </div>
     );
   }
@@ -173,7 +221,6 @@ function AdminDashboard() {
             </a>
           </div>
         </div>
-        <Footer />
       </div>
     );
   }
@@ -192,7 +239,7 @@ function AdminDashboard() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-                <p className="text-sm text-muted-foreground">Review store verification requests</p>
+                <p className="text-sm text-muted-foreground">Review fraud queue and store verification requests</p>
               </div>
             </div>
             <Button
@@ -213,6 +260,37 @@ function AdminDashboard() {
             <p className="text-sm text-muted-foreground">
               Logged in as: <span className="font-medium text-foreground">{user.email}</span>
             </p>
+          </div>
+
+          {/* Fraud Review Queue */}
+          <div className="mb-8 rounded-lg border border-border bg-card p-6">
+            <h2 className="mb-4 text-2xl font-bold">Fraud Review Queue</h2>
+            {fraudQueueLoading ? (
+              <div className="text-sm text-muted-foreground">Loading fraud queue...</div>
+            ) : fraudQueue.length === 0 ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+                No pending fraud reviews.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {fraudQueue.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/20">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700 dark:text-amber-300" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{item.stores?.name ?? "Unknown store"}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Risk score: {item.risk_score} · {new Date(item.created_at).toLocaleString()}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Flags: {item.fraud_flags.join(", ") || "none"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Review Notifications */}
@@ -260,7 +338,6 @@ function AdminDashboard() {
         </div>
       </main>
 
-      <Footer />
     </div>
   );
 }

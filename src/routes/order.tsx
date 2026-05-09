@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, PackageSearch, CheckCircle2, Clock, Truck, XCircle } from "lucide-react";
@@ -284,7 +284,6 @@ function OrderLookupPage() {
           </div>
         )}
       </main>
-      <Footer />
       <Toaster />
     </div>
   );

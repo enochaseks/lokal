@@ -6,7 +6,7 @@ import facebookLogo from "@/assets/Facebook_Logo_2023.png";
 import xLogo from "@/assets/X_icon.svg.png";
 import instagramLogo from "@/assets/Instagram_logo_2016.svg.png";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1140,7 +1140,6 @@ function StoreDetail() {
         </div>
       </main>
 
-      <Footer />
     </div>
   );
 }

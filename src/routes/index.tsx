@@ -5,10 +5,9 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { Hero } from "@/components/lokal/Hero";
 import { HowItWorks } from "@/components/lokal/HowItWorks";
 import { Footer } from "@/components/lokal/Footer";
-import { PlatformMetrics } from "@/components/lokal/PlatformMetrics";
 import { WhyLokal } from "@/components/lokal/WhyLokal";
 import { MerchantCTA } from "@/components/lokal/MerchantCTA";
-import { BadgeCheck, Shield } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -200,7 +199,6 @@ function Index() {
       <Navbar />
       <main>
         <Hero onSearch={setSearch} />
-        <PlatformMetrics stores={liveStores} />
 
         <section id="stores" className="container mx-auto px-4 py-20">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
@@ -305,32 +303,10 @@ function Index() {
         </section>
 
         {/* Trust & Verification section */}
-        <section className="container mx-auto px-4 py-20">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <span className="text-xs font-semibold uppercase tracking-widest text-primary">Trust on Lokal</span>
-            <h2 className="mt-3 font-display text-4xl font-bold md:text-5xl text-balance">
-              Verified stores you can <span className="bg-gradient-primary bg-clip-text text-transparent">trust.</span>
-            </h2>
-          </div>
-          <div className="max-w-3xl mx-auto grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-card">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-warm">
-                <BadgeCheck className="h-5 w-5" />
-              </div>
-              <h3 className="font-display text-lg font-bold">Verified Stores</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Stores with blue badges have been verified by our admin team. Look for <strong>Verified</strong>, <strong>Online verified</strong>, or <strong>Unsecured verified</strong> badges on store cards and detail pages.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-card">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                <Shield className="h-5 w-5" />
-              </div>
-              <h3 className="font-display text-lg font-bold">Shop Safely</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Unverified stores are clearly marked. Always review store details, ratings, and policies before ordering. You're in control of your choice.
-              </p>
-            </div>
+        <section className="container mx-auto px-4 py-10">
+          <div className="max-w-3xl mx-auto flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <BadgeCheck className="h-4 w-4 text-primary flex-shrink-0" />
+            <span>All stores are reviewed and verified by our admin team before going live.</span>
           </div>
         </section>
 

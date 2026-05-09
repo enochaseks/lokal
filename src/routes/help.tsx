@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Mail, Instagram, MessageCircleHeart, BadgeCheck } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 
 export const Route = createFileRoute("/help")({
   component: HelpPage,
@@ -105,7 +105,6 @@ function HelpPage() {
           </p>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

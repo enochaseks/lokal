@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 
 export const Route = createFileRoute("/privacy")({
   component: PrivacyPage,
@@ -141,7 +141,6 @@ function PrivacyPage() {
           See also our <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>.
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

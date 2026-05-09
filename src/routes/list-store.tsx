@@ -235,6 +235,43 @@ function ListStorePage() {
         .from("stores").insert(payload).select("id").single();
       if (storeErr) throw storeErr;
 
+      // Run fraud detection check
+      try {
+        const fraudCheckResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fraud-check`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: user.id,
+              email: user.email,
+              display_name: user.user_metadata?.display_name || "",
+              store_name: store.name,
+              store_category: store.category,
+              phone: normalizePhoneForAlerts(store.phone, phoneCountry) || "",
+              metadata: {
+                address: store.address,
+                description: store.description,
+                city: store.city,
+              },
+              entity_type: "store",
+            }),
+          }
+        );
+        
+        if (fraudCheckResponse.ok) {
+          const fraudResult = await fraudCheckResponse.json();
+          if (fraudResult.risk_level === "high") {
+            toast.warning("Your account is under review", {
+              description: "We've flagged some details for security review. An admin will approve your store soon.",
+            });
+          }
+        }
+      } catch (fraudErr) {
+        // Log but don't fail the store creation if fraud check fails
+        console.error("Fraud check failed:", fraudErr);
+      }
+
       if (validProducts.length > 0) {
         const productRows = validProducts.map((p, i) => ({
           store_id: newStore.id,

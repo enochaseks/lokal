@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
-import { Footer } from "@/components/lokal/Footer";
+
 import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl } from "@/lib/utils";
@@ -254,7 +254,6 @@ function FollowingPage() {
         )}
       </main>
 
-      <Footer />
       <StoreDialog store={selected} open={open} onOpenChange={setOpen} />
       <Toaster position="bottom-center" />
     </div>

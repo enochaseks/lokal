@@ -27,6 +27,7 @@ import { Route as StoreIdRouteImport } from './routes/store.$id'
 import { Route as CustomerProfileRouteImport } from './routes/customer.profile'
 import { Route as CustomerDashboardRouteImport } from './routes/customer.dashboard'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AdminFraudReviewsRouteImport } from './routes/admin.fraud-reviews'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -118,10 +119,15 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/callback',
   getParentRoute: () => AuthRoute,
 } as any)
+const AdminFraudReviewsRoute = AdminFraudReviewsRouteImport.update({
+  id: '/fraud-reviews',
+  path: '/fraud-reviews',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
   '/farmers-market': typeof FarmersMarketRoute
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/rate': typeof RateRoute
   '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
+  '/admin/fraud-reviews': typeof AdminFraudReviewsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
   '/customer/profile': typeof CustomerProfileRoute
@@ -141,7 +148,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
   '/farmers-market': typeof FarmersMarketRoute
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   '/rate': typeof RateRoute
   '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
+  '/admin/fraud-reviews': typeof AdminFraudReviewsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
   '/customer/profile': typeof CustomerProfileRoute
@@ -162,7 +170,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
   '/farmers-market': typeof FarmersMarketRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/rate': typeof RateRoute
   '/refunds-cancellations': typeof RefundsCancellationsRoute
   '/terms': typeof TermsRoute
+  '/admin/fraud-reviews': typeof AdminFraudReviewsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/customer/dashboard': typeof CustomerDashboardRoute
   '/customer/profile': typeof CustomerProfileRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/rate'
     | '/refunds-cancellations'
     | '/terms'
+    | '/admin/fraud-reviews'
     | '/auth/callback'
     | '/customer/dashboard'
     | '/customer/profile'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/rate'
     | '/refunds-cancellations'
     | '/terms'
+    | '/admin/fraud-reviews'
     | '/auth/callback'
     | '/customer/dashboard'
     | '/customer/profile'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/rate'
     | '/refunds-cancellations'
     | '/terms'
+    | '/admin/fraud-reviews'
     | '/auth/callback'
     | '/customer/dashboard'
     | '/customer/profile'
@@ -245,7 +257,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   BookingRoute: typeof BookingRoute
   FarmersMarketRoute: typeof FarmersMarketRoute
@@ -391,8 +403,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/admin/fraud-reviews': {
+      id: '/admin/fraud-reviews'
+      path: '/fraud-reviews'
+      fullPath: '/admin/fraud-reviews'
+      preLoaderRoute: typeof AdminFraudReviewsRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminFraudReviewsRoute: typeof AdminFraudReviewsRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminFraudReviewsRoute: AdminFraudReviewsRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface AuthRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -406,7 +435,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   BookingRoute: BookingRoute,
   FarmersMarketRoute: FarmersMarketRoute,

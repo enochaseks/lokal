@@ -65,6 +65,17 @@ export const Route = createFileRoute("/merchant")({
     if (typeof window === "undefined") return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw redirect({ to: "/auth", search: { redirect: "/merchant" } });
+    
+    // Check if user has created a store
+    const { data: stores } = await supabase
+      .from("stores")
+      .select("id")
+      .eq("owner_id", session.user.id)
+      .limit(1);
+    
+    if (!stores || stores.length === 0) {
+      throw redirect({ to: "/list-store" });
+    }
   },
   errorComponent: RouteError,
   component: MerchantPage,
