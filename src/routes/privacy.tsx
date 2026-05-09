@@ -54,11 +54,12 @@ function PrivacyPage() {
               <li>Send order status notifications (email and/or SMS) where you have provided contact details.</li>
               <li>Display relevant stores near your location.</li>
               <li>Allow merchants to manage their store listings and orders.</li>
+              <li>Review and verify merchant claims for store verification badges (business registration, online presence, etc).</li>
               <li>Maintain the security and operation of the platform.</li>
             </ul>
             <p>
               Our lawful basis is <strong className="text-foreground">contract performance</strong> (processing orders) and
-              <strong className="text-foreground"> legitimate interests</strong> (operating the platform securely).
+              <strong className="text-foreground"> legitimate interests</strong> (operating the platform securely and fairly).
             </p>
           </Section>
 
@@ -80,22 +81,33 @@ function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="6. Data retention">
+          <Section title="6. Verification and trust data">
             <p>
-              Order data is retained for 2 years to support order disputes and records. Merchant account data
-              is retained for as long as the account remains active, and up to 1 year after deletion upon
-              request. You may request deletion of your data at any time (see Section 8).
+              When merchants submit store verification requests, we collect and review supporting documents
+              (business registration, website/social media screenshots, or manual submission details). We
+              retain these submissions for 2 years to maintain verification audit trails. If a request is
+              rejected or withdrawn, supporting documents are deleted. Verification approvals/rejections
+              are recorded in our platform logs indefinitely.
             </p>
           </Section>
 
-          <Section title="7. Cookies and tracking">
+          <Section title="7. Data retention">
+            <p>
+              Order data is retained for 2 years to support order disputes and records. Merchant account data
+              is retained for as long as the account remains active, and up to 1 year after deletion upon
+              request. Verification submission data is retained for 2 years as noted above. You may request
+              deletion of your data at any time (see Section 8).
+            </p>
+          </Section>
+
+          <Section title="8. Cookies and tracking">
             <p>
               We use only essential session cookies required for authentication. We do not use advertising
               cookies or cross-site tracking. No consent banner is required for essential cookies under UK GDPR.
             </p>
           </Section>
 
-          <Section title="8. Your rights">
+          <Section title="9. Your rights">
             <p>Under UK GDPR you have the right to:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Access the personal data we hold about you.</li>
@@ -117,7 +129,7 @@ function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="9. Changes to this policy">
+          <Section title="10. Changes to this policy">
             <p>
               We may update this policy periodically. Material changes will be flagged on the site.
               Continued use of Lokal after changes constitutes acceptance of the updated policy.

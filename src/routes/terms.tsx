@@ -92,7 +92,31 @@ function TermsPage() {
             </p>
           </Section>
 
-          <Section title="6. Intellectual property">
+          <Section title="6. Verification and badges">
+            <p>
+              Lokal offers optional store verification. Merchants may submit verification requests
+              using one of three methods: business registration documents, online presence proof, or
+              manual submission. Our admin team reviews submissions and approves or rejects based on
+              available evidence.
+            </p>
+            <p>
+              Verified stores display blue verification badges:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong className="text-foreground">Verified</strong> — verified with official business registration documents.</li>
+              <li><strong className="text-foreground">Online verified</strong> — verified via established online presence (website, social media, etc).</li>
+              <li><strong className="text-foreground">Unsecured verified</strong> — verified via manual submission with limited supporting evidence.</li>
+            </ul>
+            <p>
+              <strong className="text-foreground">Important:</strong> Verification badges indicate that we have reviewed available evidence
+              at a point in time. Badges do not guarantee product quality, customer satisfaction, or
+              merchant reliability. All transactions remain at customer discretion. Unverified stores
+              are not inherently unsafe — merchants may choose not to verify. Always review store
+              policies, ratings, and contact details before ordering.
+            </p>
+          </Section>
+
+          <Section title="7. Intellectual property">
             <p>
               The Lokal name, logo, and platform design are owned by Lokal. Merchants retain ownership
               of their store content (descriptions, photos) but grant Lokal a licence to display it on
@@ -100,7 +124,7 @@ function TermsPage() {
             </p>
           </Section>
 
-          <Section title="7. Limitation of liability">
+          <Section title="8. Limitation of liability">
             <p>
               To the maximum extent permitted by UK law, Lokal is not liable for:
             </p>
@@ -116,7 +140,7 @@ function TermsPage() {
             </p>
           </Section>
 
-          <Section title="8. Acceptable use">
+          <Section title="9. Acceptable use">
             <p>You must not use Lokal to:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Submit false, misleading, or fraudulent orders or listings.</li>
@@ -126,7 +150,7 @@ function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="9. Termination">
+          <Section title="10. Termination">
             <p>
               We may suspend or terminate your access to Lokal at any time for breaches of these Terms
               or for any other reason at our discretion. Merchants may remove their listing at any time
@@ -137,14 +161,14 @@ function TermsPage() {
             </p>
           </Section>
 
-          <Section title="10. Governing law">
+          <Section title="11. Governing law">
             <p>
               These Terms are governed by the laws of <strong className="text-foreground">England and Wales</strong>.
               Any disputes will be subject to the exclusive jurisdiction of the courts of England and Wales.
             </p>
           </Section>
 
-          <Section title="11. Contact">
+          <Section title="12. Contact">
             <p>
               For any questions about these Terms, contact us at{" "}
               <strong className="text-foreground">helplokal@gmail.com</strong>.

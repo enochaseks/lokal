@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Mail, Instagram, MessageCircleHeart } from "lucide-react";
+import { Mail, Instagram, MessageCircleHeart, BadgeCheck } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Footer } from "@/components/lokal/Footer";
 
@@ -75,6 +75,27 @@ function HelpPage() {
               @lokaladmin
             </a>
           </HelpCard>
+        </div>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-card">
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <h3 className="font-display text-lg font-bold">What do verified badges mean?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Stores with blue badges have been verified by our admin team using business registration, online presence, or manual submission. Verification indicates we've reviewed available evidence — it does not guarantee quality or reliability. Unverified stores are not unsafe; many merchants simply choose not to verify.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-card">
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
+              <MessageCircleHeart className="h-5 w-5" />
+            </div>
+            <h3 className="font-display text-lg font-bold">How do I verify my store?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              If you're a merchant, you can submit a verification request from your dashboard. Provide business registration documents, proof of online presence, or manual details. Our admin team reviews submissions within a few days and approves or rejects based on available evidence.
+            </p>
+          </div>
         </div>
 
         <div className="mt-10 rounded-2xl border border-border/60 bg-secondary/40 p-6 text-sm leading-relaxed text-muted-foreground">
