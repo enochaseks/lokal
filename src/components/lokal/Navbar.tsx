@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store, Heart, User, ShieldCheck } from "lucide-react";
+import { MapPin, LogOut, Store, Heart, User, ShieldCheck, Sprout } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
 import { supabase } from "@/integrations/supabase/client";
@@ -171,6 +171,11 @@ export function Navbar() {
                 <DropdownMenuItem onClick={() => { markFollowingSeen(); navigate({ to: "/following" }); }}>
                   <Heart className="mr-2 h-4 w-4" /> Following
                   {hasNewFollowingPosts && <span className="ml-auto h-2.5 w-2.5 rounded-full bg-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { window.location.href = "/farmers-market"; }}>
+                  <Sprout className="mr-2 h-4 w-4" /> Farmers Market
+                  <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Soon</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate({ to: "/help" })}>

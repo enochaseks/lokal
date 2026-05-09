@@ -18,6 +18,7 @@ import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as ListStoreRouteImport } from './routes/list-store'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as FollowingRouteImport } from './routes/following'
+import { Route as FarmersMarketRouteImport } from './routes/farmers-market'
 import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -72,6 +73,11 @@ const FollowingRoute = FollowingRouteImport.update({
   path: '/following',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FarmersMarketRoute = FarmersMarketRouteImport.update({
+  id: '/farmers-market',
+  path: '/farmers-market',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BookingRoute = BookingRouteImport.update({
   id: '/booking',
   path: '/booking',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
+  '/farmers-market': typeof FarmersMarketRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
+  '/farmers-market': typeof FarmersMarketRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRouteWithChildren
   '/booking': typeof BookingRoute
+  '/farmers-market': typeof FarmersMarketRoute
   '/following': typeof FollowingRoute
   '/help': typeof HelpRoute
   '/list-store': typeof ListStoreRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/booking'
+    | '/farmers-market'
     | '/following'
     | '/help'
     | '/list-store'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/booking'
+    | '/farmers-market'
     | '/following'
     | '/help'
     | '/list-store'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/booking'
+    | '/farmers-market'
     | '/following'
     | '/help'
     | '/list-store'
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRouteWithChildren
   BookingRoute: typeof BookingRoute
+  FarmersMarketRoute: typeof FarmersMarketRoute
   FollowingRoute: typeof FollowingRoute
   HelpRoute: typeof HelpRoute
   ListStoreRoute: typeof ListStoreRoute
@@ -315,6 +328,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FollowingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/farmers-market': {
+      id: '/farmers-market'
+      path: '/farmers-market'
+      fullPath: '/farmers-market'
+      preLoaderRoute: typeof FarmersMarketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/booking': {
       id: '/booking'
       path: '/booking'
@@ -389,6 +409,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AuthRoute: AuthRouteWithChildren,
   BookingRoute: BookingRoute,
+  FarmersMarketRoute: FarmersMarketRoute,
   FollowingRoute: FollowingRoute,
   HelpRoute: HelpRoute,
   ListStoreRoute: ListStoreRoute,
