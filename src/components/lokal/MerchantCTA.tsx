@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 
 export function MerchantCTA() {
   return (
@@ -19,7 +20,11 @@ export function MerchantCTA() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
             <Link to="/list-store">
-              <Button size="lg" className="gap-2 bg-amber-600 hover:bg-amber-700 text-white">
+              <Button
+                size="lg"
+                className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={() => trackEvent("merchant_cta_click", { placement: "merchant_section", target: "list-store" })}
+              >
                 List Your Store <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>

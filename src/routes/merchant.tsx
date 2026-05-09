@@ -4,6 +4,7 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { VerificationRequestDialog } from "@/components/merchant/VerificationRequestDialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy, BadgeCheck, AlertCircle } from "lucide-react";
+import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, BadgeCheck, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable } from "@/data/stores";
@@ -638,6 +639,9 @@ function MerchantPage() {
   const [postDraftUploading, setPostDraftUploading] = useState(false);
   const [postDraftSaving, setPostDraftSaving] = useState(false);
   const [sharedStoreId, setSharedStoreId] = useState<string | null>(null);
+  const [sharedStoreIds, setSharedStoreIds] = useState<Set<string>>(new Set());
+  const [listingCountByStore, setListingCountByStore] = useState<Record<string, number>>({});
+  const [onboardingStoreId, setOnboardingStoreId] = useState<string | null>(null);
   const [verificationStatusByStore, setVerificationStatusByStore] = useState<Record<string, VerificationStatus>>({});
   const [verificationTierByStore, setVerificationTierByStore] = useState<Record<string, VerificationTier>>({});
 
@@ -645,10 +649,46 @@ function MerchantPage() {
     const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
     const shareUrl = `${domain}/store/${storeId}`;
     navigator.clipboard.writeText(shareUrl);
+    trackEvent("merchant_store_share", { store_id: storeId, source: "merchant_dashboard" });
+
+    setSharedStoreIds((prev) => {
+      const next = new Set(prev);
+      next.add(storeId);
+      try {
+        window.localStorage.setItem("lokal:shared-store-ids", JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage issues.
+      }
+      return next;
+    });
+
     setSharedStoreId(storeId);
     toast.success("Share link copied!");
     setTimeout(() => setSharedStoreId(null), 2000);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem("lokal:new-store-onboarding");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { storeId?: string };
+        if (parsed.storeId) setOnboardingStoreId(parsed.storeId);
+      }
+    } catch {
+      // Ignore storage parsing errors.
+    }
+
+    try {
+      const rawShared = window.localStorage.getItem("lokal:shared-store-ids");
+      if (rawShared) {
+        const parsed = JSON.parse(rawShared) as string[];
+        if (Array.isArray(parsed)) setSharedStoreIds(new Set(parsed));
+      }
+    } catch {
+      // Ignore storage parsing errors.
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -667,6 +707,17 @@ function MerchantPage() {
 
       if (rows.length === 0) return;
       const storeIds = rows.map((s) => s.id);
+
+      const { data: productsData } = await db.from("store_products").select("store_id").in("store_id", storeIds);
+      const counts: Record<string, number> = {};
+      for (const row of (productsData ?? []) as Array<{ store_id: string }>) {
+        counts[row.store_id] = (counts[row.store_id] ?? 0) + 1;
+      }
+      setListingCountByStore(counts);
+
+      if (onboardingStoreId && !storeIds.includes(onboardingStoreId)) {
+        setOnboardingStoreId(null);
+      }
 
       try {
         const { data: reqData } = await (supabase as any)
@@ -783,7 +834,7 @@ function MerchantPage() {
         supabase.removeChannel(realtimeChannel);
       }
     };
-  }, [user]);
+  }, [user, onboardingStoreId]);
 
   useEffect(() => {
     if (tab !== "messages") return;
@@ -899,6 +950,24 @@ function MerchantPage() {
   const storesWithoutPhone = stores.filter((s) => !s.phone);
   const hasOrderableStore = stores.some((s) => !isStoreBookable(s.category, s.selling_mode));
   const hasBookableStore = stores.some((s) => isStoreBookable(s.category, s.selling_mode));
+  const onboardingStore = onboardingStoreId ? stores.find((s) => s.id === onboardingStoreId) ?? null : null;
+  const onboardingChecklist = onboardingStore
+    ? {
+        hasListing: (listingCountByStore[onboardingStore.id] ?? 0) > 0,
+        hasVerificationStep: onboardingStore.is_verified || verificationStatusByStore[onboardingStore.id] === "pending" || verificationStatusByStore[onboardingStore.id] === "approved",
+        hasSharedLink: sharedStoreIds.has(onboardingStore.id),
+      }
+    : null;
+  const checklistDone = onboardingChecklist
+    ? onboardingChecklist.hasListing && onboardingChecklist.hasVerificationStep && onboardingChecklist.hasSharedLink
+    : false;
+
+  const dismissOnboardingChecklist = () => {
+    setOnboardingStoreId(null);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem("lokal:new-store-onboarding");
+    }
+  };
 
   useEffect(() => {
     if (tab === "bookings" && !hasBookableStore) {
@@ -925,6 +994,60 @@ function MerchantPage() {
             </Button>
           )}
         </div>
+
+        {onboardingStore && onboardingChecklist && (
+          <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Quick activation checklist</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Finish these to help {onboardingStore.name} get discovered faster.
+                </p>
+              </div>
+              <button
+                onClick={dismissOnboardingChecklist}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Dismiss
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasListing ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                  {onboardingChecklist.hasListing ? "✓" : "1"}
+                </span>
+                <span>Add your first product or service</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasVerificationStep ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                  {onboardingChecklist.hasVerificationStep ? "✓" : "2"}
+                </span>
+                <span>Submit verification request (or get verified)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasSharedLink ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                  {onboardingChecklist.hasSharedLink ? "✓" : "3"}
+                </span>
+                <span>Share your store link</span>
+                {!onboardingChecklist.hasSharedLink && (
+                  <button
+                    onClick={() => handleShareStore(onboardingStore.id)}
+                    className="ml-auto text-xs font-semibold text-primary hover:underline"
+                  >
+                    Copy link
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {checklistDone && (
+              <p className="mt-3 rounded-md bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
+                Great start. Your store setup is complete.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Tabs */}
         {/* WhatsApp nudge banner */}

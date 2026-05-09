@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
+import { trackEvent, trackEventOnce } from "@/lib/analytics";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
 const regionNames =
@@ -129,6 +130,8 @@ function ListStorePage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
+  const [onboardingStarted, setOnboardingStarted] = useState(false);
   const [region, setRegion] = useState<Region>("GB");
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>("GB");
 
@@ -149,6 +152,10 @@ function ListStorePage() {
 
   useEffect(() => {
     // route guard handled by beforeLoad
+  }, []);
+
+  useEffect(() => {
+    trackEvent("merchant_onboarding_visit", { page: "list-store" });
   }, []);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,11 +203,30 @@ function ListStorePage() {
     return true;
   };
 
+  const handleStep1Continue = () => {
+    if (!validateStep1()) return;
+    if (!onboardingStarted) {
+      trackEventOnce("merchant_onboarding_start", `start:${user?.id ?? "anon"}`, {
+        step: 1,
+        category: store.category,
+      });
+      setOnboardingStarted(true);
+    }
+    setStep(2);
+  };
+
   const handleSubmit = async () => {
     if (!user) return;
     const isBarber = isServiceStore;
     const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
     if (validProducts.length === 0) { toast.error(`Add at least one ${isBarber ? "service" : "product"} before going live`); return; }
+
+    trackEvent("merchant_onboarding_submit", {
+      step: 3,
+      store_category: store.category,
+      listing_count: validProducts.length,
+      is_service_store: isBarber,
+    });
 
     setSubmitting(true);
     try {
@@ -313,6 +339,19 @@ function ListStorePage() {
       // Promote to merchant role
       await supabase.from("user_roles").insert({ user_id: user.id, role: "merchant" });
       await refreshRoles();
+
+      trackEvent("merchant_onboarding_success", {
+        store_id: newStore.id,
+        store_category: store.category,
+        listing_count: validProducts.length,
+      });
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          "lokal:new-store-onboarding",
+          JSON.stringify({ storeId: newStore.id, createdAt: Date.now() })
+        );
+      }
 
       toast.success("Your store is live!", { description: "Shoppers can now find and order from you." });
       navigate({ to: "/merchant" });
@@ -454,47 +493,64 @@ function ListStorePage() {
                 <Textarea value={store.description} onChange={(e) => setStore({ ...store, description: e.target.value })} placeholder="What makes your store special?" maxLength={500} className="mt-1" rows={3} />
               </div>
 
-              <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-3">
-                <Label>Refunds & cancellation policy</Label>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Do you accept refunds?</Label>
-                  <Select value={store.accepts_refunds ? "yes" : "no"} onValueChange={(v) => setStore({ ...store, accepts_refunds: v === "yes" })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="yes">Yes, refunds may be accepted</SelectItem>
-                      <SelectItem value="no">No refunds</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Refund policy details (shown to customers)</Label>
-                  <Textarea value={store.refund_policy} onChange={(e) => setStore({ ...store, refund_policy: e.target.value })} placeholder="Example: Full refund if cancelled 24+ hours before appointment." maxLength={1000} className="mt-1" rows={3} />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Cancellation policy details (shown to customers)</Label>
-                  <Textarea value={store.cancellation_policy} onChange={(e) => setStore({ ...store, cancellation_policy: e.target.value })} placeholder="Example: Deposit is non-refundable for no-shows." maxLength={1000} className="mt-1" rows={3} />
-                </div>
+              <div className="rounded-lg border border-border/70 bg-secondary/20 p-3">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary hover:underline"
+                  onClick={() => setShowOptionalFields((v) => !v)}
+                >
+                  {showOptionalFields ? "Hide optional details" : "Add optional details"}
+                </button>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Optional details help your profile stand out, but you can go live without them.
+                </p>
               </div>
 
-              <div>
-                <Label>Cover photo</Label>
-                {store.image_url && (
-                  <div className="mt-1 h-32 w-full overflow-hidden rounded-lg bg-secondary">
-                    <img src={getImageUrl(store.image_url) ?? store.image_url} alt="preview" className="h-full w-full object-cover" />
-                  </div>
-                )}
-                <div className="mt-1 flex gap-2">
-                  <label className="flex-1 cursor-pointer">
-                    <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
-                      {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : store.image_url ? "Replace photo" : "Upload photo"}
+              {showOptionalFields && (
+                <>
+                  <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-3">
+                    <Label>Refunds & cancellation policy</Label>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Do you accept refunds?</Label>
+                      <Select value={store.accepts_refunds ? "yes" : "no"} onValueChange={(v) => setStore({ ...store, accepts_refunds: v === "yes" })}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes, refunds may be accepted</SelectItem>
+                          <SelectItem value="no">No refunds</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
-                  </label>
-                  {!store.image_url && (
-                    <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="or paste URL" className="flex-[2]" />
-                  )}
-                </div>
-              </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Refund policy details (shown to customers)</Label>
+                      <Textarea value={store.refund_policy} onChange={(e) => setStore({ ...store, refund_policy: e.target.value })} placeholder="Example: Full refund if cancelled 24+ hours before appointment." maxLength={1000} className="mt-1" rows={3} />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Cancellation policy details (shown to customers)</Label>
+                      <Textarea value={store.cancellation_policy} onChange={(e) => setStore({ ...store, cancellation_policy: e.target.value })} placeholder="Example: Deposit is non-refundable for no-shows." maxLength={1000} className="mt-1" rows={3} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Cover photo</Label>
+                    {store.image_url && (
+                      <div className="mt-1 h-32 w-full overflow-hidden rounded-lg bg-secondary">
+                        <img src={getImageUrl(store.image_url) ?? store.image_url} alt="preview" className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                    <div className="mt-1 flex gap-2">
+                      <label className="flex-1 cursor-pointer">
+                        <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
+                          {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : store.image_url ? "Replace photo" : "Upload photo"}
+                        </div>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+                      </label>
+                      {!store.image_url && (
+                        <Input value={store.image_url} onChange={(e) => setStore({ ...store, image_url: e.target.value })} placeholder="or paste URL" className="flex-[2]" />
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
@@ -545,28 +601,32 @@ function ListStorePage() {
                 </div>
               </div>
 
-              <div>
-                <Label>Opening hours</Label>
-                <Input value={store.hours} onChange={(e) => setStore({ ...store, hours: e.target.value })} placeholder="Mon–Sat · 9am – 8pm" maxLength={80} className="mt-1" />
-              </div>
-
-              <div className="space-y-3">
-                <Label>Social links</Label>
-                <div className="grid gap-4 sm:grid-cols-2">
+              {showOptionalFields && (
+                <>
                   <div>
-                    <Input value={store.instagram_handle} onChange={(e) => setStore({ ...store, instagram_handle: e.target.value })} placeholder="Instagram handle or profile URL" maxLength={80} className="mt-1" />
+                    <Label>Opening hours</Label>
+                    <Input value={store.hours} onChange={(e) => setStore({ ...store, hours: e.target.value })} placeholder="Mon–Sat · 9am – 8pm" maxLength={80} className="mt-1" />
                   </div>
-                  <div>
-                    <Input value={store.tiktok_handle} onChange={(e) => setStore({ ...store, tiktok_handle: e.target.value })} placeholder="TikTok handle or profile URL" maxLength={80} className="mt-1" />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Input value={store.website_url} onChange={(e) => setStore({ ...store, website_url: e.target.value })} placeholder="Website URL" maxLength={200} className="mt-1" />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">These appear as secondary links in your store profile, below Lokal's order, booking, and message actions.</p>
-              </div>
 
-              <Button size="lg" className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => { if (validateStep1()) setStep(2); }}>
+                  <div className="space-y-3">
+                    <Label>Social links</Label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Input value={store.instagram_handle} onChange={(e) => setStore({ ...store, instagram_handle: e.target.value })} placeholder="Instagram handle or profile URL" maxLength={80} className="mt-1" />
+                      </div>
+                      <div>
+                        <Input value={store.tiktok_handle} onChange={(e) => setStore({ ...store, tiktok_handle: e.target.value })} placeholder="TikTok handle or profile URL" maxLength={80} className="mt-1" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Input value={store.website_url} onChange={(e) => setStore({ ...store, website_url: e.target.value })} placeholder="Website URL" maxLength={200} className="mt-1" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">These appear as secondary links in your store profile, below Lokal's order, booking, and message actions.</p>
+                  </div>
+                </>
+              )}
+
+              <Button size="lg" className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={handleStep1Continue}>
                 Continue
               </Button>
             </div>
@@ -611,7 +671,15 @@ function ListStorePage() {
 
               <div className="flex gap-2">
                 <Button variant="outline" size="lg" className="flex-1" onClick={() => setStep(1)}>Back</Button>
-                <Button size="lg" className="flex-[2] bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => { if (validateStep2()) setStep(3); }}>
+                <Button
+                  size="lg"
+                  className="flex-[2] bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                  onClick={() => {
+                    if (!validateStep2()) return;
+                    trackEvent("merchant_onboarding_step_complete", { step: 2 });
+                    setStep(3);
+                  }}
+                >
                   Continue
                 </Button>
               </div>

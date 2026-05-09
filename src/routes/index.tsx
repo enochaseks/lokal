@@ -310,6 +310,8 @@ function Index() {
           </div>
         </section>
 
+        <MerchantCTA />
+
         {/* Following feed — only visible when the user follows ≥1 store */}
         {showFeed && (
           <section className="container mx-auto px-4 py-12">
@@ -366,7 +368,6 @@ function Index() {
         )}
 
         <WhyLokal />
-        <MerchantCTA />
         <HowItWorks />
       </main>
       <Footer />

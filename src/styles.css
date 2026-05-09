@@ -137,4 +137,13 @@
   .shadow-glow { box-shadow: var(--shadow-glow); }
   .font-display { font-family: var(--font-display); }
   .text-balance { text-wrap: balance; }
+
+  @keyframes fade-loop {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+
+  .animate-fade-loop {
+    animation: fade-loop 2.8s ease-in-out infinite;
+  }
 }
