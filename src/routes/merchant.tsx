@@ -743,6 +743,26 @@ function MerchantPage() {
           setBookings((prev) => [...prev, payload.new as BookingRow].sort((a, b) => a.slot_start.localeCompare(b.slot_start)));
           toast("📅 New booking request!", { description: `${(payload.new as BookingRow).customer_name} — ${(payload.new as BookingRow).slot_start.slice(0, 16).replace("T", " ")}` });
         })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "store_verification_requests", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
+          const updated = payload.new as any;
+          if (updated.status === "approved") {
+            const storeName = stores.find((s) => s.id === updated.store_id)?.name ?? "Your store";
+            toast.success(`🎉 ${storeName} is now verified!`, {
+              description: "You can now publish your store and go live on Lokal.",
+              duration: 8000,
+            });
+            // Update local verification status and tier
+            setVerificationStatusByStore((prev) => ({ ...prev, [updated.store_id]: "approved" }));
+            const tier = updated.verification_method === "registration_number"
+              ? "verified"
+              : updated.verification_method === "online_presence"
+                ? "online_verified"
+                : "unsecured_verified";
+            setVerificationTierByStore((prev) => ({ ...prev, [updated.store_id]: tier }));
+            // Update store is_verified flag
+            setStores((prev) => prev.map((s) => s.id === updated.store_id ? { ...s, is_verified: true } : s));
+          }
+        })
         .subscribe();
     })();
 

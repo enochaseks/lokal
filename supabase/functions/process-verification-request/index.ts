@@ -186,14 +186,46 @@ Deno.serve(async (req) => {
       const decisionTitle = payload.action === "approve" ? "approved" : "rejected";
       const notes = payload.admin_notes?.trim() ? `<p><strong>Admin notes:</strong> ${payload.admin_notes.trim()}</p>` : "";
 
-      const html = `
-        <h2>Your store verification request was ${decisionTitle}</h2>
-        <p><strong>Business:</strong> ${requestRow.business_name}</p>
-        <p><strong>Owner:</strong> ${requestRow.owner_name}</p>
-        <p><strong>Status:</strong> ${decision}</p>
-        ${notes}
-        <p><a href="https://lokalshops.co.uk/">Open Lokal</a></p>
-      `;
+      let html = "";
+      let subject = "";
+
+      if (payload.action === "approve") {
+        subject = `🎉 Your store is verified! Go live on Lokal`;
+        html = `
+          <h2>🎉 Congratulations! Your store is verified!</h2>
+          <p>Your store <strong>${requestRow.business_name}</strong> has been approved and verified on Lokal.</p>
+          
+          <p><strong>You can now publish your store:</strong></p>
+          <ol>
+            <li>Go to your merchant dashboard at <a href="https://lokalshops.co.uk/">lokalshops.co.uk</a></li>
+            <li>Click the <strong>Publish</strong> button on your store</li>
+            <li>Your store will be live and visible to customers across the Lokal platform!</li>
+          </ol>
+          
+          <p><strong>What this means:</strong></p>
+          <ul>
+            <li>✅ Customers can now find and order from your store</li>
+            <li>✅ Your store will display a verification badge</li>
+            <li>✅ Customers know your store has been reviewed by our team</li>
+          </ul>
+          
+          ${notes}
+          
+          <p>Questions? Reply to this email or contact us at helplokal@gmail.com</p>
+          <p><a href="https://lokalshops.co.uk/" style="background:#000;color:#fff;padding:10px 20px;text-decoration:none;border-radius:8px;display:inline-block">Go to Dashboard</a></p>
+        `;
+      } else {
+        subject = `Store verification request - Not approved`;
+        html = `
+          <h2>Your store verification request was ${decisionTitle}</h2>
+          <p><strong>Business:</strong> ${requestRow.business_name}</p>
+          <p><strong>Owner:</strong> ${requestRow.owner_name}</p>
+          <p><strong>Status:</strong> ${decision}</p>
+          ${notes}
+          <p>You can submit another verification request after addressing the feedback above.</p>
+          <p><a href="https://lokalshops.co.uk/">Open Lokal</a></p>
+        `;
+      }
 
       await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -204,7 +236,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           sender: { email: emailFrom, name: "Lokal" },
           to: [{ email: requesterEmail }],
-          subject: `Store verification ${decision}: ${requestRow.business_name}`,
+          subject: subject,
           htmlContent: html,
         }),
       });
