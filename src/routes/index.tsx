@@ -41,6 +41,7 @@ function Index() {
   const [cityManuallySet, setCityManuallySet] = useState(false);
   const [showCityInput, setShowCityInput] = useState(false);
   const [cityInputValue, setCityInputValue] = useState("");
+  const [showMoreSections, setShowMoreSections] = useState(false);
 
   // Following feed
   type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
@@ -312,63 +313,78 @@ function Index() {
 
         <MerchantCTA />
 
-        {/* Following feed — only visible when the user follows ≥1 store */}
-        {showFeed && (
-          <section className="container mx-auto px-4 py-12">
-            <div className="mb-6 flex items-center gap-3">
-              <span className="text-2xl">❤️</span>
-              <div>
-                <h2 className="font-display text-2xl font-bold">Followed on Lokal</h2>
-                <p className="text-sm text-muted-foreground">Latest updates from stores you follow</p>
-              </div>
-            </div>
+        <section className="container mx-auto px-4 py-6">
+          <div className="mx-auto max-w-3xl text-center">
+            <button
+              onClick={() => setShowMoreSections((v) => !v)}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              {showMoreSections ? "Hide extra sections" : "Show more about Lokal"}
+            </button>
+          </div>
+        </section>
 
-            {loadingFeed ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-xl border border-border bg-card p-4">
-                    <div className="h-4 w-1/4 rounded bg-secondary animate-pulse mb-2" />
-                    <div className="h-16 w-full rounded bg-secondary animate-pulse" />
+        {showMoreSections && (
+          <>
+            {/* Following feed — only visible when the user follows ≥1 store */}
+            {showFeed && (
+              <section className="container mx-auto px-4 py-12">
+                <div className="mb-6 flex items-center gap-3">
+                  <span className="text-2xl">❤️</span>
+                  <div>
+                    <h2 className="font-display text-2xl font-bold">Followed on Lokal</h2>
+                    <p className="text-sm text-muted-foreground">Latest updates from stores you follow</p>
                   </div>
-                ))}
-              </div>
-            ) : followedPosts.length === 0 ? (
-              <div className="rounded-xl border-2 border-dashed border-border bg-card p-10 text-center">
-                <p className="text-sm text-muted-foreground">The stores you follow haven't posted any updates yet. Check back soon.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {followedPosts.map((post) => {
-                  const storeName = liveStores.find((s) => s.id === post.store_id)?.name ?? "Store";
-                  const storeObj = liveStores.find((s) => s.id === post.store_id);
-                  return (
-                    <div
-                      key={post.id}
-                      className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-card hover:border-primary/30 transition-colors"
-                      onClick={() => { if (storeObj) { setSelected(storeObj); setOpen(true); } }}
-                    >
-                      {post.image_url && (
-                        <div className="aspect-[5/3] overflow-hidden bg-secondary">
-                          <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span className="text-xs font-semibold text-primary">{storeName}</span>
-                          <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                        </div>
-                        <p className="text-sm line-clamp-4 whitespace-pre-wrap">{post.body}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
+                </div>
 
-        <WhyLokal />
-        <HowItWorks />
+                {loadingFeed ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-card p-4">
+                        <div className="h-4 w-1/4 rounded bg-secondary animate-pulse mb-2" />
+                        <div className="h-16 w-full rounded bg-secondary animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                ) : followedPosts.length === 0 ? (
+                  <div className="rounded-xl border-2 border-dashed border-border bg-card p-10 text-center">
+                    <p className="text-sm text-muted-foreground">The stores you follow haven't posted any updates yet. Check back soon.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {followedPosts.map((post) => {
+                      const storeName = liveStores.find((s) => s.id === post.store_id)?.name ?? "Store";
+                      const storeObj = liveStores.find((s) => s.id === post.store_id);
+                      return (
+                        <div
+                          key={post.id}
+                          className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-card hover:border-primary/30 transition-colors"
+                          onClick={() => { if (storeObj) { setSelected(storeObj); setOpen(true); } }}
+                        >
+                          {post.image_url && (
+                            <div className="aspect-[5/3] overflow-hidden bg-secondary">
+                              <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
+                            </div>
+                          )}
+                          <div className="p-4">
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <span className="text-xs font-semibold text-primary">{storeName}</span>
+                              <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                            </div>
+                            <p className="text-sm line-clamp-4 whitespace-pre-wrap">{post.body}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            <WhyLokal />
+            <HowItWorks />
+          </>
+        )}
       </main>
       <Footer />
 
