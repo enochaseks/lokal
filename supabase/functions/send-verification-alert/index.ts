@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       <p><strong>Requester email:</strong> ${payload.requester_email ?? "Not provided"}</p>
       <p><strong>Reason:</strong></p>
       <pre style="white-space:pre-wrap;font-family:inherit">${payload.submission_reason}</pre>
-      <p><a href="https://lokalshops.co.uk/admin">Open admin dashboard</a></p>
+      <p><a href="https://lokalshops.co.uk/">Open Lokal</a></p>
     `;
 
     const recipients = [...ADMIN_EMAILS, payload.requester_email]

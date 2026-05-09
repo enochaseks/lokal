@@ -12,6 +12,7 @@ import type { Store } from "@/data/stores";
 import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
+import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 
 const isBookable = (cat: string, sellingMode?: string | null) => isStoreBookable(cat, sellingMode);
 
@@ -320,6 +321,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
+  const isStoreVerified = Boolean(store.verification_tier || store.is_verified);
+  const unverifiedWarningText = "This store is not verified yet. Make sure you trust this seller before shopping with them.";
 
   const socialLinks = [
     store.instagramHandle ? { label: "Instagram", href: buildInstagramUrl(store.instagramHandle) } : null,
@@ -367,6 +370,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   };
 
   const handleConfirmTransfer = async () => {
+    if (!isStoreVerified) {
+      toast.warning(unverifiedWarningText);
+    }
+
     const normalizedPhone = normalizePhoneForAlerts(phone, phoneCountryCode);
     if (!normalizedPhone) {
       toast.error("Enter phone in international format", {
@@ -530,6 +537,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   };
 
   const handleBook = async () => {
+    if (!isStoreVerified) {
+      toast.warning(unverifiedWarningText);
+    }
+
     const selectedStaff = bookStaff.find((s) => s.id === bookStaffId) ?? null;
     if (selectedStaff && selectedBookingDay != null && Array.isArray(selectedStaff.available_days) && selectedStaff.available_days.length > 0 && !selectedStaff.available_days.includes(selectedBookingDay)) {
       toast.error("Selected team member is unavailable on this day");
@@ -671,7 +682,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           <DialogHeader className="text-left">
             <DialogTitle className="font-display text-3xl">{store.name}</DialogTitle>
             <DialogDescription className="text-base">{store.description}</DialogDescription>
+            <div className="pt-2">
+              <VerificationBadge
+                verificationTier={store.verification_tier ?? (store.is_verified ? "verified" : null)}
+                verificationReason={store.verification_reason ?? unverifiedWarningText}
+                showUnverified
+              />
+            </div>
           </DialogHeader>
+
+          {!isStoreVerified && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300">
+              {unverifiedWarningText}
+            </div>
+          )}
 
           {/* Follow button */}
           <div className="mt-3 flex items-center gap-3">

@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
         <p><strong>Owner:</strong> ${requestRow.owner_name}</p>
         <p><strong>Status:</strong> ${decision}</p>
         ${notes}
-        <p><a href="https://lokalshops.co.uk/merchant">Open merchant dashboard</a></p>
+        <p><a href="https://lokalshops.co.uk/">Open Lokal</a></p>
       `;
 
       await fetch("https://api.brevo.com/v3/smtp/email", {
