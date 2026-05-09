@@ -20,16 +20,28 @@ export function WaitlistSignup() {
     setStatus("loading");
     
     try {
-      // TODO: Connect to your waitlist service (e.g., Mailchimp, Supabase, etc.)
-      // For now, we'll just simulate success
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/waitlist-signup`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to join waitlist");
+      }
+
       setStatus("success");
       setMessage("You're on the list! We'll keep you updated.");
       setEmail("");
       
       setTimeout(() => setStatus("idle"), 5000);
     } catch (error) {
+      console.error("Waitlist signup error:", error);
       setStatus("error");
       setMessage("Something went wrong. Please try again.");
     }
