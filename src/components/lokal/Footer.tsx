@@ -24,7 +24,6 @@ export function Footer() {
             <h4 className="mb-3 text-sm font-semibold">Marketplace</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><a href="/#stores" className="hover:text-foreground">Browse stores</a></li>
-              <li><a href="/#how" className="hover:text-foreground">How it works</a></li>
               <li><Link to="/help" className="hover:text-foreground">Help Center</Link></li>
               <li><Link to="/refunds-cancellations" className="hover:text-foreground">Refund &amp; Cancellation</Link></li>
             </ul>

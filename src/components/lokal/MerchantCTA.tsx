@@ -28,6 +28,9 @@ export function MerchantCTA() {
                 List Your Store <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
+            <a href="#how" className="text-sm font-semibold text-amber-900 dark:text-amber-100 hover:underline">
+              Learn how it works
+            </a>
           </div>
 
           <div className="flex items-center justify-center gap-10 mt-10 pt-8 border-t border-amber-200/60 dark:border-amber-800/40">
