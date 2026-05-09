@@ -5,6 +5,9 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { Hero } from "@/components/lokal/Hero";
 import { HowItWorks } from "@/components/lokal/HowItWorks";
 import { Footer } from "@/components/lokal/Footer";
+import { PlatformMetrics } from "@/components/lokal/PlatformMetrics";
+import { WhyLokal } from "@/components/lokal/WhyLokal";
+import { MerchantCTA } from "@/components/lokal/MerchantCTA";
 import { BadgeCheck, Shield } from "lucide-react";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
@@ -197,6 +200,7 @@ function Index() {
       <Navbar />
       <main>
         <Hero onSearch={setSearch} />
+        <PlatformMetrics stores={liveStores} />
 
         <section id="stores" className="container mx-auto px-4 py-20">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
@@ -385,6 +389,8 @@ function Index() {
           </section>
         )}
 
+        <WhyLokal />
+        <MerchantCTA />
         <HowItWorks />
       </main>
       <Footer />

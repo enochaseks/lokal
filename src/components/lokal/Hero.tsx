@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Search, Store } from "lucide-react";
 import { useLocation } from "@/hooks/use-location";
 
 type HeroProps = {
@@ -57,6 +58,16 @@ export function Hero({ onSearch }: HeroProps) {
               <Search className="h-4 w-4" />
               Find stores
             </Button>
+          </div>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <Link to="/list-store" className="flex-1 sm:flex-none">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto gap-2">
+                <Store className="h-4 w-4" />
+                List your store
+              </Button>
+            </Link>
+            <div className="flex-1 sm:flex-none"></div>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-muted-foreground">
