@@ -15,3 +15,15 @@ verify_enabled = true
 enable_confirmations = true
 max_frequency = "1m0s"
 otp_length = 8
+
+[functions.send-review-alert]
+verify_jwt = false
+
+[functions.send-verification-alert]
+verify_jwt = false
+
+[functions.get-admin-verification-feed]
+verify_jwt = false
+
+[functions.process-verification-request]
+verify_jwt = false

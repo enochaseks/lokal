@@ -11,6 +11,8 @@ type ReviewAlertPayload = {
   body: string | null;
 };
 
+const ADMIN_EMAILS = ["enochaseks@yahoo.co.uk", "enochaseks@gmail.com"];
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -71,6 +73,10 @@ Deno.serve(async (req) => {
       <p><a href="https://lokalshops.co.uk">Open Lokal</a></p>
     `;
 
+    const recipients = [merchantEmail, ...ADMIN_EMAILS].filter(
+      (email, index, list) => Boolean(email) && list.indexOf(email) === index,
+    );
+
     const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
@@ -79,7 +85,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         sender: { email: emailFrom, name: "Lokal" },
-        to: [{ email: merchantEmail }],
+        to: recipients.map((email) => ({ email })),
         subject: `New review for ${payload.store_name} (${payload.rating}/5)`,
         htmlContent: html,
       }),

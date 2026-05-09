@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy } from "lucide-react";
+import { VerificationRequestDialog } from "@/components/merchant/VerificationRequestDialog";
+import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable } from "@/data/stores";
@@ -89,6 +90,9 @@ type StoreRow = {
   deposit_amount?: number | null;
   region: string | null; currency: string | null;
   selling_mode?: SellingMode | null;
+  is_verified?: boolean | null;
+  verified_at?: string | null;
+  verification_reason?: string | null;
 };
 
 type OrderRow = {
@@ -136,6 +140,9 @@ type StaffDraft = {
   daily_capacity: string;
   available_days: number[];
 };
+
+type VerificationStatus = "pending" | "approved" | "rejected";
+type VerificationTier = "verified" | "online_verified" | "unsecured_verified";
 
 type PostRow = {
   id: string; store_id: string; body: string; image_url: string | null; created_at: string;
@@ -601,6 +608,8 @@ function MerchantPage() {
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
   const [editingStore, setEditingStore] = useState<StoreRow | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+    const [verificationRequestingStoreId, setVerificationRequestingStoreId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -618,6 +627,8 @@ function MerchantPage() {
   const [postDraftUploading, setPostDraftUploading] = useState(false);
   const [postDraftSaving, setPostDraftSaving] = useState(false);
   const [sharedStoreId, setSharedStoreId] = useState<string | null>(null);
+  const [verificationStatusByStore, setVerificationStatusByStore] = useState<Record<string, VerificationStatus>>({});
+  const [verificationTierByStore, setVerificationTierByStore] = useState<Record<string, VerificationTier>>({});
 
   const handleShareStore = (storeId: string) => {
     const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
@@ -630,15 +641,47 @@ function MerchantPage() {
 
   useEffect(() => {
     if (!user) return;
+    let isActive = true;
+    let realtimeChannel: any = null;
+
     (async () => {
       const { data: storesData, error } = await supabase.from("stores").select("*").eq("owner_id", user.id).order("created_at", { ascending: false });
+      if (!isActive) return;
       if (error) { toast.error(error.message); setBusy(false); return; }
       const rows = (storesData as unknown as StoreRow[]) ?? [];
       setStores(rows);
+      setVerificationStatusByStore({});
+      setVerificationTierByStore({});
       setBusy(false);
 
       if (rows.length === 0) return;
       const storeIds = rows.map((s) => s.id);
+
+      try {
+        const { data: reqData } = await (supabase as any)
+          .from("store_verification_requests")
+          .select("store_id,status,submitted_at,verification_method")
+          .eq("owner_id", user.id)
+          .in("store_id", storeIds)
+          .order("submitted_at", { ascending: false });
+
+        const latestByStore: Record<string, VerificationStatus> = {};
+        const tierByStore: Record<string, VerificationTier> = {};
+        for (const req of (reqData ?? []) as Array<{ store_id: string; status: VerificationStatus; verification_method?: string | null }>) {
+          if (!latestByStore[req.store_id]) latestByStore[req.store_id] = req.status;
+          if (!tierByStore[req.store_id] && req.status === "approved") {
+            tierByStore[req.store_id] = req.verification_method === "registration_number"
+              ? "verified"
+              : req.verification_method === "online_presence"
+                ? "online_verified"
+                : "unsecured_verified";
+          }
+        }
+        setVerificationStatusByStore(latestByStore);
+        setVerificationTierByStore(tierByStore);
+      } catch {
+        // Table may not be migrated yet.
+      }
 
       const { data: ordersData } = await db.from("orders").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(100);
       setOrders(((ordersData ?? []) as unknown) as OrderRow[]);
@@ -683,7 +726,7 @@ function MerchantPage() {
       }
 
       // Real-time subscriptions
-      const channel = supabase
+      realtimeChannel = supabase
         .channel("merchant-realtime")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
           setOrders((prev) => [payload.new as OrderRow, ...prev]);
@@ -701,9 +744,14 @@ function MerchantPage() {
           toast("📅 New booking request!", { description: `${(payload.new as BookingRow).customer_name} — ${(payload.new as BookingRow).slot_start.slice(0, 16).replace("T", " ")}` });
         })
         .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
     })();
+
+    return () => {
+      isActive = false;
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
+    };
   }, [user]);
 
   useEffect(() => {
@@ -848,6 +896,15 @@ function MerchantPage() {
           </div>
         )}
 
+        {/* Verification info banner */}
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
+          <Check className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+          <div className="text-blue-900">
+            <p className="font-medium">Store Verification</p>
+            <p className="mt-1 text-xs text-blue-800">Verified stores get a blue badge on their store card and detail page. Our admin team verifies stores based on business documents, reviews, and reliability metrics. This badge builds customer trust!</p>
+          </div>
+        </div>
+
         <div className="mt-8 overflow-x-auto pb-1">
           <div className="flex w-max min-w-full gap-1 rounded-xl bg-secondary p-1">
             <button
@@ -943,6 +1000,23 @@ function MerchantPage() {
                       {s.bank_name && <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3" />{s.bank_name} ····{(s.bank_account_number || "").slice(-4)}</div>}
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
+                      {verificationStatusByStore[s.id] === "pending" && !s.is_verified && (
+                        <div className="w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                          Verification request submitted. Awaiting admin review.
+                        </div>
+                      )}
+                      {verificationTierByStore[s.id] && (
+                        <div className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : verificationTierByStore[s.id] === "online_verified" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                          <BadgeCheck className="h-3 w-3" />
+                          <span>
+                            {verificationTierByStore[s.id] === "verified"
+                              ? "Verified"
+                              : verificationTierByStore[s.id] === "online_verified"
+                                ? "Online verified"
+                                : "Unsecured verified"}
+                          </span>
+                        </div>
+                      )}
                       <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)}>
                         {s.published ? <><EyeOff className="h-3 w-3" /> Hide</> : <><Eye className="h-3 w-3" /> Publish</>}
                       </Button>
@@ -955,6 +1029,25 @@ function MerchantPage() {
                       <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1 gap-1.5" onClick={() => handleShareStore(s.id)} title="Copy shareable link">
                         {sharedStoreId === s.id ? <><Check className="h-3 w-3" /> Done</> : <><Share2 className="h-3 w-3" /> Share</>}
                       </Button>
+                      {!verificationTierByStore[s.id] && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="min-w-[5.5rem] flex-1 gap-1.5 border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/20"
+                          disabled={verificationStatusByStore[s.id] === "pending"}
+                          onClick={() => {
+                            setVerificationRequestingStoreId(s.id);
+                            setVerificationDialogOpen(true);
+                          }}
+                        >
+                          <BadgeCheck className="h-3 w-3" />
+                          {verificationStatusByStore[s.id] === "pending"
+                            ? "Pending"
+                            : verificationStatusByStore[s.id] === "rejected"
+                              ? "Re-apply"
+                              : "Verify"}
+                        </Button>
+                      )}
                     </div>
                     {/* Orders for this store */}
                     {orders.filter((o) => o.store_id === s.id && ["pending_transfer", "transfer_received"].includes(o.status)).length > 0 && (
@@ -1850,6 +1943,23 @@ function MerchantPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {verificationRequestingStoreId && (
+        <VerificationRequestDialog
+          store={{ id: verificationRequestingStoreId, name: stores.find((s) => s.id === verificationRequestingStoreId)?.name || "Store" }}
+          open={verificationDialogOpen}
+          onOpenChange={(open) => {
+            setVerificationDialogOpen(open);
+            if (!open) setVerificationRequestingStoreId(null);
+          }}
+          onSuccess={() => {
+            if (verificationRequestingStoreId) {
+              setVerificationStatusByStore((prev) => ({ ...prev, [verificationRequestingStoreId]: "pending" }));
+            }
+            setVerificationRequestingStoreId(null);
+          }}
+        />
       )}
 
       <Toaster position="bottom-center" />

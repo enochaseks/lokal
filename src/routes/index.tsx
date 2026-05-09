@@ -79,11 +79,28 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,store_products(name,price,unit,position,image_url)")
+        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
       if (!rows) return;
+      const { data: verifications } = await (supabase as any)
+        .from("store_verification_requests")
+        .select("store_id, verification_method, status")
+        .eq("status", "approved")
+        .in("store_id", rows.map((row: any) => row.id));
+
+      const tierByStore: Record<string, "verified" | "online_verified" | "unsecured_verified"> = {};
+      for (const item of (verifications ?? []) as Array<{ store_id: string; verification_method: string }>) {
+        if (tierByStore[item.store_id]) continue;
+        tierByStore[item.store_id] =
+          item.verification_method === "registration_number"
+            ? "verified"
+            : item.verification_method === "online_presence"
+              ? "online_verified"
+              : "unsecured_verified";
+      }
+
       const mapped: Store[] = rows.flatMap((r: any) => {
         if (!LIVE_CATEGORIES.includes(r.category)) return [];
         return [{
@@ -121,6 +138,10 @@ function Index() {
           .sort((a: any, b: any) => a.position - b.position)
           .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined, image_url: p.image_url ?? null })),
         deposit_amount: r.deposit_amount ?? undefined,
+        is_verified: Boolean(r.is_verified),
+        verified_at: r.verified_at ?? null,
+        verification_reason: r.verification_reason ?? null,
+        verification_tier: tierByStore[r.id] ?? null,
       }];
       });
       setLiveStores(mapped);

@@ -213,6 +213,10 @@ export type Store = {
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
   deposit_amount?: number | null;
+  is_verified?: boolean | null;
+  verified_at?: string | null;
+  verification_reason?: string | null;
+  verification_tier?: "verified" | "online_verified" | "unsecured_verified" | null;
 };
 
 export const stores: Store[] = [

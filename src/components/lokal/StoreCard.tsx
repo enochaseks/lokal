@@ -1,5 +1,6 @@
 import { MapPin, Star } from "lucide-react";
 import type { Store } from "@/data/stores";
+import { VerificationBadge } from "./VerificationBadge";
 
 export function StoreCard({ store, onClick }: { store: Store; onClick: () => void }) {
   return (
@@ -16,8 +17,15 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
           height={600}
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
-        <div className="absolute left-3 top-3 rounded-full bg-background/90 px-3 py-1 text-xs font-medium backdrop-blur">
-          {store.origin}
+        <div className="absolute left-3 top-3 flex items-center gap-2">
+          <div className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium backdrop-blur">
+            {store.origin}
+          </div>
+          <VerificationBadge 
+            verificationTier={store.verification_tier ?? (store.is_verified ? "verified" : null)}
+            verificationReason={store.verification_reason ?? "Unverified store. Buy at your own risk."}
+            showUnverified
+          />
         </div>
       </div>
 

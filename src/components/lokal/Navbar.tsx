@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store, Heart, User } from "lucide-react";
+import { MapPin, LogOut, Store, Heart, User, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
 import { supabase } from "@/integrations/supabase/client";
+import { isAdminEmail } from "@/lib/admin";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@/assets/logo.jpg";
@@ -175,6 +176,14 @@ export function Navbar() {
                 <DropdownMenuItem onClick={() => navigate({ to: "/help" })}>
                   <Store className="mr-2 h-4 w-4" /> Help Center
                 </DropdownMenuItem>
+                {isAdminEmail(user?.email) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate({ to: "/admin" })}>
+                      <ShieldCheck className="mr-2 h-4 w-4" /> Admin Dashboard
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={async () => { await signOut(); navigate({ to: "/" }); }}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign out

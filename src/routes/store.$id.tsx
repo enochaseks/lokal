@@ -7,6 +7,7 @@ import xLogo from "@/assets/X_icon.svg.png";
 import instagramLogo from "@/assets/Instagram_logo_2016.svg.png";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Footer } from "@/components/lokal/Footer";
+import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -117,6 +118,10 @@ type StoreDetails = {
   accepts_refunds?: boolean | null;
   refund_policy?: string | null;
   cancellation_policy?: string | null;
+  is_verified?: boolean | null;
+  verified_at?: string | null;
+  verification_reason?: string | null;
+  verification_tier?: "verified" | "online_verified" | "unsecured_verified" | null;
 };
 
 const isBookable = (category: string, sellingMode?: string | null) => isStoreBookable(category, sellingMode);
@@ -181,12 +186,41 @@ export const Route = createFileRoute("/store/$id")({
       throw new Error("Store not found");
     }
 
+    const { data: approvedVerification } = await (supabase as any)
+      .from("store_verification_requests")
+      .select("verification_method")
+      .eq("store_id", params.id)
+      .eq("status", "approved")
+      .limit(1);
+
+    const hasApprovedVerification = (approvedVerification ?? []).length > 0;
+    const verificationMethod = approvedVerification?.[0]?.verification_method as
+      | "registration_number"
+      | "online_presence"
+      | "manual_review"
+      | undefined;
+    const verificationTier =
+      verificationMethod === "registration_number"
+        ? "verified"
+        : verificationMethod === "online_presence"
+          ? "online_verified"
+          : verificationMethod === "manual_review"
+            ? "unsecured_verified"
+            : null;
+
     const { data: rd } = await (supabase as any)
       .from("staff_reviews")
       .select("staff_id, rating")
       .eq("store_id", params.id);
 
-    return { ...data[0], staff_reviews: rd ?? [] } as unknown as StoreDetails;
+    return {
+      ...data[0],
+      is_verified: Boolean(data[0].is_verified && hasApprovedVerification),
+      verified_at: hasApprovedVerification ? data[0].verified_at : null,
+      verification_reason: hasApprovedVerification ? data[0].verification_reason : null,
+      verification_tier: verificationTier,
+      staff_reviews: rd ?? [],
+    } as unknown as StoreDetails;
   },
   errorComponent: ({ error }) => (
     <div className="min-h-screen flex flex-col bg-background">
@@ -614,6 +648,11 @@ function StoreDetail() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">{store.category}</span>
                 {store.origin && <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">{store.origin}</span>}
+                <VerificationBadge 
+                  verificationTier={store.verification_tier}
+                  verificationReason={store.verification_reason ?? "Unverified store. Buy at your own risk."}
+                  showUnverified
+                />
               </div>
             </div>
 
