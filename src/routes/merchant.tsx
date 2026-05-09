@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { VerificationRequestDialog } from "@/components/merchant/VerificationRequestDialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy, BadgeCheck } from "lucide-react";
+import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, Copy, BadgeCheck, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable } from "@/data/stores";
@@ -289,8 +289,8 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         );
         if (prodErr) throw prodErr;
 
-        // Auto-publish if adding products to unpublished store
-        if (!store.published) {
+        // Auto-publish if adding products to unpublished store (only if verified)
+        if (!store.published && store.is_verified) {
           const { error: pubErr } = await supabase.from("stores").update({ published: true }).eq("id", store.id);
           if (pubErr) throw pubErr;
         }
@@ -767,6 +767,15 @@ function MerchantPage() {
 
   const togglePublish = async (s: StoreRow) => {
     if (!s.published) {
+      // Check if store is verified
+      if (!s.is_verified) {
+        toast.error("Store not verified", {
+          description: "Your store must be verified before publishing. Submit a verification request from the Verification tab.",
+          duration: 5000,
+        });
+        return;
+      }
+
       const { count } = await supabase.from("store_products").select("id", { count: "exact", head: true }).eq("store_id", s.id);
       if (!count || count === 0) {
         toast.error("Add at least one product or service before publishing");
@@ -1005,6 +1014,12 @@ function MerchantPage() {
                           Verification request submitted. Awaiting admin review.
                         </div>
                       )}
+                      {!s.is_verified && verificationStatusByStore[s.id] !== "pending" && (
+                        <div className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-800 flex items-center gap-2">
+                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                          <span>Verify your store to publish</span>
+                        </div>
+                      )}
                       {verificationTierByStore[s.id] && (
                         <div className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : verificationTierByStore[s.id] === "online_verified" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
                           <BadgeCheck className="h-3 w-3" />
@@ -1017,7 +1032,7 @@ function MerchantPage() {
                           </span>
                         </div>
                       )}
-                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)}>
+                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)} disabled={!s.is_verified && !s.published}>
                         {s.published ? <><EyeOff className="h-3 w-3" /> Hide</> : <><Eye className="h-3 w-3" /> Publish</>}
                       </Button>
                       <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => setEditingStore(s)}>
