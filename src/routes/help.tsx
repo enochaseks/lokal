@@ -82,10 +82,20 @@ function HelpPage() {
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
               <BadgeCheck className="h-5 w-5" />
             </div>
-            <h3 className="font-display text-lg font-bold">What do verified badges mean?</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Stores with blue badges have been verified by our admin team using business registration, online presence, or manual submission. Verification indicates we've reviewed available evidence — it does not guarantee quality or reliability. Unverified stores are not unsafe; many merchants simply choose not to verify.
-            </p>
+            <h3 className="font-display text-lg font-bold">What each verification badge means</h3>
+            <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+              <p>
+                We use different verification badges based on the type of evidence reviewed by our admin team:
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li><strong className="text-foreground">Verified</strong> - business registration documents were reviewed and approved.</li>
+                <li><strong className="text-foreground">Online verified</strong> - store identity was verified through established online presence (website/social pages).</li>
+                <li><strong className="text-foreground">Unsecured verified</strong> - manual evidence was accepted, but with fewer formal supporting documents.</li>
+              </ul>
+              <p>
+                All live stores must pass one of these verification paths. Badges show which path was used, but do not guarantee product quality, delivery speed, or merchant reliability.
+              </p>
+            </div>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-card">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
