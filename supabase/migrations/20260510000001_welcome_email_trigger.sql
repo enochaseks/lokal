@@ -1,6 +1,5 @@
 -- Trigger welcome email when a new user signs up
--- Requires: pg_net extension enabled, service role key stored via:
---   ALTER DATABASE postgres SET app.settings.service_role_key = '<your-service-role-key>';
+-- Requires: pg_net extension enabled
 
 create or replace function public.handle_new_user_welcome()
 returns trigger
@@ -13,8 +12,7 @@ begin
     net.http_post(
       url := 'https://aabyxfcrrqivjupawxdu.supabase.co/functions/v1/send-welcome-email',
       headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
+        'Content-Type', 'application/json'
       ),
       body := jsonb_build_object(
         'type', 'INSERT',

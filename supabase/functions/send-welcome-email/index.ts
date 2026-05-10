@@ -31,11 +31,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const brevoKey = Deno.env.get("BREVO_KEY");
+    const brevoKey = Deno.env.get("BREVO_API_KEY");
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
 
     if (!brevoKey) {
-      return new Response(JSON.stringify({ error: "BREVO_KEY not set" }), {
+      return new Response(JSON.stringify({ error: "BREVO_API_KEY not set" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
