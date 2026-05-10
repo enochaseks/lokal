@@ -11,6 +11,7 @@ import { BadgeCheck } from "lucide-react";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { PostMedia } from "@/components/lokal/PostMedia";
+import { PostReactions } from "@/components/lokal/PostReactions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LIVE_CATEGORIES, categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
@@ -549,6 +550,7 @@ function Index() {
                               <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
                             </div>
                             <p className="text-sm line-clamp-4 whitespace-pre-wrap">{post.body}</p>
+                            <PostReactions postId={post.id} />
                           </div>
                         </div>
                       );

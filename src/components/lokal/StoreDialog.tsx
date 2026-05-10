@@ -14,6 +14,7 @@ import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { PostMedia } from "@/components/lokal/PostMedia";
+import { PostReactions } from "@/components/lokal/PostReactions";
 
 const isBookable = (cat: string, sellingMode?: string | null) => isStoreBookable(cat, sellingMode);
 
@@ -916,6 +917,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                     ) : post.image_url ? (
                       <PostMedia url={post.image_url} kind="image" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
                     ) : null}
+                    <PostReactions postId={post.id} />
                   </div>
                 ))
               )}

@@ -4,6 +4,7 @@ import { Navbar } from "@/components/lokal/Navbar";
 
 import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { PostMedia } from "@/components/lokal/PostMedia";
+import { PostReactions } from "@/components/lokal/PostReactions";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl } from "@/lib/utils";
 import { type Store, LIVE_CATEGORIES } from "@/data/stores";
@@ -245,6 +246,7 @@ function FollowingPage() {
                             </span>
                           </div>
                           <p className="line-clamp-4 whitespace-pre-wrap text-sm">{post.body}</p>
+                          <PostReactions postId={post.id} />
                         </div>
                       </div>
                     );

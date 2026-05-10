@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { PostMedia } from "@/components/lokal/PostMedia";
+import { PostReactions } from "@/components/lokal/PostReactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -2215,6 +2216,7 @@ function MerchantPage() {
                               ) : post.image_url ? (
                                 <PostMedia url={post.image_url} kind="image" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
                               ) : null}
+                              <PostReactions postId={post.id} />
                             </div>
                             <button
                               className="shrink-0 text-muted-foreground hover:text-destructive"
