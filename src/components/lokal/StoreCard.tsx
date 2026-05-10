@@ -3,10 +3,11 @@ import type { Store } from "@/data/stores";
 import { VerificationBadge } from "./VerificationBadge";
 
 export function StoreCard({ store, onClick }: { store: Store; onClick: () => void }) {
+  const isClosed = store.is_open_now === false;
   return (
     <button
       onClick={onClick}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-card transition-all duration-500 hover:-translate-y-1 hover:shadow-warm"
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-card transition-all duration-500 hover:-translate-y-1 hover:shadow-warm${isClosed ? " opacity-70 saturate-75" : ""}`}
     >
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
@@ -45,6 +46,12 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
         <div className="mt-auto flex items-center gap-1.5 pt-2 text-[11px]">
+          {store.is_open_now === true && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">🟢 Open now</span>
+          )}
+          {store.is_open_now === false && (
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">⚫ Closed now</span>
+          )}
           {store.category === "Groceries" && store.subcategory === "Meat & Fish" && store.health_safety_certificate_status === "approved" && (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">✅ Health &amp; Safety Passed</span>
           )}

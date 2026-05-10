@@ -44,6 +44,37 @@ function Index() {
   const [cityInputValue, setCityInputValue] = useState("");
   const [showMoreSections, setShowMoreSections] = useState(false);
 
+  const timeToMinutes = (time: string) => {
+    const [h, m] = time.slice(0, 5).split(":").map(Number);
+    return (h * 60) + m;
+  };
+
+  const isStoreOpenNow = (availability: Array<{ day_of_week: number; start_time: string; end_time: string }> | null | undefined): boolean | null => {
+    if (!availability || availability.length === 0) return null;
+    const now = new Date();
+    const today = now.getDay();
+    const nowMins = (now.getHours() * 60) + now.getMinutes();
+    const prevDay = (today + 6) % 7;
+
+    for (const row of availability) {
+      const start = timeToMinutes(row.start_time);
+      const end = timeToMinutes(row.end_time);
+      if (start === end) {
+        if (row.day_of_week === today) return true;
+        continue;
+      }
+      const overnight = end < start;
+      if (!overnight && row.day_of_week === today && nowMins >= start && nowMins < end) {
+        return true;
+      }
+      if (overnight) {
+        if (row.day_of_week === today && nowMins >= start) return true;
+        if (row.day_of_week === prevDay && nowMins < end) return true;
+      }
+    }
+    return false;
+  };
+
   // Following feed
   type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
   const [followedPosts, setFollowedPosts] = useState<PostRow[]>([]);
@@ -84,7 +115,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
+        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url),store_availability(day_of_week,start_time,end_time)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -114,6 +145,7 @@ function Index() {
         category: r.category as Store["category"],
         subcategory: r.subcategory ?? null,
         health_safety_certificate_status: r.health_safety_certificate_status ?? null,
+        is_open_now: isStoreOpenNow(r.store_availability ?? []),
         origin: r.origin || "🌍 Local",
         rating: 0,
         reviews: 0,

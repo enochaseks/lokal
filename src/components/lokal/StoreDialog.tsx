@@ -100,10 +100,14 @@ function generateTimeSlots(startTime: string, endTime: string, durationMins: num
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
   let minutes = sh * 60 + sm;
-  const endMinutes = eh * 60 + em;
+  let endMinutes = eh * 60 + em;
+  if (endMinutes <= minutes) {
+    endMinutes += 24 * 60;
+  }
   while (minutes + durationMins <= endMinutes) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    const normalized = minutes % (24 * 60);
+    const h = Math.floor(normalized / 60);
+    const m = normalized % 60;
     slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
     minutes += durationMins;
   }
@@ -563,8 +567,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     const avail = bookAvailability.find((a) => a.day_of_week === new Date(y, mo - 1, d).getDay());
     const duration = avail?.slot_duration_mins ?? 30;
     const [th, tm] = bookTime.split(":").map(Number);
-    const endMins = th * 60 + tm + duration;
-    const slotEnd = `${bookDate}T${String(Math.floor(endMins / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}:00`;
+    const slotEndDate = new Date(y, mo - 1, d, th, tm + duration, 0, 0);
+    const slotEnd = `${slotEndDate.getFullYear()}-${String(slotEndDate.getMonth() + 1).padStart(2, "0")}-${String(slotEndDate.getDate()).padStart(2, "0")}T${String(slotEndDate.getHours()).padStart(2, "0")}:${String(slotEndDate.getMinutes()).padStart(2, "0")}:00`;
     setSubmittingBooking(true);
     try {
       const { data: bookingRow, error } = await (supabase as any)
