@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Store as StoreIcon, Landmark, Package, Calendar, Check, ArrowLeft, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
+import { NavigationLoadingScreen } from "@/components/lokal/NavigationLoadingOverlay";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
@@ -416,7 +417,7 @@ function ListStorePage() {
   };
 
   if (loading || !user) {
-    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
+    return <NavigationLoadingScreen />;
   }
 
   return (

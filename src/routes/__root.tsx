@@ -3,7 +3,6 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import appCss from "../styles.css?url";
 import logoUrl from "../assets/logo.jpg?url";
 import logoSvgUrl from "../assets/logo.svg?url";
-import { NavigationLoadingOverlay } from "@/components/lokal/NavigationLoadingOverlay";
 
 function NotFoundComponent() {
   return (
@@ -71,7 +70,6 @@ import { AuthProvider } from "@/auth/AuthProvider";
 function RootComponent() {
   return (
     <AuthProvider>
-      <NavigationLoadingOverlay />
       <Outlet />
     </AuthProvider>
   );

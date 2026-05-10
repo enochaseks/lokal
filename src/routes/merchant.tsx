@@ -7,6 +7,7 @@ import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTik
 import { trackEvent } from "@/lib/analytics";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
+import { NavigationLoadingScreen } from "@/components/lokal/NavigationLoadingOverlay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1127,7 +1128,7 @@ function MerchantPage() {
     }
   }, [tab, hasBookableStore]);
 
-  if (loading || !user) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
+  if (loading || !user) return <NavigationLoadingScreen />;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
