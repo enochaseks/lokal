@@ -7,7 +7,40 @@ export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & 
 /** Categories that are always service/booking based. */
 export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
 
+export const CLOTHES_FASHION_PRODUCT_SUBCATEGORIES = [
+  "Men's Wear",
+  "Women's Wear",
+  "Kids Wear",
+  "Accessories",
+  "Shoes",
+] as const;
+
+export const CLOTHES_FASHION_SERVICE_SUBCATEGORIES = [
+  "Custom Tailoring",
+  "Alterations",
+  "Bridal & Occasion",
+  "Uniforms",
+  "Embroidery & Print",
+  "Custom Shoe Making",
+] as const;
+
 export const CATEGORY_SUBCATEGORIES = {
+  Groceries: [
+    "Fresh Produce",
+    "Meat & Fish",
+    "Pantry Staples",
+    "Spices & Seasoning",
+    "Frozen Foods",
+    "Drinks",
+    "Snacks",
+  ],
+  Barbers: [
+    "Haircut & Fade",
+    "Beard Grooming",
+    "Kids Cuts",
+    "Home Service Haircut",
+    "Mobile Grooming",
+  ],
   "Hair & Beauty": [
     "Makeup",
     "Braids",
@@ -27,13 +60,18 @@ export const CATEGORY_SUBCATEGORIES = {
   ],
 } as const satisfies Partial<Record<LiveCategory, readonly string[]>>;
 
-export function getCategorySubcategories(category: string): readonly string[] {
+export function getCategorySubcategories(category: string, sellingMode?: SellingMode | string | null): readonly string[] {
+  if (category === "Clothes & Fashion") {
+    if (sellingMode === "services") return CLOTHES_FASHION_SERVICE_SUBCATEGORIES;
+    if (sellingMode === "products") return CLOTHES_FASHION_PRODUCT_SUBCATEGORIES;
+    return [...CLOTHES_FASHION_PRODUCT_SUBCATEGORIES, ...CLOTHES_FASHION_SERVICE_SUBCATEGORIES];
+  }
   return CATEGORY_SUBCATEGORIES[category as keyof typeof CATEGORY_SUBCATEGORIES] ?? [];
 }
 
-export function isValidStoreSubcategory(category: string, subcategory?: string | null): boolean {
+export function isValidStoreSubcategory(category: string, subcategory?: string | null, sellingMode?: SellingMode | string | null): boolean {
   if (!subcategory) return true;
-  return getCategorySubcategories(category).includes(subcategory);
+  return getCategorySubcategories(category, sellingMode).includes(subcategory);
 }
 
 export const REGIONS = {

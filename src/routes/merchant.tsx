@@ -91,6 +91,8 @@ type Origin = (typeof ORIGINS)[number];
 type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
   subcategory?: string | null;
+  health_safety_certificate_url?: string | null;
+  health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
   accepts_refunds?: boolean | null;
@@ -204,10 +206,12 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     subcategory: store.subcategory ?? "",
+    health_safety_certificate_url: store.health_safety_certificate_url ?? "",
+    health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
     hours: store.hours ?? "", phone: store.phone ?? "", accepts_refunds: !!store.accepts_refunds, refund_policy: store.refund_policy ?? "", cancellation_policy: store.cancellation_policy ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
@@ -270,15 +274,32 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
+    const requiresFoodSafetyApproval = form.category === "Groceries" && form.subcategory === "Meat & Fish";
+    if (requiresFoodSafetyApproval && !form.health_safety_certificate_url.trim()) {
+      toast.error("Health and safety certificate is required for Meat & Fish");
+      return;
+    }
     setSaving(true);
     try {
       const instagramHandle = normalizeInstagramHandle(form.instagram_handle);
       const tiktokHandle = normalizeTikTokHandle(form.tiktok_handle);
       const websiteUrl = normalizeWebsiteUrl(form.website_url);
+      const validSubcategory = getCategorySubcategories(form.category, form.selling_mode).includes(form.subcategory) ? n(form.subcategory) : null;
+      const certificateUrl = requiresFoodSafetyApproval ? n(form.health_safety_certificate_url) : null;
+      const currentCertStatus = form.health_safety_certificate_status;
+      const nextCertStatus = !requiresFoodSafetyApproval
+        ? "not_required"
+        : currentCertStatus === "approved"
+          ? "approved"
+          : currentCertStatus === "rejected"
+            ? "pending"
+            : currentCertStatus;
 
       const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
-        subcategory: getCategorySubcategories(form.category).includes(form.subcategory) ? n(form.subcategory) : null,
+        subcategory: validSubcategory,
+        health_safety_certificate_url: certificateUrl,
+        health_safety_certificate_status: nextCertStatus,
         origin: form.origin, description: n(form.description),
         address: requiresFixedAddress ? n(form.address) : null,
         city: requiresFixedAddress ? n(form.city) : null,
@@ -322,7 +343,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      onSaved({ ...store, ...form, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({ ...store, ...form, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -349,8 +370,16 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                     const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
                       ? f.selling_mode
                       : (isStoreBookable(nextCategory) ? "services" : "products");
-                    const nextSubcategory = getCategorySubcategories(nextCategory).includes(f.subcategory) ? f.subcategory : "";
-                    return { ...f, category: nextCategory, subcategory: nextSubcategory, selling_mode: nextMode };
+                    const nextSubcategory = getCategorySubcategories(nextCategory, nextMode).includes(f.subcategory) ? f.subcategory : "";
+                    const keepCertificate = nextCategory === "Groceries" && nextSubcategory === "Meat & Fish";
+                    return {
+                      ...f,
+                      category: nextCategory,
+                      subcategory: nextSubcategory,
+                      health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
+                      health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
+                      selling_mode: nextMode,
+                    };
                   })}
                 >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -363,22 +392,42 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <SelectContent>{ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {getCategorySubcategories(form.category).length > 0 && (
+              {getCategorySubcategories(form.category, form.selling_mode).length > 0 && (
                 <div className="sm:col-span-2"><Label>Subcategory</Label>
-                  <Select value={form.subcategory || "none"} onValueChange={(v) => setForm((f) => ({ ...f, subcategory: v === "none" ? "" : v }))}>
+                  <Select value={form.subcategory || "none"} onValueChange={(v) => setForm((f) => {
+                    const nextSubcategory = v === "none" ? "" : v;
+                    const keepCertificate = f.category === "Groceries" && nextSubcategory === "Meat & Fish";
+                    return {
+                      ...f,
+                      subcategory: nextSubcategory,
+                      health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
+                      health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
+                    };
+                  })}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General</SelectItem>
-                      {getCategorySubcategories(form.category).map((subcategory) => (
+                      {getCategorySubcategories(form.category, form.selling_mode).map((subcategory) => (
                         <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
+              {form.category === "Groceries" && form.subcategory === "Meat & Fish" && (
+                <div className="sm:col-span-2">
+                  <Label>Health and safety certificate URL *</Label>
+                  <Input value={form.health_safety_certificate_url} onChange={(e) => setForm((f) => ({ ...f, health_safety_certificate_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to certificate document" />
+                  <p className="mt-1.5 text-xs text-muted-foreground">Certificate review status: {form.health_safety_certificate_status}</p>
+                </div>
+              )}
               {form.category === "Clothes & Fashion" && (
                 <div className="sm:col-span-2"><Label>How do you want to sell?</Label>
-                  <Select value={form.selling_mode} onValueChange={(v) => setForm((f) => ({ ...f, selling_mode: v as SellingMode }))}>
+                  <Select value={form.selling_mode} onValueChange={(v) => setForm((f) => {
+                    const nextMode = v as SellingMode;
+                    const nextSubcategory = getCategorySubcategories("Clothes & Fashion", nextMode).includes(f.subcategory) ? f.subcategory : "";
+                    return { ...f, selling_mode: nextMode, subcategory: nextSubcategory };
+                  })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="products">Product store (ready-made items)</SelectItem>
@@ -875,6 +924,15 @@ function MerchantPage() {
         return;
       }
 
+      const needsFoodSafetyApproval = s.category === "Groceries" && s.subcategory === "Meat & Fish";
+      if (needsFoodSafetyApproval && s.health_safety_certificate_status !== "approved") {
+        toast.error("Health and safety certificate approval required", {
+          description: "Meat & Fish stores can only publish after certificate approval.",
+          duration: 5000,
+        });
+        return;
+      }
+
       const { count } = await supabase.from("store_products").select("id", { count: "exact", head: true }).eq("store_id", s.id);
       if (!count || count === 0) {
         toast.error("Add at least one product or service before publishing");
@@ -1172,6 +1230,7 @@ function MerchantPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-display text-xl font-bold">{s.name}</h3>
                       <span className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium">{s.category}</span>
+                      {s.subcategory && <span className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{s.subcategory}</span>}
                     </div>
                     {s.description && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description}</p>}
                     <div className="mt-3 space-y-1 text-xs text-muted-foreground">
@@ -1201,6 +1260,11 @@ function MerchantPage() {
                                 ? "Online verified"
                                 : "Unsecured verified"}
                           </span>
+                        </div>
+                      )}
+                      {s.category === "Groceries" && s.subcategory === "Meat & Fish" && s.health_safety_certificate_status !== "approved" && (
+                        <div className="w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                          Health &amp; safety certificate review: {s.health_safety_certificate_status ?? "pending"}
                         </div>
                       )}
                       <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)} disabled={!s.is_verified && !s.published}>

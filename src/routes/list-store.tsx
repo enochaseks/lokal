@@ -92,7 +92,9 @@ function isValidImageReference(value: string) {
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
   category: z.enum(CATEGORIES),
+  selling_mode: z.enum(["products", "services"]).optional(),
   subcategory: z.string().trim().max(60).optional(),
+  health_safety_certificate_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid certificate URL").optional().or(z.literal("")),
   origin: z.enum(ORIGINS, { message: "Please select an African/Caribbean origin" }),
   description: z.string().trim().max(500).optional(),
   address: z.string().trim().max(200).optional(),
@@ -108,9 +110,16 @@ const storeSchema = z.object({
   accepts_refunds: z.boolean().default(false),
   refund_policy: z.string().trim().max(1000).optional(),
   cancellation_policy: z.string().trim().max(1000).optional(),
-}).refine((value) => isValidStoreSubcategory(value.category, value.subcategory), {
+}).refine((value) => isValidStoreSubcategory(value.category, value.subcategory, value.selling_mode), {
   message: "Please choose a valid subcategory for this category",
   path: ["subcategory"],
+}).refine((value) => {
+  const requiresCertificate = value.category === "Groceries" && value.subcategory === "Meat & Fish";
+  if (!requiresCertificate) return true;
+  return !!value.health_safety_certificate_url?.trim();
+}, {
+  message: "Health and safety certificate is required for Meat & Fish",
+  path: ["health_safety_certificate_url"],
 });
 
 const bankSchema = z.object({
@@ -142,6 +151,7 @@ function ListStorePage() {
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
     subcategory: "",
+    health_safety_certificate_url: "",
     description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
     instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
@@ -237,6 +247,7 @@ function ListStorePage() {
     try {
       const slug = `${slugify(store.name)}-${Math.random().toString(36).slice(2, 6)}`;
       const parsedStore = storeSchema.parse(store);
+      const requiresFoodSafetyApproval = parsedStore.category === "Groceries" && parsedStore.subcategory === "Meat & Fish";
       const toNullable = (value?: string) => {
         const trimmed = (value ?? "").trim();
         return trimmed ? trimmed : null;
@@ -257,10 +268,12 @@ function ListStorePage() {
         address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
         city: requiresFixedAddress ? toNullable(parsedStore.city) : null,
         postcode: requiresFixedAddress ? toNullable(parsedStore.postcode) : null,
-        published: true,
+        published: !requiresFoodSafetyApproval,
         location_type: isServiceStore ? store.location_type : null,
         selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
         subcategory: parsedStore.subcategory?.trim() ? parsedStore.subcategory.trim() : null,
+        health_safety_certificate_url: parsedStore.health_safety_certificate_url?.trim() ? parsedStore.health_safety_certificate_url.trim() : null,
+        health_safety_certificate_status: requiresFoodSafetyApproval ? "pending" : "not_required",
       };
 
       const { data: newStore, error: storeErr } = await (supabase as any)
@@ -360,7 +373,13 @@ function ListStorePage() {
         );
       }
 
-      toast.success("Your store is live!", { description: "Shoppers can now find and order from you." });
+      if (requiresFoodSafetyApproval) {
+        toast.success("Store created and sent for certificate review", {
+          description: "Your Meat & Fish store will go live after health and safety approval.",
+        });
+      } else {
+        toast.success("Your store is live!", { description: "Shoppers can now find and order from you." });
+      }
       navigate({ to: "/merchant" });
     } catch (e: any) {
       toast.error(e.message ?? "Could not save your store");
@@ -423,8 +442,9 @@ function ListStorePage() {
                       const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
                         ? prev.selling_mode
                         : (isStoreBookable(nextCategory) ? "services" : "products");
-                      const nextSubcategory = getCategorySubcategories(nextCategory).includes(prev.subcategory) ? prev.subcategory : "";
-                      return { ...prev, category: nextCategory, subcategory: nextSubcategory, selling_mode: nextMode };
+                      const nextSubcategory = getCategorySubcategories(nextCategory, nextMode).includes(prev.subcategory) ? prev.subcategory : "";
+                      const nextCertificate = nextCategory === "Groceries" && nextSubcategory === "Meat & Fish" ? prev.health_safety_certificate_url : "";
+                      return { ...prev, category: nextCategory, subcategory: nextSubcategory, health_safety_certificate_url: nextCertificate, selling_mode: nextMode };
                     })}
                   >
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -444,14 +464,18 @@ function ListStorePage() {
                 </div>
               </div>
 
-              {getCategorySubcategories(store.category).length > 0 && (
+              {getCategorySubcategories(store.category, store.selling_mode).length > 0 && (
                 <div>
                   <Label>Subcategory</Label>
-                  <Select value={store.subcategory || "none"} onValueChange={(v) => setStore((s) => ({ ...s, subcategory: v === "none" ? "" : v }))}>
+                  <Select value={store.subcategory || "none"} onValueChange={(v) => setStore((s) => {
+                    const nextSubcategory = v === "none" ? "" : v;
+                    const keepCertificate = s.category === "Groceries" && nextSubcategory === "Meat & Fish";
+                    return { ...s, subcategory: nextSubcategory, health_safety_certificate_url: keepCertificate ? s.health_safety_certificate_url : "" };
+                  })}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General</SelectItem>
-                      {getCategorySubcategories(store.category).map((subcategory) => (
+                      {getCategorySubcategories(store.category, store.selling_mode).map((subcategory) => (
                         <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
                       ))}
                     </SelectContent>
@@ -459,10 +483,28 @@ function ListStorePage() {
                 </div>
               )}
 
+              {store.category === "Groceries" && store.subcategory === "Meat & Fish" && (
+                <div>
+                  <Label>Health and safety certificate URL *</Label>
+                  <Input
+                    value={store.health_safety_certificate_url}
+                    onChange={(e) => setStore((s) => ({ ...s, health_safety_certificate_url: e.target.value }))}
+                    placeholder="Link to certificate document"
+                    maxLength={500}
+                    className="mt-1"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">Required for Meat &amp; Fish stores. Your store stays hidden until approved.</p>
+                </div>
+              )}
+
               {store.category === "Clothes & Fashion" && (
                 <div>
                   <Label>How do you want to sell?</Label>
-                  <Select value={store.selling_mode} onValueChange={(v) => setStore((s) => ({ ...s, selling_mode: v as SellingMode }))}>
+                  <Select value={store.selling_mode} onValueChange={(v) => setStore((s) => {
+                    const nextMode = v as SellingMode;
+                    const nextSubcategory = getCategorySubcategories("Clothes & Fashion", nextMode).includes(s.subcategory) ? s.subcategory : "";
+                    return { ...s, selling_mode: nextMode, subcategory: nextSubcategory };
+                  })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="products">Product store (ready-made items)</SelectItem>
