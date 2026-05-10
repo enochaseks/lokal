@@ -90,6 +90,7 @@ type Origin = (typeof ORIGINS)[number];
 
 type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
+  category_locked?: boolean | null;
   subcategory?: string | null;
   health_safety_certificate_url?: string | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
@@ -230,7 +231,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [uploading, setUploading] = useState(false);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
-  const categoryLocked = store.published;
+  const categoryLocked = Boolean(store.category_locked ?? store.published);
 
   useEffect(() => {
     supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
