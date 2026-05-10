@@ -13,6 +13,7 @@ import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stor
 import type { Region } from "@/data/stores";
 import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
+import { PostMedia } from "@/components/lokal/PostMedia";
 
 const isBookable = (cat: string, sellingMode?: string | null) => isStoreBookable(cat, sellingMode);
 
@@ -184,7 +185,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [submittingReview, setSubmittingReview] = useState(false);
 
   // Posts / updates feed
-  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
+  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; video_url: string | null; created_at: string };
   const [storePosts, setStorePosts] = useState<PostRow[]>([]);
   const [postsTab, setPostsTab] = useState<"info" | "updates">("info");
 
@@ -234,7 +235,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setStorePosts([]);
     (supabase as any)
       .from("store_posts")
-      .select("id, store_id, body, image_url, created_at")
+      .select("id, store_id, body, image_url, video_url, created_at")
       .eq("store_id", store.id)
       .order("created_at", { ascending: false })
       .limit(50)
@@ -910,11 +911,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                   <div key={post.id} className="rounded-xl border border-border bg-card p-4">
                     <p className="text-xs text-muted-foreground mb-2">{new Date(post.created_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
                     <p className="text-sm whitespace-pre-wrap">{post.body}</p>
-                    {post.image_url && (
-                      <div className="mt-3 overflow-hidden rounded-lg max-h-72 bg-secondary">
-                        <img src={getImageUrl(post.image_url) || ""} alt="" className="w-full object-cover" />
-                      </div>
-                    )}
+                    {post.video_url ? (
+                      <PostMedia url={post.video_url} kind="video" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" />
+                    ) : post.image_url ? (
+                      <PostMedia url={post.image_url} kind="image" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                    ) : null}
                   </div>
                 ))
               )}

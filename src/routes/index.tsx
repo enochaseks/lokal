@@ -10,6 +10,7 @@ import { MerchantCTA } from "@/components/lokal/MerchantCTA";
 import { BadgeCheck } from "lucide-react";
 import { StoreCard } from "@/components/lokal/StoreCard";
 import { StoreDialog } from "@/components/lokal/StoreDialog";
+import { PostMedia } from "@/components/lokal/PostMedia";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LIVE_CATEGORIES, categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
@@ -179,7 +180,7 @@ function Index() {
   };
 
   // Following feed
-  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; created_at: string };
+  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; video_url: string | null; created_at: string };
   const [followedPosts, setFollowedPosts] = useState<PostRow[]>([]);
   const [followedStoreIds, setFollowedStoreIds] = useState<string[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
@@ -197,7 +198,7 @@ function Index() {
       setLoadingFeed(true);
       const { data: posts } = await (supabase as any)
         .from("store_posts")
-        .select("id, store_id, body, image_url, created_at")
+        .select("id, store_id, body, image_url, video_url, created_at")
         .in("store_id", ids)
         .order("created_at", { ascending: false })
         .limit(60);
@@ -537,11 +538,11 @@ function Index() {
                           className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-card hover:border-primary/30 transition-colors"
                           onClick={() => { if (storeObj) { setSelected(storeObj); setOpen(true); } }}
                         >
-                          {post.image_url && (
-                            <div className="aspect-[5/3] overflow-hidden bg-secondary">
-                              <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
-                            </div>
-                          )}
+                          {post.video_url ? (
+                            <PostMedia url={post.video_url} kind="video" className="aspect-[5/3]" mediaClassName="h-full w-full" />
+                          ) : post.image_url ? (
+                            <PostMedia url={post.image_url} kind="image" className="aspect-[5/3]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                          ) : null}
                           <div className="p-4">
                             <div className="mb-1.5 flex items-center gap-2">
                               <span className="text-xs font-semibold text-primary">{storeName}</span>

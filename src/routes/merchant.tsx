@@ -5,6 +5,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { PostMedia } from "@/components/lokal/PostMedia";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,7 +181,7 @@ type VerificationStatus = "pending" | "approved" | "rejected";
 type VerificationTier = "verified" | "online_verified" | "unsecured_verified";
 
 type PostRow = {
-  id: string; store_id: string; body: string; image_url: string | null; created_at: string;
+  id: string; store_id: string; body: string; image_url: string | null; video_url: string | null; created_at: string;
 };
 
 type DayDraft = {
@@ -775,7 +776,8 @@ function MerchantPage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [postDraftStoreId, setPostDraftStoreId] = useState<string | null>(null);
   const [postDraftBody, setPostDraftBody] = useState("");
-  const [postDraftImage, setPostDraftImage] = useState("");
+  const [postDraftMediaUrl, setPostDraftMediaUrl] = useState("");
+  const [postDraftMediaType, setPostDraftMediaType] = useState<"image" | "video" | "">("");
   const [postDraftUploading, setPostDraftUploading] = useState(false);
   const [postDraftSaving, setPostDraftSaving] = useState(false);
   const [sharedStoreId, setSharedStoreId] = useState<string | null>(null);
@@ -2112,20 +2114,26 @@ function MerchantPage() {
                       <p className="mt-1 text-xs text-muted-foreground text-right">{postDraftBody.length}/1000</p>
                     </div>
                     <div>
-                      <Label>Photo (optional)</Label>
-                      {postDraftImage && (
-                        <div className="mt-1 relative w-40 h-28 rounded-lg overflow-hidden bg-secondary">
-                          <img src={getImageUrl(postDraftImage) || ""} alt="" className="h-full w-full object-cover" />
-                          <button onClick={() => setPostDraftImage("")} className="absolute top-1 right-1 rounded-full bg-background/80 p-0.5 text-xs hover:bg-background">✕</button>
+                      <Label>Photo or video (optional)</Label>
+                      {postDraftMediaUrl && (
+                        <div className="relative mt-1 w-40">
+                          <PostMedia
+                            url={postDraftMediaUrl}
+                            kind={postDraftMediaType === "video" ? "video" : "image"}
+                            className="h-28 w-full"
+                            mediaClassName="h-full w-full"
+                            alt="Post preview"
+                          />
+                          <button onClick={() => { setPostDraftMediaUrl(""); setPostDraftMediaType(""); }} className="absolute right-3 top-3 rounded-full bg-background/80 p-0.5 text-xs hover:bg-background">✕</button>
                         </div>
                       )}
                       <label className="mt-1 cursor-pointer block">
                         <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${postDraftUploading ? " opacity-50" : ""}`}>
-                          {postDraftUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : <><ImageIcon className="mr-2 h-4 w-4" />Upload photo</>}
+                          {postDraftUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : <><ImageIcon className="mr-2 h-4 w-4" />Upload media</>}
                         </div>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,video/*"
                           className="hidden"
                           disabled={postDraftUploading}
                           onChange={async (e) => {
@@ -2138,8 +2146,10 @@ function MerchantPage() {
                               const path = `${user.id}/${storeId}/post-${Date.now()}.${ext}`;
                               const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: false });
                               if (error) throw error;
-                              setPostDraftImage(path);
-                              toast.success("Photo uploaded");
+                              const isVideo = file.type.startsWith("video/");
+                              setPostDraftMediaUrl(path);
+                              setPostDraftMediaType(isVideo ? "video" : "image");
+                              toast.success(isVideo ? "Video uploaded" : "Photo uploaded");
                             } catch (err: any) {
                               toast.error(err.message ?? "Upload failed");
                             } finally {
@@ -2160,12 +2170,14 @@ function MerchantPage() {
                           const { data, error } = await db.from("store_posts").insert({
                             store_id: storeId,
                             body: postDraftBody.trim(),
-                            image_url: postDraftImage || null,
+                            image_url: postDraftMediaType === "image" ? postDraftMediaUrl || null : null,
+                            video_url: postDraftMediaType === "video" ? postDraftMediaUrl || null : null,
                           }).select("*").single();
                           if (error) throw error;
                           setPosts((prev) => [data as PostRow, ...prev]);
                           setPostDraftBody("");
-                          setPostDraftImage("");
+                          setPostDraftMediaUrl("");
+                          setPostDraftMediaType("");
                           toast.success("Update posted!");
                         } catch (e: any) {
                           toast.error(e.message ?? "Could not post update");
@@ -2198,11 +2210,11 @@ function MerchantPage() {
                                 <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                               </div>
                               <p className="text-sm whitespace-pre-wrap">{post.body}</p>
-                              {post.image_url && (
-                                <div className="mt-3 overflow-hidden rounded-lg max-h-60 bg-secondary">
-                                  <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
-                                </div>
-                              )}
+                              {post.video_url ? (
+                                <PostMedia url={post.video_url} kind="video" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" />
+                              ) : post.image_url ? (
+                                <PostMedia url={post.image_url} kind="image" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                              ) : null}
                             </div>
                             <button
                               className="shrink-0 text-muted-foreground hover:text-destructive"

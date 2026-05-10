@@ -3,6 +3,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
 
 import { StoreDialog } from "@/components/lokal/StoreDialog";
+import { PostMedia } from "@/components/lokal/PostMedia";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl } from "@/lib/utils";
 import { type Store, LIVE_CATEGORIES } from "@/data/stores";
@@ -22,6 +23,7 @@ type PostRow = {
   store_id: string;
   body: string;
   image_url: string | null;
+  video_url: string | null;
   created_at: string;
 };
 
@@ -87,7 +89,7 @@ function FollowingPage() {
           .eq("published", true),
         (supabase as any)
           .from("store_posts")
-          .select("id, store_id, body, image_url, created_at")
+          .select("id, store_id, body, image_url, video_url, created_at")
           .in("store_id", ids)
           .order("created_at", { ascending: false })
           .limit(120),
@@ -227,11 +229,11 @@ function FollowingPage() {
                           setOpen(true);
                         }}
                       >
-                        {post.image_url && (
-                          <div className="aspect-[5/3] overflow-hidden bg-secondary">
-                            <img src={getImageUrl(post.image_url) || ""} alt="" className="h-full w-full object-cover" />
-                          </div>
-                        )}
+                        {post.video_url ? (
+                          <PostMedia url={post.video_url} kind="video" className="aspect-[5/3]" mediaClassName="h-full w-full" />
+                        ) : post.image_url ? (
+                          <PostMedia url={post.image_url} kind="image" className="aspect-[5/3]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                        ) : null}
                         <div className="p-4">
                           <div className="mb-1.5 flex items-center gap-2">
                             <span className="text-xs font-semibold text-primary">{storeName}</span>
