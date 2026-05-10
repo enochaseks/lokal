@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
               <p style="color: #555; margin-bottom: 16px;">
                 List your store on Lokal for free. Sell groceries, beauty products, clothing, and more — or take bookings for services like barbering and hair styling. Get paid directly, no platform fees.
               </p>
-              <a href="https://lokalshops.co.uk/list-store"
+              <a href="https://lokalshops.co.uk/"
                 style="display: inline-block; background-color: #c2410c; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                 List your store →
               </a>
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
               <p style="color: #555; margin-bottom: 16px;">
                 Browse African and Caribbean stores near you. Order directly, pay by bank transfer — no card fees. Discover groceries, beauty stores, barbers, and more.
               </p>
-              <a href="https://lokalshops.co.uk/#stores"
+              <a href="https://lokalshops.co.uk/"
                 style="display: inline-block; background-color: #1d4ed8; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                 Browse stores →
               </a>
