@@ -47,6 +47,25 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
+function getDetectedTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function isValidIanaTimezone(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -95,7 +114,7 @@ type StoreRow = {
   health_safety_certificate_url?: string | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   description: string | null; address: string | null; city: string | null;
-  postcode: string | null; hours: string | null; phone: string | null;
+  postcode: string | null; timezone?: string | null; hours: string | null; phone: string | null;
   accepts_refunds?: boolean | null;
   refund_policy?: string | null;
   cancellation_policy?: string | null;
@@ -207,14 +226,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; timezone: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     subcategory: store.subcategory ?? "",
     health_safety_certificate_url: store.health_safety_certificate_url ?? "",
     health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
-    address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
+    address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "", timezone: store.timezone ?? getDetectedTimezone(),
     hours: store.hours ?? "", phone: store.phone ?? "", accepts_refunds: !!store.accepts_refunds, refund_policy: store.refund_policy ?? "", cancellation_policy: store.cancellation_policy ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
     bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
@@ -239,19 +258,17 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "", image_url: p.image_url ?? "" })));
         setLoadingProducts(false);
       });
-    if (isStoreBookable(store.category, store.selling_mode)) {
-      (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
-        .then((result: any) => {
-          const data: any[] | null = result.data;
-          if (data && data.length > 0) {
-            setEditAvail([0,1,2,3,4,5,6].map((day) => {
-              const row = (data as any[]).find((r) => r.day_of_week === day);
-              if (row) return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins, max_bookings_per_slot: row.max_bookings_per_slot ?? 1 };
-              return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 };
-            }));
-          }
-        });
-    }
+    (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
+      .then((result: any) => {
+        const data: any[] | null = result.data;
+        if (data && data.length > 0) {
+          setEditAvail([0,1,2,3,4,5,6].map((day) => {
+            const row = (data as any[]).find((r) => r.day_of_week === day);
+            if (row) return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins, max_bookings_per_slot: row.max_bookings_per_slot ?? 1 };
+            return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 };
+          }));
+        }
+      });
   }, [store.id]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -276,6 +293,10 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
+    if (!isValidIanaTimezone(form.timezone)) {
+      toast.error("Enter a valid IANA timezone (e.g. Africa/Lagos)");
+      return;
+    }
     if (categoryLocked && form.category !== store.category) {
       toast.error("Category cannot be changed for live stores", {
         description: "Please contact support to request a category migration review.",
@@ -312,6 +333,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         address: requiresFixedAddress ? n(form.address) : null,
         city: requiresFixedAddress ? n(form.city) : null,
         postcode: requiresFixedAddress ? n(form.postcode) : null,
+        timezone: form.timezone.trim(),
         hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url),
         accepts_refunds: form.accepts_refunds,
         refund_policy: n(form.refund_policy),
@@ -340,18 +362,23 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         }
       }
 
-      if (isServiceStore) {
-        await (supabase as any).from("store_availability").delete().eq("store_id", store.id);
-        const activeDays = editAvail.filter((d) => d.active);
-        if (activeDays.length > 0) {
-          const { error: availErr } = await (supabase as any).from("store_availability").insert(
-            activeDays.map((d) => ({ store_id: store.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
-          );
-          if (availErr) throw availErr;
-        }
+      await (supabase as any).from("store_availability").delete().eq("store_id", store.id);
+      const activeDays = editAvail.filter((d) => d.active);
+      if (activeDays.length > 0) {
+        const { error: availErr } = await (supabase as any).from("store_availability").insert(
+          activeDays.map((d) => ({
+            store_id: store.id,
+            day_of_week: d.day,
+            start_time: d.start_time,
+            end_time: d.end_time,
+            slot_duration_mins: isServiceStore ? d.slot_duration_mins : 60,
+            max_bookings_per_slot: isServiceStore ? d.max_bookings_per_slot : 1,
+          }))
+        );
+        if (availErr) throw availErr;
       }
 
-      onSaved({ ...store, ...form, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({ ...store, ...form, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -571,6 +598,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <span className="text-muted-foreground">{REGIONS[form.region as keyof typeof REGIONS]?.symbol || "£"} {form.currency}</span>
                 </div>
               </div>
+              <div className="sm:col-span-2">
+                <Label>Store timezone *</Label>
+                <div className="mt-1 flex gap-2">
+                  <Input value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))} placeholder="Africa/Lagos" maxLength={80} />
+                  <Button type="button" variant="outline" onClick={() => setForm((f) => ({ ...f, timezone: getDetectedTimezone() }))}>Use mine</Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">Used for accurate open/closed status globally. Example: Europe/London, America/Toronto.</p>
+              </div>
             </div>
           </div>
 
@@ -630,49 +665,52 @@ function EditStoreDialog({ store, onClose, onSaved }: {
             )}
           </div>
 
-          {isServiceStore && (
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
-              <div className="space-y-2">
-                {editAvail.map((d, i) => (
-                  <div key={d.day} className="rounded-lg border border-border p-3">
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" checked={d.active} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))} className="h-4 w-4 accent-primary" />
-                      <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
-                      {d.active && (
-                        <div className="flex flex-1 flex-wrap items-center gap-2">
-                          <Input type="time" value={d.start_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))} className="h-8 text-xs w-28" />
-                          <span className="text-sm text-muted-foreground">to</span>
-                          <Input type="time" value={d.end_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))} className="h-8 text-xs w-28" />
-                          <Select value={String(d.slot_duration_mins)} onValueChange={(v) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, slot_duration_mins: Number(v) } : x))}>
-                            <SelectTrigger className="h-8 text-xs w-24"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="15">15 min</SelectItem>
-                              <SelectItem value="30">30 min</SelectItem>
-                              <SelectItem value="45">45 min</SelectItem>
-                              <SelectItem value="60">60 min</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">Max</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={20}
-                              value={d.max_bookings_per_slot}
-                              onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : x))}
-                              className="h-8 text-xs w-14 font-mono"
-                            />
-                            <span className="text-xs text-muted-foreground">clients</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isServiceStore ? "Booking schedule" : "Business hours"}</p>
+            <div className="space-y-2">
+              {editAvail.map((d, i) => (
+                <div key={d.day} className="rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={d.active} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))} className="h-4 w-4 accent-primary" />
+                    <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
+                    {d.active && (
+                      <div className="flex flex-1 flex-wrap items-center gap-2">
+                        <Input type="time" value={d.start_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                        <span className="text-sm text-muted-foreground">to</span>
+                        <Input type="time" value={d.end_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                        {isServiceStore && (
+                          <>
+                            <Select value={String(d.slot_duration_mins)} onValueChange={(v) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, slot_duration_mins: Number(v) } : x))}>
+                              <SelectTrigger className="h-8 text-xs w-24"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="15">15 min</SelectItem>
+                                <SelectItem value="30">30 min</SelectItem>
+                                <SelectItem value="45">45 min</SelectItem>
+                                <SelectItem value="60">60 min</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">Max</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={d.max_bookings_per_slot}
+                                onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : x))}
+                                className="h-8 text-xs w-14 font-mono"
+                              />
+                              <span className="text-xs text-muted-foreground">clients</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-          )}
+            {!isServiceStore && <p className="text-xs text-muted-foreground">Night shifts are supported. Example: 22:00 to 02:00.</p>}
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>

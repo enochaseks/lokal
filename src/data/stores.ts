@@ -266,6 +266,7 @@ export type Store = {
   address: string;
   city?: string;
   postcode?: string;
+  timezone?: string | null;
   hours: string;
   phone: string;
   image: string;

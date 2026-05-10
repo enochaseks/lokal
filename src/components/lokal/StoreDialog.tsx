@@ -95,6 +95,45 @@ type StaffRow = {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function getDayOfWeekInTimezone(dateStr: string, timezone?: string | null): number {
+  try {
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, mo - 1, d, 12, 0, 0, 0);
+    if (!timezone?.trim()) return date.getDay();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+    }).formatToParts(date);
+    const weekday = parts.find((p) => p.type === "weekday")?.value;
+    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return dayMap[weekday ?? ""] ?? date.getDay();
+  } catch {
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    return new Date(y, mo - 1, d).getDay();
+  }
+}
+
+function getTodayDateInTimezone(timezone?: string | null): string {
+  const now = new Date();
+  if (!timezone?.trim()) {
+    return now.toISOString().split("T")[0];
+  }
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+    const year = parts.find((p) => p.type === "year")?.value;
+    const month = parts.find((p) => p.type === "month")?.value;
+    const day = parts.find((p) => p.type === "day")?.value;
+    return `${year}-${month}-${day}`;
+  } catch {
+    return now.toISOString().split("T")[0];
+  }
+}
+
 function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
   const slots: string[] = [];
   const [sh, sm] = startTime.split(":").map(Number);
@@ -312,14 +351,13 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   useEffect(() => {
     if (!bookStaffId) return;
     if (!bookDate) return;
-    const [yr, mo, dy] = bookDate.split("-").map(Number);
-    const day = new Date(yr, mo - 1, dy).getDay();
+    const day = getDayOfWeekInTimezone(bookDate, store?.timezone);
     const selected = bookStaff.find((m) => m.id === bookStaffId);
     if (!selected) return;
     if (!Array.isArray(selected.available_days) || selected.available_days.length === 0) return;
     if (selected.available_days.includes(day)) return;
     setBookStaffId("");
-  }, [bookStaffId, bookDate, bookStaff]);
+  }, [bookStaffId, bookDate, bookStaff, store?.timezone]);
 
   if (!store) return null;
 
@@ -339,10 +377,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const hasItems = total > 0;
   const selectedBookingDay = bookDate
-    ? (() => {
-        const [yr, mo, dy] = bookDate.split("-").map(Number);
-        return new Date(yr, mo - 1, dy).getDay();
-      })()
+    ? getDayOfWeekInTimezone(bookDate, store?.timezone)
     : null;
   const availableBookStaff = selectedBookingDay == null
     ? bookStaff
@@ -564,7 +599,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       return;
     }
     const [y, mo, d] = bookDate.split("-").map(Number);
-    const avail = bookAvailability.find((a) => a.day_of_week === new Date(y, mo - 1, d).getDay());
+    const dayOfWeek = getDayOfWeekInTimezone(bookDate, store?.timezone);
+    const avail = bookAvailability.find((a) => a.day_of_week === dayOfWeek);
     const duration = avail?.slot_duration_mins ?? 30;
     const [th, tm] = bookTime.split(":").map(Number);
     const slotEndDate = new Date(y, mo - 1, d, th, tm + duration, 0, 0);
@@ -902,13 +938,22 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                           <Input
                             type="date"
                             value={bookDate}
-                            min={(() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()}
-                            max={(() => { const d = new Date(); d.setDate(d.getDate() + 28); return d.toISOString().split("T")[0]; })()}
+                            min={(() => {
+                              const today = getTodayDateInTimezone(store?.timezone);
+                              const [y, m, d] = today.split("-").map(Number);
+                              const nextDay = new Date(y, m - 1, d + 1);
+                              return `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, "0")}-${String(nextDay.getDate()).padStart(2, "0")}`;
+                            })()}
+                            max={(() => {
+                              const today = getTodayDateInTimezone(store?.timezone);
+                              const [y, m, d] = today.split("-").map(Number);
+                              const maxDay = new Date(y, m - 1, d + 28);
+                              return `${maxDay.getFullYear()}-${String(maxDay.getMonth() + 1).padStart(2, "0")}-${String(maxDay.getDate()).padStart(2, "0")}`;
+                            })()}
                             onChange={(e) => {
                               const val = e.target.value;
                               if (!val) { setBookDate(""); setBookTime(""); return; }
-                              const [yr, mo, dy] = val.split("-").map(Number);
-                              const day = new Date(yr, mo - 1, dy).getDay();
+                              const day = getDayOfWeekInTimezone(val, store?.timezone);
                               if (!bookAvailability.some((a) => a.day_of_week === day)) {
                                 toast.error("No availability on this day — pick another date.");
                                 return;

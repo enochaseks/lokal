@@ -46,6 +46,25 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   return `+${countryCode}${localDigits}`;
 }
 
+function getDetectedTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function isValidIanaTimezone(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -99,6 +118,7 @@ const storeSchema = z.object({
   description: z.string().trim().max(500).optional(),
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(60).optional(),
+  timezone: z.string().trim().min(1, "Timezone is required").refine(isValidIanaTimezone, "Enter a valid IANA timezone (e.g. Africa/Lagos)"),
   postcode: z.string().trim().max(20).optional(),
   hours: z.string().trim().max(80).optional(),
   phone: z.string().trim().max(40).optional(),
@@ -153,6 +173,7 @@ function ListStorePage() {
     subcategory: "",
     health_safety_certificate_url: "",
     description: "", address: "", city: "", postcode: "",
+    timezone: getDetectedTimezone(),
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
     instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
     accepts_refunds: false, refund_policy: "", cancellation_policy: "",
@@ -267,6 +288,7 @@ function ListStorePage() {
         fulfillment: isServiceStore && store.location_type === "travel" ? "pay_at_store" : parsedStore.fulfillment,
         address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
         city: requiresFixedAddress ? toNullable(parsedStore.city) : null,
+        timezone: parsedStore.timezone,
         postcode: requiresFixedAddress ? toNullable(parsedStore.postcode) : null,
         published: !requiresFoodSafetyApproval,
         location_type: isServiceStore ? store.location_type : null,
@@ -346,14 +368,19 @@ function ListStorePage() {
         }
       }
 
-      if (isBarber) {
-        const activeDays = schedule.filter((d) => d.active);
-        if (activeDays.length > 0) {
-          const { error: availErr } = await (supabase as any).from("store_availability").insert(
-            activeDays.map((d) => ({ store_id: newStore.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
-          );
-          if (availErr) throw availErr;
-        }
+      const activeDays = schedule.filter((d) => d.active);
+      if (activeDays.length > 0) {
+        const { error: availErr } = await (supabase as any).from("store_availability").insert(
+          activeDays.map((d) => ({
+            store_id: newStore.id,
+            day_of_week: d.day,
+            start_time: d.start_time,
+            end_time: d.end_time,
+            slot_duration_mins: isServiceStore ? d.slot_duration_mins : 60,
+            max_bookings_per_slot: isServiceStore ? d.max_bookings_per_slot : 1,
+          }))
+        );
+        if (availErr) throw availErr;
       }
 
       // Promote to merchant role
@@ -408,7 +435,7 @@ function ListStorePage() {
           {[
             { n: 1, label: "About your store", icon: StoreIcon },
             { n: 2, label: "Bank details", icon: Landmark },
-            { n: 3, label: isServiceStore ? "Schedule" : "Products", icon: isServiceStore ? Calendar : Package },
+            { n: 3, label: isServiceStore ? "Schedule" : "Products & hours", icon: isServiceStore ? Calendar : Package },
           ].map((s, i) => (
             <div key={s.n} className="flex flex-1 items-center gap-2">
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
@@ -628,6 +655,21 @@ function ListStorePage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Store timezone *</Label>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      value={store.timezone}
+                      onChange={(e) => setStore({ ...store, timezone: e.target.value })}
+                      placeholder="Africa/Lagos"
+                      maxLength={80}
+                    />
+                    <Button type="button" variant="outline" onClick={() => setStore((s) => ({ ...s, timezone: getDetectedTimezone() }))}>
+                      Use mine
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">Used to show accurate open/closed status globally. Example: Europe/London, America/Toronto.</p>
                 </div>
                 {requiresFixedAddress ? (
                   <>
@@ -906,6 +948,43 @@ function ListStorePage() {
                     <Button variant="outline" size="sm" onClick={addProduct} className="gap-1">
                       <Plus className="h-3 w-3" /> Add product
                     </Button>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Business hours</p>
+                    <div className="space-y-2">
+                      {schedule.map((d, i) => (
+                        <div key={d.day} className="rounded-lg border border-border p-3">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={d.active}
+                              onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))}
+                              className="h-4 w-4 accent-primary"
+                            />
+                            <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
+                            {d.active && (
+                              <div className="flex flex-1 flex-wrap items-center gap-2">
+                                <Input
+                                  type="time"
+                                  value={d.start_time}
+                                  onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))}
+                                  className="w-28"
+                                />
+                                <span className="text-sm text-muted-foreground">to</span>
+                                <Input
+                                  type="time"
+                                  value={d.end_time}
+                                  onChange={(e) => setSchedule((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))}
+                                  className="w-28"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">Night shifts are supported. Example: 22:00 to 02:00.</p>
                   </div>
                 </>
               )}

@@ -49,14 +49,117 @@ function Index() {
     return (h * 60) + m;
   };
 
-  const isStoreOpenNow = (availability: Array<{ day_of_week: number; start_time: string; end_time: string }> | null | undefined): boolean | null => {
-    if (!availability || availability.length === 0) return null;
+  const DAY_TO_INDEX: Record<string, number> = {
+    sun: 0,
+    mon: 1,
+    tue: 2,
+    wed: 3,
+    thu: 4,
+    fri: 5,
+    sat: 6,
+  };
+
+  const WEEKDAY_TO_INDEX: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+
+  const parseClockTime = (raw: string): string | null => {
+    const cleaned = raw.trim().toLowerCase().replace(/\./g, "");
+    const match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+    if (!match) return null;
+    const hour12 = Number(match[1]);
+    const minute = Number(match[2] ?? "0");
+    const period = match[3];
+    if (hour12 < 1 || hour12 > 12 || minute < 0 || minute > 59) return null;
+    const hour24 = (hour12 % 12) + (period === "pm" ? 12 : 0);
+    return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  };
+
+  const parseHoursText = (hours: string | null | undefined): Array<{ day_of_week: number; start_time: string; end_time: string }> => {
+    if (!hours) return [];
+    const normalized = hours.toLowerCase().trim();
+    if (!normalized || normalized.includes("request")) return [];
+
+    const timeTokens = normalized.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)/g) ?? [];
+    if (timeTokens.length < 2) return [];
+    const startTime = parseClockTime(timeTokens[0]);
+    const endTime = parseClockTime(timeTokens[1]);
+    if (!startTime || !endTime) return [];
+
+    const allDays = [0, 1, 2, 3, 4, 5, 6];
+    const daySegmentRaw = hours.split("·")[0]?.trim() ?? hours.trim();
+    const daySegment = daySegmentRaw.toLowerCase();
+    if (daySegment.includes("daily") || daySegment.includes("every day") || daySegment.includes("everyday")) {
+      return allDays.map((day) => ({ day_of_week: day, start_time: startTime, end_time: endTime }));
+    }
+
+    const segments = daySegment
+      .replace(/[–—]/g, "-")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const resolvedDays = new Set<number>();
+    for (const segment of segments) {
+      if (segment.includes("-")) {
+        const [fromRaw, toRaw] = segment.split("-").map((p) => p.trim().slice(0, 3));
+        const from = DAY_TO_INDEX[fromRaw];
+        const to = DAY_TO_INDEX[toRaw];
+        if (from == null || to == null) continue;
+        if (from <= to) {
+          for (let day = from; day <= to; day += 1) resolvedDays.add(day);
+        } else {
+          for (let day = from; day <= 6; day += 1) resolvedDays.add(day);
+          for (let day = 0; day <= to; day += 1) resolvedDays.add(day);
+        }
+      } else {
+        const key = segment.slice(0, 3);
+        const day = DAY_TO_INDEX[key];
+        if (day != null) resolvedDays.add(day);
+      }
+    }
+
+    const days = resolvedDays.size > 0 ? Array.from(resolvedDays) : allDays;
+    return days.map((day) => ({ day_of_week: day, start_time: startTime, end_time: endTime }));
+  };
+
+  const isStoreOpenNow = (
+    availability: Array<{ day_of_week: number; start_time: string; end_time: string }> | null | undefined,
+    hoursText?: string | null,
+    timezone?: string | null,
+  ): boolean => {
+    const windows = availability && availability.length > 0 ? availability : parseHoursText(hoursText);
+    if (!windows || windows.length === 0) return false;
     const now = new Date();
-    const today = now.getDay();
-    const nowMins = (now.getHours() * 60) + now.getMinutes();
+    let today = now.getDay();
+    let nowMins = (now.getHours() * 60) + now.getMinutes();
+    if (timezone?.trim()) {
+      try {
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: timezone,
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(now);
+        const weekday = parts.find((p) => p.type === "weekday")?.value;
+        const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+        const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+        today = WEEKDAY_TO_INDEX[weekday ?? ""] ?? today;
+        nowMins = (hour * 60) + minute;
+      } catch {
+        // Fall back to viewer local time if timezone is invalid.
+      }
+    }
     const prevDay = (today + 6) % 7;
 
-    for (const row of availability) {
+    for (const row of windows) {
       const start = timeToMinutes(row.start_time);
       const end = timeToMinutes(row.end_time);
       if (start === end) {
@@ -115,7 +218,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url),store_availability(day_of_week,start_time,end_time)")
+        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url),store_availability(day_of_week,start_time,end_time)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -145,13 +248,14 @@ function Index() {
         category: r.category as Store["category"],
         subcategory: r.subcategory ?? null,
         health_safety_certificate_status: r.health_safety_certificate_status ?? null,
-        is_open_now: isStoreOpenNow(r.store_availability ?? []),
+        is_open_now: isStoreOpenNow(r.store_availability ?? [], r.hours, r.timezone),
         origin: r.origin || "🌍 Local",
         rating: 0,
         reviews: 0,
         distance: "—",
         city: r.city || undefined,
         postcode: r.postcode || undefined,
+        timezone: r.timezone || undefined,
         address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
         hours: r.hours || "Hours on request",
         phone: r.phone || "—",
