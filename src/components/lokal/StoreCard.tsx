@@ -45,6 +45,9 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
         <div className="mt-auto flex items-center gap-1.5 pt-2 text-[11px]">
+          {store.category === "Groceries" && store.subcategory === "Meat & Fish" && store.health_safety_certificate_status === "approved" && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">✅ Health &amp; Safety Passed</span>
+          )}
           {store.location_type === "salon" && (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">🏠 At premises</span>
           )}

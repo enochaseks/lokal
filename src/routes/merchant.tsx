@@ -230,6 +230,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [uploading, setUploading] = useState(false);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
+  const categoryLocked = store.published;
 
   useEffect(() => {
     supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
@@ -274,6 +275,12 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
+    if (categoryLocked && form.category !== store.category) {
+      toast.error("Category cannot be changed for live stores", {
+        description: "Please contact support to request a category migration review.",
+      });
+      return;
+    }
     const requiresFoodSafetyApproval = form.category === "Groceries" && form.subcategory === "Meat & Fish";
     if (requiresFoodSafetyApproval && !form.health_safety_certificate_url.trim()) {
       toast.error("Health and safety certificate is required for Meat & Fish");
@@ -365,6 +372,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               <div><Label>Category</Label>
                 <Select
                   value={form.category}
+                  disabled={categoryLocked}
                   onValueChange={(v) => setForm((f) => {
                     const nextCategory = v as Category;
                     const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
@@ -385,6 +393,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
+                {categoryLocked && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">Category is locked while your store is live. Contact support to request a reviewed category change.</p>
+                )}
               </div>
               <div><Label>Origin</Label>
                 <Select value={form.origin} onValueChange={(v) => setForm((f) => ({ ...f, origin: v as Origin }))}>

@@ -257,6 +257,7 @@ export type Store = {
   name: string;
   category: LiveCategory;
   subcategory?: string | null;
+  health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   origin: string;
   rating: number;
   reviews: number;

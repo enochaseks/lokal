@@ -84,7 +84,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
+        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -113,6 +113,7 @@ function Index() {
         name: r.name,
         category: r.category as Store["category"],
         subcategory: r.subcategory ?? null,
+        health_safety_certificate_status: r.health_safety_certificate_status ?? null,
         origin: r.origin || "🌍 Local",
         rating: 0,
         reviews: 0,
