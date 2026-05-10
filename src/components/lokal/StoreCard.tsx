@@ -32,9 +32,16 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
       <div className="flex flex-1 flex-col gap-2 p-5">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-display text-xl font-bold leading-tight">{store.name}</h3>
-          <span className="shrink-0 rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-            {store.category}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+              {store.category}
+            </span>
+            {store.subcategory && (
+              <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {store.subcategory}
+              </span>
+            )}
+          </div>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{store.description}</p>
         <div className="mt-auto flex items-center gap-1.5 pt-2 text-[11px]">

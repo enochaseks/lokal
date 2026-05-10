@@ -12,7 +12,7 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK, isStoreBookable } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK, isStoreBookable, getCategorySubcategories, isValidStoreSubcategory } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 import { trackEvent, trackEventOnce } from "@/lib/analytics";
@@ -92,6 +92,7 @@ function isValidImageReference(value: string) {
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
   category: z.enum(CATEGORIES),
+  subcategory: z.string().trim().max(60).optional(),
   origin: z.enum(ORIGINS, { message: "Please select an African/Caribbean origin" }),
   description: z.string().trim().max(500).optional(),
   address: z.string().trim().max(200).optional(),
@@ -107,6 +108,9 @@ const storeSchema = z.object({
   accepts_refunds: z.boolean().default(false),
   refund_policy: z.string().trim().max(1000).optional(),
   cancellation_policy: z.string().trim().max(1000).optional(),
+}).refine((value) => isValidStoreSubcategory(value.category, value.subcategory), {
+  message: "Please choose a valid subcategory for this category",
+  path: ["subcategory"],
 });
 
 const bankSchema = z.object({
@@ -137,6 +141,7 @@ function ListStorePage() {
 
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
+    subcategory: "",
     description: "", address: "", city: "", postcode: "",
     hours: "", phone: "", fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store", image_url: "",
     instagram_handle: "", tiktok_handle: "", website_url: "", location_type: "salon" as "salon" | "remote" | "travel" | "remote_and_travel",
@@ -255,6 +260,7 @@ function ListStorePage() {
         published: true,
         location_type: isServiceStore ? store.location_type : null,
         selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
+        subcategory: parsedStore.subcategory?.trim() ? parsedStore.subcategory.trim() : null,
       };
 
       const { data: newStore, error: storeErr } = await (supabase as any)
@@ -279,6 +285,7 @@ function ListStorePage() {
                 address: store.address,
                 description: store.description,
                 city: store.city,
+                subcategory: store.subcategory || null,
               },
               entity_type: "store",
             }),
@@ -416,7 +423,8 @@ function ListStorePage() {
                       const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
                         ? prev.selling_mode
                         : (isStoreBookable(nextCategory) ? "services" : "products");
-                      return { ...prev, category: nextCategory, selling_mode: nextMode };
+                      const nextSubcategory = getCategorySubcategories(nextCategory).includes(prev.subcategory) ? prev.subcategory : "";
+                      return { ...prev, category: nextCategory, subcategory: nextSubcategory, selling_mode: nextMode };
                     })}
                   >
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -435,6 +443,21 @@ function ListStorePage() {
                   </Select>
                 </div>
               </div>
+
+              {getCategorySubcategories(store.category).length > 0 && (
+                <div>
+                  <Label>Subcategory</Label>
+                  <Select value={store.subcategory || "none"} onValueChange={(v) => setStore((s) => ({ ...s, subcategory: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">General</SelectItem>
+                      {getCategorySubcategories(store.category).map((subcategory) => (
+                        <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {store.category === "Clothes & Fashion" && (
                 <div>

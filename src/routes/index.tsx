@@ -31,6 +31,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const [active, setActive] = useState<(typeof categories)[number]["name"]>("All");
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [selected, setSelected] = useState<Store | null>(null);
   const [open, setOpen] = useState(false);
   const [liveStores, setLiveStores] = useState<Store[]>([]);
@@ -83,7 +84,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
+        .select("id,name,category,subcategory,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -111,6 +112,7 @@ function Index() {
         id: r.id,
         name: r.name,
         category: r.category as Store["category"],
+        subcategory: r.subcategory ?? null,
         origin: r.origin || "🌍 Local",
         rating: 0,
         reviews: 0,
@@ -177,6 +179,7 @@ function Index() {
 
   const filtered = liveStores
     .filter((s) => active === "All" || s.category === active)
+    .filter((s) => !activeSubcategory || s.subcategory === activeSubcategory)
     .filter((s) => {
       if (!locationFilter) return true;
       if (!s.city) return true; // stores without a city set are shown everywhere
@@ -189,11 +192,16 @@ function Index() {
       const q = search.toLowerCase();
       return (
         s.name.toLowerCase().includes(q) ||
+        s.subcategory?.toLowerCase().includes(q) ||
         s.city?.toLowerCase().includes(q) ||
         s.address?.toLowerCase().includes(q) ||
         s.description?.toLowerCase().includes(q)
       );
     });
+
+  const availableSubcategories = active === "All"
+    ? []
+    : Array.from(new Set(liveStores.filter((s) => s.category === active && !!s.subcategory).map((s) => s.subcategory as string)));
 
   return (
     <div className="min-h-screen bg-background">
@@ -246,7 +254,10 @@ function Index() {
               {categories.map((c) => (
                 <button
                   key={c.name}
-                  onClick={() => setActive(c.name)}
+                  onClick={() => {
+                    setActive(c.name);
+                    setActiveSubcategory(null);
+                  }}
                   className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                     active === c.name
                       ? "border-transparent bg-gradient-primary text-primary-foreground shadow-warm"
@@ -259,6 +270,34 @@ function Index() {
               ))}
             </div>
           </div>
+
+          {availableSubcategories.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => setActiveSubcategory(null)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                  !activeSubcategory
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                }`}
+              >
+                All {active}
+              </button>
+              {availableSubcategories.map((subcategory) => (
+                <button
+                  key={subcategory}
+                  onClick={() => setActiveSubcategory(subcategory)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeSubcategory === subcategory
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  }`}
+                >
+                  {subcategory}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {loadingStores

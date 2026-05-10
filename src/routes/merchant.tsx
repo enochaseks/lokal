@@ -15,7 +15,7 @@ import { VerificationRequestDialog } from "@/components/merchant/VerificationReq
 import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, BadgeCheck, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable, getCategorySubcategories } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -90,6 +90,7 @@ type Origin = (typeof ORIGINS)[number];
 
 type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
+  subcategory?: string | null;
   description: string | null; address: string | null; city: string | null;
   postcode: string | null; hours: string | null; phone: string | null;
   accepts_refunds?: boolean | null;
@@ -203,9 +204,10 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; origin: Origin; description: string; address: string; city: string; postcode: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
+    subcategory: store.subcategory ?? "",
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
     address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "",
     hours: store.hours ?? "", phone: store.phone ?? "", accepts_refunds: !!store.accepts_refunds, refund_policy: store.refund_policy ?? "", cancellation_policy: store.cancellation_policy ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
@@ -276,6 +278,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
       const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
+        subcategory: getCategorySubcategories(form.category).includes(form.subcategory) ? n(form.subcategory) : null,
         origin: form.origin, description: n(form.description),
         address: requiresFixedAddress ? n(form.address) : null,
         city: requiresFixedAddress ? n(form.city) : null,
@@ -346,7 +349,8 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                     const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
                       ? f.selling_mode
                       : (isStoreBookable(nextCategory) ? "services" : "products");
-                    return { ...f, category: nextCategory, selling_mode: nextMode };
+                    const nextSubcategory = getCategorySubcategories(nextCategory).includes(f.subcategory) ? f.subcategory : "";
+                    return { ...f, category: nextCategory, subcategory: nextSubcategory, selling_mode: nextMode };
                   })}
                 >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -359,6 +363,19 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <SelectContent>{ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              {getCategorySubcategories(form.category).length > 0 && (
+                <div className="sm:col-span-2"><Label>Subcategory</Label>
+                  <Select value={form.subcategory || "none"} onValueChange={(v) => setForm((f) => ({ ...f, subcategory: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">General</SelectItem>
+                      {getCategorySubcategories(form.category).map((subcategory) => (
+                        <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {form.category === "Clothes & Fashion" && (
                 <div className="sm:col-span-2"><Label>How do you want to sell?</Label>
                   <Select value={form.selling_mode} onValueChange={(v) => setForm((f) => ({ ...f, selling_mode: v as SellingMode }))}>

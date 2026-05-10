@@ -7,6 +7,35 @@ export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & 
 /** Categories that are always service/booking based. */
 export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
 
+export const CATEGORY_SUBCATEGORIES = {
+  "Hair & Beauty": [
+    "Makeup",
+    "Braids",
+    "Wig Install",
+    "Locs",
+    "Natural Hair Care",
+    "Lashes & Brows",
+    "Nails",
+  ],
+  "Beauty Store": [
+    "Skincare Products",
+    "Hair Products",
+    "Cosmetics",
+    "Tools & Accessories",
+    "Fragrances",
+    "Body Care",
+  ],
+} as const satisfies Partial<Record<LiveCategory, readonly string[]>>;
+
+export function getCategorySubcategories(category: string): readonly string[] {
+  return CATEGORY_SUBCATEGORIES[category as keyof typeof CATEGORY_SUBCATEGORIES] ?? [];
+}
+
+export function isValidStoreSubcategory(category: string, subcategory?: string | null): boolean {
+  if (!subcategory) return true;
+  return getCategorySubcategories(category).includes(subcategory);
+}
+
 export const REGIONS = {
   // Diaspora host countries
   GB: { name: "United Kingdom",            currency: "GBP", symbol: "£"    },
@@ -189,6 +218,7 @@ export type Store = {
   id: string;
   name: string;
   category: LiveCategory;
+  subcategory?: string | null;
   origin: string;
   rating: number;
   reviews: number;
