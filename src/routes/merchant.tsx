@@ -248,6 +248,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>((store.region ?? "GB") as CountryCode);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [initialProducts, setInitialProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string; image_url: string }> | null>(null);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
   const categoryLocked = Boolean(store.category_locked ?? store.published);
@@ -255,7 +256,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   useEffect(() => {
     supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
       .then(({ data }) => {
-        setProducts((data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "", image_url: p.image_url ?? "" })));
+        const loadedProducts = (data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "", image_url: p.image_url ?? "" }));
+        setProducts(loadedProducts);
+        setInitialProducts(loadedProducts);
         setLoadingProducts(false);
       });
     (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
@@ -290,6 +293,15 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   };
 
   const n = (v: string) => v.trim() || null;
+
+  const hasProductChanges = initialProducts !== null && (
+    products.length !== initialProducts.length ||
+    products.some((p, i) => {
+      const orig = initialProducts[i];
+      if (!orig) return true;
+      return p.name !== orig.name || p.price !== orig.price || p.unit !== orig.unit || p.deposit !== orig.deposit || p.image_url !== orig.image_url;
+    })
+  );
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Store name is required"); return; }
@@ -348,7 +360,11 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       if (storeErr) throw storeErr;
 
       const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
+      if (hasProductChanges) {
+        console.log("Product changes detected:", { originalCount: initialProducts?.length, currentCount: validProducts.length });
+      }
       await supabase.from("store_products").delete().eq("store_id", store.id);
+      let shouldPublish = store.published;
       if (validProducts.length > 0) {
         const { error: prodErr } = await (supabase as any).from("store_products").insert(
           validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, deposit: p.deposit.trim() ? Number(p.deposit) : null, image_url: p.image_url || null, position: i }))
@@ -359,6 +375,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         if (!store.published && store.is_verified) {
           const { error: pubErr } = await supabase.from("stores").update({ published: true }).eq("id", store.id);
           if (pubErr) throw pubErr;
+          shouldPublish = true;
+        }
+      } else {
+        // Unpublish if all products are deleted
+        if (store.published) {
+          const { error: unpubErr } = await supabase.from("stores").update({ published: false }).eq("id", store.id);
+          if (unpubErr) throw unpubErr;
+          shouldPublish = false;
         }
       }
 
@@ -378,7 +402,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         if (availErr) throw availErr;
       }
 
-      onSaved({ ...store, ...form, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({ ...store, ...form, published: shouldPublish, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -714,7 +738,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95">
+          <Button onClick={handleSave} disabled={saving || loadingProducts} className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" title={hasProductChanges ? "Store details and products updated" : ""}>
             {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save changes"}
           </Button>
         </DialogFooter>

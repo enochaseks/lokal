@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
           headers: adminHeaders,
           body: JSON.stringify({
             is_verified: true,
+            published: true,
             verified_at: nowIso,
             verification_reason: verificationReason,
           }),

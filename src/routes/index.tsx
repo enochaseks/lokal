@@ -218,7 +218,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url),store_availability(day_of_week,start_time,end_time)")
+        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -279,7 +279,7 @@ function Index() {
         },
         products: (r.store_products ?? [])
           .sort((a: any, b: any) => a.position - b.position)
-          .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined, image_url: p.image_url ?? null })),
+          .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined, image_url: p.image_url ?? null, deposit: p.deposit ?? null })),
         deposit_amount: r.deposit_amount ?? undefined,
         is_verified: Boolean(r.is_verified),
         verified_at: r.verified_at ?? null,

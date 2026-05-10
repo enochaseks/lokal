@@ -156,6 +156,7 @@ function generateTimeSlots(startTime: string, endTime: string, durationMins: num
 export function StoreDialog({ store, open, onOpenChange }: { store: Store | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const [step, setStep] = useState<"browse" | "arrange" | "transfer">("browse");
   const [bookingDepositDue, setBookingDepositDue] = useState<{ amount: number; service: string | null } | null>(null);
+  const [pendingBookingData, setPendingBookingData] = useState<any>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -406,9 +407,86 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setStorePosts([]);
     setPostsTab("info");
     setFollowerId(null); setIsFollowing(false); setFollowCount(0);
+    setBookingDepositDue(null);
+    setPendingBookingData(null);
   };
 
   const handleConfirmTransfer = async () => {
+    // Handle booking deposit confirmation
+    if (bookingDepositDue && pendingBookingData) {
+      setSaving(true);
+      try {
+        // Insert the booking with pending_transfer status
+        const { data: bookingRow, error } = await (supabase as any)
+          .from("store_bookings")
+          .insert({ ...pendingBookingData, status: "pending_transfer" })
+          .select("id")
+          .single();
+        if (error) throw error;
+
+        let bookingId: string | null = bookingRow?.id ?? null;
+        if (!bookingId) {
+          const { data: fallbackBooking } = await (supabase as any)
+            .from("store_bookings")
+            .select("id")
+            .eq("store_id", pendingBookingData.store_id)
+            .eq("customer_phone", pendingBookingData.customer_phone)
+            .eq("slot_start", pendingBookingData.slot_start)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          bookingId = fallbackBooking?.id ?? null;
+        }
+
+        // Send confirmation emails
+        if (pendingBookingData.bookEmail) {
+          void supabase.functions.invoke("send-booking-customer-confirmation", {
+            body: {
+              booking_id: bookingId,
+              store_name: store!.name,
+              customer_name: pendingBookingData.customer_name,
+              customer_email: pendingBookingData.bookEmail,
+              service: pendingBookingData.service || null,
+              staff_name: pendingBookingData.staff_name ?? null,
+              slot_start: pendingBookingData.slot_start,
+              customer_phone: pendingBookingData.customer_phone,
+            },
+          });
+        }
+
+        // Notify merchant
+        void supabase.functions.invoke("send-booking-alert", {
+          body: {
+            store_id: store!.id,
+            store_name: store!.name,
+            customer_name: pendingBookingData.customer_name,
+            customer_phone: pendingBookingData.customer_phone,
+            service: pendingBookingData.service || null,
+            staff_name: pendingBookingData.staff_name ?? null,
+            staff_phone: pendingBookingData.staff_phone ?? null,
+            slot_start: pendingBookingData.slot_start,
+            note: pendingBookingData.note || null,
+          },
+        });
+
+        toast.success("Booking requested!", {
+          description: `Once ${store!.name} receives your deposit of ${currencySymbol}${bookingDepositDue.amount.toFixed(2)}, they'll confirm your appointment.`,
+          duration: 8000,
+        });
+        setBookingDepositDue(null);
+        setPendingBookingData(null);
+        setStep("browse");
+        onOpenChange(false);
+        setTimeout(reset, 200);
+      } catch (e: any) {
+        toast.error(e.message ?? "Could not confirm booking");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Handle order transfer confirmation
     if (!isStoreVerified) {
       toast.warning(unverifiedWarningText);
     }
@@ -598,6 +676,47 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       toast.error("Please choose a team member");
       return;
     }
+
+    // CHECK FOR DEPOSIT FIRST
+    const serviceDeposit = bookService ? store!.products?.find((p) => p.name === bookService)?.deposit : undefined;
+    const depositAmount = serviceDeposit ?? store!.deposit_amount ?? null;
+    
+    if (depositAmount) {
+      // Store all booking details before showing deposit screen
+      const [y, mo, d] = bookDate.split("-").map(Number);
+      const dayOfWeek = getDayOfWeekInTimezone(bookDate, store?.timezone);
+      const avail = bookAvailability.find((a) => a.day_of_week === dayOfWeek);
+      const duration = avail?.slot_duration_mins ?? 30;
+      const [th, tm] = bookTime.split(":").map(Number);
+      const slotEndDate = new Date(y, mo - 1, d, th, tm + duration, 0, 0);
+      const slotEnd = `${slotEndDate.getFullYear()}-${String(slotEndDate.getMonth() + 1).padStart(2, "0")}-${String(slotEndDate.getDate()).padStart(2, "0")}T${String(slotEndDate.getHours()).padStart(2, "0")}:${String(slotEndDate.getMinutes()).padStart(2, "0")}:00`;
+      
+      setPendingBookingData({
+        store_id: store!.id,
+        customer_id: customerId,
+        customer_name: bookName.trim(),
+        customer_phone: normalizedBookPhone,
+        customer_email: bookEmail.trim() || null,
+        service: bookService || null,
+        staff_id: selectedStaff?.id ?? null,
+        staff_name: selectedStaff?.name ?? null,
+        staff_phone: selectedStaff?.phone ?? null,
+        slot_start: `${bookDate}T${bookTime}:00`,
+        slot_end: slotEnd,
+        status: "pending",
+        note: bookNote.trim() || null,
+        selectedStaff,
+        bookEmail: bookEmail.trim(),
+      });
+      
+      // Don't insert booking yet - just show deposit payment screen
+      setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
+      setStep("transfer");
+      setShowBookingForm(false);
+      return;
+    }
+
+    // NO DEPOSIT - proceed with booking insertion
     const [y, mo, d] = bookDate.split("-").map(Number);
     const dayOfWeek = getDayOfWeekInTimezone(bookDate, store?.timezone);
     const avail = bookAvailability.find((a) => a.day_of_week === dayOfWeek);
@@ -674,12 +793,11 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       });
 
       const prettyDate = new Date(y, mo - 1, d).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-      const serviceDeposit = bookService ? store!.products?.find((p) => p.name === bookService)?.deposit : undefined;
-      const depositAmount = serviceDeposit ?? store!.deposit_amount ?? null;
       const isTravelServiceStore = isBookable(store!.category, store!.selling_mode)
         && (store!.location_type === "travel" || store!.location_type === "remote_and_travel");
       if (depositAmount) {
         setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
+        setStep("transfer");
       } else {
         toast.success("Appointment requested!", {
           description: isTravelServiceStore
@@ -689,9 +807,6 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         });
       }
       setShowBookingForm(false);
-      if (bookingDepositDue) {
-        // keep dialog open — deposit panel shows
-      }
       setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
       setSlotCounts((prev) => ({ ...prev, [bookTime]: (prev[bookTime] ?? 0) + 1 }));
       if (selectedStaff?.id) {
@@ -1042,26 +1157,9 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                           <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
                           <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} placeholder="Any special requests?" rows={2} className="mt-1" />
                         </div>
-                        {(() => {
-                            const serviceDeposit = bookService
-                              ? store.products?.find((p) => p.name === bookService)?.deposit
-                              : undefined;
-                            const depositAmount = serviceDeposit ?? store.deposit_amount;
-                            return depositAmount ? (
-                              <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                                💳 A deposit of <strong>{currencySymbol}{Number(depositAmount).toFixed(2)}</strong> is required. Please send it to:
-                                <div className="mt-2 space-y-1 text-xs font-mono">
-                                  <div><span className="text-amber-600">Bank: </span>{store.bank.name}</div>
-                                  <div><span className="text-amber-600">Name: </span>{store.bank.accountName}</div>
-                                  <div><span className="text-amber-600">Account: </span>{store.bank.accountNumber}</div>
-                                  {store.bank.sortCode && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank.sortCode}</div>}
-                                </div>
-                              </div>
-                            ) : null;
-                          })()}
                         <Button
                           size="sm"
-                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0)))}
+                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0))) || (store.products.length > 0 && !bookService)}
                           onClick={handleBook}
                           className="bg-gradient-primary text-primary-foreground"
                         >
@@ -1343,8 +1441,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
           {step === "transfer" && (
             <>
-              <button onClick={() => setStep("arrange")} className="mt-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="h-3 w-3" /> Back
+              <button onClick={() => bookingDepositDue ? setStep("browse") : setStep("arrange")} className="mt-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="h-3 w-3" /> {bookingDepositDue ? "Back to booking" : "Back to products"}
               </button>
 
               <div className="mt-3 rounded-2xl border-2 border-primary/30 bg-gradient-soft p-6 shadow-card">
@@ -1352,31 +1450,44 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                   <Landmark className="h-5 w-5" />
                   <span className="text-sm font-semibold uppercase tracking-wider">Bank transfer only</span>
                 </div>
-                <h4 className="font-display text-2xl font-bold">Send {currencySymbol}{total.toFixed(2)} to {store.name}</h4>
+                <h4 className="font-display text-2xl font-bold">Send {currencySymbol}{bookingDepositDue ? bookingDepositDue.amount.toFixed(2) : total.toFixed(2)} to {store.name}</h4>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Lokal connects you directly with the merchant — no card fees, no middleman. Use the reference below so they can match your order instantly.
+                  {bookingDepositDue 
+                    ? `Pay the deposit to confirm your ${bookingDepositDue.service || "appointment"}. ${store.name} will confirm once they receive payment.`
+                    : "Lokal connects you directly with the merchant — no card fees, no middleman. Use the reference below so they can match your order instantly."}
                 </p>
 
                 <div className="mt-5 space-y-2">
-                  {[
-                    { label: "Bank", value: store.bank.name },
-                    { label: "Account name", value: store.bank.accountName },
-                    { label: "Account number", value: store.bank.accountNumber },
-                    ...(store.bank.sortCode ? [{ label: (REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel, value: store.bank.sortCode }] : []),
-                    { label: "Reference", value: reference },
-                    { label: "Amount", value: `${currencySymbol}${total.toFixed(2)}` },
-                  ].map((row) => (
-                    <div key={row.label} className="flex items-center justify-between rounded-lg bg-card px-4 py-3">
-                      <div>
-                        <div className="text-xs uppercase tracking-wider text-muted-foreground">{row.label}</div>
-                        <div className="font-mono font-semibold">{row.value}</div>
+                  {(() => {
+                    const rows = bookingDepositDue 
+                      ? [
+                          { label: "Bank", value: store.bank.name },
+                          { label: "Account name", value: store.bank.accountName },
+                          { label: "Account number", value: store.bank.accountNumber },
+                          ...(store.bank.sortCode ? [{ label: (REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel, value: store.bank.sortCode }] : []),
+                          { label: "Deposit amount", value: `${currencySymbol}${bookingDepositDue.amount.toFixed(2)}` },
+                        ]
+                      : [
+                          { label: "Bank", value: store.bank.name },
+                          { label: "Account name", value: store.bank.accountName },
+                          { label: "Account number", value: store.bank.accountNumber },
+                          ...(store.bank.sortCode ? [{ label: (REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel, value: store.bank.sortCode }] : []),
+                          { label: "Reference", value: reference },
+                          { label: "Amount", value: `${currencySymbol}${total.toFixed(2)}` },
+                        ];
+                    return rows.map((row) => (
+                      <div key={row.label} className="flex items-center justify-between rounded-lg bg-card px-4 py-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-wider text-muted-foreground">{row.label}</div>
+                          <div className="font-mono font-semibold">{row.value}</div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => copy(row.label, row.value)} className="gap-1.5">
+                          {copied === row.label ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                          {copied === row.label ? "Copied" : "Copy"}
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => copy(row.label, row.value)} className="gap-1.5">
-                        {copied === row.label ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
-                        {copied === row.label ? "Copied" : "Copy"}
-                      </Button>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
               </div>
 
@@ -1386,14 +1497,20 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 disabled={saving}
                 onClick={handleConfirmTransfer}
               >
-                {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming…</> : "I've made the transfer"}
+                {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{bookingDepositDue ? "Requesting…" : "Confirming…"}</> : (bookingDepositDue ? "Request booking" : "I've made the transfer")}
               </Button>
               <p className="mt-3 text-center text-xs text-muted-foreground">
-                After sending, track your order at{" "}
-                <a href={`/order?ref=${reference}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2">
-                  lokalshops.co.uk/order
-                </a>{" "}
-                using reference <span className="font-mono font-bold">{reference}</span>
+                {bookingDepositDue 
+                  ? `${store.name} will confirm your appointment once payment is received.`
+                  : (
+                    <>
+                      After sending, track your order at{" "}
+                      <a href={`/order?ref=${reference}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2">
+                        lokalshops.co.uk/order
+                      </a>{" "}
+                      using reference <span className="font-mono font-bold">{reference}</span>
+                    </>
+                  )}
               </p>
             </>
           )}
