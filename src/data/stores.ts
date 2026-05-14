@@ -2,10 +2,10 @@
 import beauty from "@/assets/store-beauty.jpg";
 import barber from "@/assets/store-fashion.jpg";
 
-export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & Beauty", "Clothes & Fashion"] as const;
+export const LIVE_CATEGORIES = ["Groceries", "Beauty Store", "Barbers", "Hair & Beauty", "Clothes & Fashion", "Body Arts & Crafts"] as const;
 
 /** Categories that are always service/booking based. */
-export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty"] as const;
+export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty", "Body Arts & Crafts"] as const;
 
 export const CLOTHES_FASHION_PRODUCT_SUBCATEGORIES = [
   "Men's Wear",
@@ -57,6 +57,13 @@ export const CATEGORY_SUBCATEGORIES = {
     "Tools & Accessories",
     "Fragrances",
     "Body Care",
+  ],
+  "Body Arts & Crafts": [
+    "Tattooing",
+    "Piercing",
+    "Henna",
+    "Body Painting",
+    "Craft Workshops",
   ],
 } as const satisfies Partial<Record<LiveCategory, readonly string[]>>;
 
@@ -257,6 +264,10 @@ export type Store = {
   name: string;
   category: LiveCategory;
   subcategory?: string | null;
+  minimum_age?: number | null;
+  tattoo_portfolio_url?: string | null;
+  tattoo_license_url?: string | null;
+  is_verified_tattoo_artist?: boolean | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   is_open_now?: boolean | null;
   origin: string;
@@ -367,4 +378,5 @@ export const categories = [
   { name: "Barbers", emoji: "💈" },
   { name: "Hair & Beauty", emoji: "💅" },
   { name: "Clothes & Fashion", emoji: "🧵" },
+  { name: "Body Arts & Crafts", emoji: "🖋️" },
 ] as const;

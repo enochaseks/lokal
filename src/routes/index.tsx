@@ -220,7 +220,7 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)")
+        .select("id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)")
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -249,6 +249,10 @@ function Index() {
         name: r.name,
         category: r.category as Store["category"],
         subcategory: r.subcategory ?? null,
+        minimum_age: r.minimum_age ?? null,
+        tattoo_portfolio_url: r.tattoo_portfolio_url ?? null,
+        tattoo_license_url: r.tattoo_license_url ?? null,
+        is_verified_tattoo_artist: r.is_verified_tattoo_artist ?? false,
         health_safety_certificate_status: r.health_safety_certificate_status ?? null,
         is_open_now: isStoreOpenNow(r.store_availability ?? [], r.hours, r.timezone),
         origin: r.origin || "🌍 Local",
@@ -316,6 +320,19 @@ function Index() {
     })();
   }, []);
 
+  const locationScore = (store: Store) => {
+    if (!locationFilter) return 0;
+    const query = locationFilter.toLowerCase().trim();
+    if (!query) return 0;
+    const cityValue = (store.city ?? "").toLowerCase().trim();
+    const addressValue = (store.address ?? "").toLowerCase().trim();
+    if (!cityValue) return 3;
+    if (cityValue === query) return 0;
+    if (cityValue.startsWith(query) || query.startsWith(cityValue)) return 1;
+    if (cityValue.includes(query) || addressValue.includes(query)) return 2;
+    return 4;
+  };
+
   const filtered = liveStores
     .filter((s) => active === "All" || s.category === active)
     .filter((s) => !activeSubcategory || s.subcategory === activeSubcategory)
@@ -336,6 +353,11 @@ function Index() {
         s.address?.toLowerCase().includes(q) ||
         s.description?.toLowerCase().includes(q)
       );
+    })
+    .sort((a, b) => {
+      const scoreDelta = locationScore(a) - locationScore(b);
+      if (scoreDelta !== 0) return scoreDelta;
+      return (b.reviews ?? 0) - (a.reviews ?? 0);
     });
 
   const availableSubcategories = active === "All"

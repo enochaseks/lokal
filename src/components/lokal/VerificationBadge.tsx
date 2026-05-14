@@ -5,11 +5,25 @@ export function VerificationBadge({
   verificationTier,
   verificationReason,
   showUnverified,
+  isTattooArtistVerified,
 }: {
   verificationTier?: "verified" | "online_verified" | "unsecured_verified" | null;
   verificationReason?: string | null;
   showUnverified?: boolean;
+  isTattooArtistVerified?: boolean;
 }) {
+  if (isTattooArtistVerified) {
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-full bg-teal-100 px-2.5 py-0.5 text-[11px] font-medium text-teal-800 dark:bg-teal-900/40 dark:text-teal-300"
+        title={verificationReason || "Verified artist"}
+      >
+        <BadgeCheck className="h-3 w-3" />
+        <span>Verified Artist</span>
+      </div>
+    );
+  }
+
   if (!verificationTier && !showUnverified) return null;
 
   if (!verificationTier && showUnverified) {

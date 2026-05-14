@@ -14,6 +14,8 @@ type BookingConfirmedPayload = {
   service: string | null;
   staff_name: string | null;
   slot_start: string;
+  age_restricted?: boolean;
+  minimum_age_required?: number | null;
 };
 
 function toE164(raw: string | null | undefined): string | null {
@@ -64,6 +66,9 @@ Deno.serve(async (req) => {
     const slotStr = prettySlot(payload.slot_start);
     const serviceText = payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : "";
     const staffText = payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : "";
+    const ageText = payload.age_restricted
+      ? `<p><strong>Important:</strong> This is an age-restricted service (${payload.minimum_age_required ?? 18}+). Please bring valid government-issued ID to your appointment.</p>`
+      : "";
 
     const html = `
       <h2>Booking confirmed</h2>
@@ -71,6 +76,7 @@ Deno.serve(async (req) => {
       <p><strong>Date and time:</strong> ${slotStr}</p>
       ${serviceText}
       ${staffText}
+      ${ageText}
       <p>If you need to make changes, please contact the store directly.</p>
       <p><a href="https://lokalshops.co.uk">Open Lokal</a></p>
     `;
@@ -81,6 +87,7 @@ Deno.serve(async (req) => {
       `${payload.store_name} - ${slotStr}`,
       payload.service ? `Service: ${payload.service}` : null,
       payload.staff_name ? `With: ${payload.staff_name}` : null,
+      payload.age_restricted ? `Bring valid ID (${payload.minimum_age_required ?? 18}+ service).` : null,
       `Need changes? Contact the store.`,
       `https://lokalshops.co.uk`,
     ]

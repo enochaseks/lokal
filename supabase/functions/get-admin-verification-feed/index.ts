@@ -18,9 +18,16 @@ type VerificationRequestRow = {
   business_registration_number?: string | null;
   manual_review_details?: string | null;
   supporting_links?: string | null;
+  is_tattoo_verification?: boolean | null;
+  tattoo_minimum_age?: number | null;
+  tattoo_portfolio_url?: string | null;
+  tattoo_license_url?: string | null;
+  tattoo_age_restriction_acknowledged?: boolean | null;
   submission_reason?: string | null;
   submitted_at: string;
   admin_notes?: string | null;
+  store_category?: string | null;
+  store_subcategory?: string | null;
 };
 
 type ReviewNotificationRow = {
@@ -101,7 +108,7 @@ Deno.serve(async (req) => {
 
     let requests: VerificationRequestRow[] = [];
     const requestsFull = await fetchJson(
-      `${supabaseUrl}/rest/v1/store_verification_requests?select=id,store_id,status,business_name,owner_name,verification_method,online_presence_url,business_registration_number,manual_review_details,supporting_links,submission_reason,submitted_at,admin_notes&order=submitted_at.desc`,
+      `${supabaseUrl}/rest/v1/store_verification_requests?select=id,store_id,status,business_name,owner_name,verification_method,online_presence_url,business_registration_number,manual_review_details,supporting_links,is_tattoo_verification,tattoo_minimum_age,tattoo_portfolio_url,tattoo_license_url,tattoo_age_restriction_acknowledged,submission_reason,submitted_at,admin_notes&order=submitted_at.desc`,
       adminHeaders,
     );
 
@@ -122,22 +129,28 @@ Deno.serve(async (req) => {
     }
 
     const storeIds = Array.from(new Set(requests.map((r) => r.store_id).filter(Boolean)));
-    const storeNameById: Record<string, string> = {};
+    const storeMetaById: Record<string, { name: string; category: string | null; subcategory: string | null }> = {};
     if (storeIds.length > 0) {
       const storesRes = await fetchJson(
-        `${supabaseUrl}/rest/v1/stores?select=id,name&id=in.(${storeIds.join(",")})`,
+        `${supabaseUrl}/rest/v1/stores?select=id,name,category,subcategory&id=in.(${storeIds.join(",")})`,
         adminHeaders,
       );
       if (storesRes.ok) {
-        for (const row of (storesRes.data ?? []) as Array<{ id: string; name: string }>) {
-          storeNameById[row.id] = row.name;
+        for (const row of (storesRes.data ?? []) as Array<{ id: string; name: string; category: string | null; subcategory: string | null }>) {
+          storeMetaById[row.id] = {
+            name: row.name,
+            category: row.category ?? null,
+            subcategory: row.subcategory ?? null,
+          };
         }
       }
     }
 
     const mappedRequests = requests.map((reqRow) => ({
       ...reqRow,
-      store_name: storeNameById[reqRow.store_id] ?? "Unknown Store",
+      store_name: storeMetaById[reqRow.store_id]?.name ?? "Unknown Store",
+      store_category: storeMetaById[reqRow.store_id]?.category ?? null,
+      store_subcategory: storeMetaById[reqRow.store_id]?.subcategory ?? null,
     }));
 
     let notifications: ReviewNotificationRow[] = [];
@@ -157,7 +170,7 @@ Deno.serve(async (req) => {
 
     const mappedNotifications = notifications.map((row) => ({
       ...row,
-      stores: { name: storeNameById[row.store_id] ?? "Unknown store" },
+      stores: { name: storeMetaById[row.store_id]?.name ?? "Unknown store" },
     }));
 
     return new Response(JSON.stringify({ requests: mappedRequests, notifications: mappedNotifications }), {

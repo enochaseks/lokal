@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
-import { buildInstagramUrl, buildTikTokUrl, getImageUrl, normalizeWebsiteUrl } from "@/lib/utils";
+import { buildInstagramUrl, buildTikTokUrl, getImageUrl, isBodyContactService, normalizeWebsiteUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -90,6 +90,11 @@ type StoreDetails = {
   id: string;
   name: string;
   category: string;
+  subcategory?: string | null;
+  minimum_age?: number | null;
+  tattoo_portfolio_url?: string | null;
+  tattoo_license_url?: string | null;
+  is_verified_tattoo_artist?: boolean | null;
   origin: string | null;
   description: string | null;
   address: string | null;
@@ -317,6 +322,8 @@ function StoreDetail() {
   const [bookPhone, setBookPhone] = useState("");
   const [bookPhoneCountry, setBookPhoneCountry] = useState<CountryCode>("GB");
   const [bookNote, setBookNote] = useState("");
+  const [bookAgeConfirmed, setBookAgeConfirmed] = useState(false);
+  const [bookIdCommitment, setBookIdCommitment] = useState(false);
   const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
@@ -340,6 +347,13 @@ function StoreDetail() {
     .filter((m) => m.active)
     .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
   const selectedStaff = staffMembers.find((m) => m.id === bookStaffId) ?? null;
+    const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
+  const ageRestrictedMinimum = (() => {
+    if (typeof store.minimum_age === "number" && store.minimum_age >= 18) return store.minimum_age;
+    if (["Barbers", "Hair & Beauty", "Body Arts & Crafts"].includes(store.category)) return 18;
+    return null;
+  })();
+  const requiresAgeVerification = isBookable(store.category, store.selling_mode) && ageRestrictedMinimum != null;
   const isTravelServiceStore = isBookable(store.category, store.selling_mode)
     && (store.location_type === "travel" || store.location_type === "remote_and_travel");
 
@@ -571,6 +585,14 @@ function StoreDetail() {
       toast.error("Please choose a team member");
       return;
     }
+    if (requiresAgeVerification && !bookAgeConfirmed) {
+      toast.error(`Please confirm you meet the ${ageRestrictedMinimum}+ age requirement.`);
+      return;
+    }
+    if (requiresAgeVerification && !bookIdCommitment) {
+      toast.error("Please confirm you'll present valid ID at your appointment.");
+      return;
+    }
     if (
       selectedStaff &&
       selectedDayOfWeek != null &&
@@ -598,6 +620,10 @@ function StoreDetail() {
           customer_phone: normalizedBookPhone,
           customer_email: bookEmail.trim() || null,
           service: bookService || null,
+          age_restricted: requiresAgeVerification,
+          minimum_age_required: ageRestrictedMinimum,
+          customer_age_confirmed: requiresAgeVerification ? bookAgeConfirmed : false,
+          customer_id_commitment: requiresAgeVerification ? bookIdCommitment : false,
           staff_id: selectedStaff?.id ?? null,
           staff_name: selectedStaff?.name ?? null,
           staff_phone: selectedStaff?.phone ?? null,
@@ -638,6 +664,8 @@ function StoreDetail() {
           staff_phone: selectedStaff?.phone ?? null,
           slot_start: `${bookDate}T${bookTime}:00`,
           note: bookNote.trim() || null,
+          age_restricted: requiresAgeVerification,
+          minimum_age_required: ageRestrictedMinimum,
         },
       });
 
@@ -663,6 +691,8 @@ function StoreDetail() {
       setBookPhoneCountry("GB");
       setBookNote("");
       setBookEmail("");
+      setBookAgeConfirmed(false);
+      setBookIdCommitment(false);
     } catch (e: any) {
       toast.error(e.message ?? "Could not request booking");
     } finally {
@@ -696,7 +726,6 @@ function StoreDetail() {
               />
             </div>
           )}
-
           {/* Header with share buttons */}
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -709,7 +738,17 @@ function StoreDetail() {
                   verificationTier={store.verification_tier}
                   verificationReason={store.verification_reason ?? "Unverified store. Buy at your own risk."}
                   showUnverified
+                  isTattooArtistVerified={Boolean(store.is_verified_tattoo_artist && isBodyContactStore)}
                 />
+                {isBodyContactStore && (store.minimum_age ?? 0) >= 18 && (
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🔞 18+ policy</span>
+                )}
+                {isBodyContactStore && store.tattoo_license_url && (
+                  <a href={store.tattoo_license_url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-100 px-3 py-1 text-sm font-medium text-teal-800 hover:opacity-90 dark:bg-teal-900/40 dark:text-teal-300">📜 Artist licence / ID</a>
+                )}
+                {isBodyContactStore && store.tattoo_portfolio_url && (
+                  <a href={store.tattoo_portfolio_url} target="_blank" rel="noreferrer" className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 hover:opacity-90 dark:bg-indigo-900/40 dark:text-indigo-300">🖼️ Portfolio</a>
+                )}
               </div>
             </div>
 
@@ -930,6 +969,29 @@ function StoreDetail() {
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Note (optional)</p>
                       <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} rows={2} placeholder="Anything the merchant should know?" />
                     </div>
+                    {requiresAgeVerification && (
+                      <div className="sm:col-span-2 space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                        <p className="font-medium">Age and ID confirmation required</p>
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={bookAgeConfirmed}
+                            onChange={(e) => setBookAgeConfirmed(e.target.checked)}
+                          />
+                          <span>I confirm I meet the minimum age requirement ({ageRestrictedMinimum}+).</span>
+                        </label>
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={bookIdCommitment}
+                            onChange={(e) => setBookIdCommitment(e.target.checked)}
+                          />
+                          <span>I will present a valid government-issued ID before service starts.</span>
+                        </label>
+                      </div>
+                    )}
                     {(() => {
                         const serviceDeposit = bookService
                           ? store.store_products?.find((p) => p.name === bookService)?.deposit
@@ -954,7 +1016,7 @@ function StoreDetail() {
                     <div className="sm:col-span-2">
                       <Button
                         onClick={handleBook}
-                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) || !storePublished}
+                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) || (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment)) || !storePublished}
                         className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                       >
                         {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}

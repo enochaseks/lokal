@@ -13,6 +13,11 @@ type VerificationAlertPayload = {
   verification_method: "registration_number" | "online_presence" | "manual_review";
   submission_reason: string;
   requester_email: string | null;
+  is_tattoo_verification?: boolean;
+  tattoo_minimum_age?: number | null;
+  tattoo_portfolio_url?: string | null;
+  tattoo_license_url?: string | null;
+  tattoo_age_restriction_acknowledged?: boolean | null;
 };
 
 const ADMIN_EMAILS = ["enochaseks@yahoo.co.uk", "enochaseks@gmail.com"];
@@ -48,6 +53,13 @@ Deno.serve(async (req) => {
       <p><strong>Business name:</strong> ${payload.business_name}</p>
       <p><strong>Owner:</strong> ${payload.owner_name}</p>
       <p><strong>Route:</strong> ${methodLabel}</p>
+      <p><strong>Tattoo verification:</strong> ${payload.is_tattoo_verification ? "Yes" : "No"}</p>
+      ${payload.is_tattoo_verification ? `
+      <p><strong>Minimum age:</strong> ${payload.tattoo_minimum_age ?? "Not provided"}</p>
+      <p><strong>Portfolio:</strong> ${payload.tattoo_portfolio_url ?? "Not provided"}</p>
+      <p><strong>Licence:</strong> ${payload.tattoo_license_url ?? "Not provided"}</p>
+      <p><strong>Age restriction acknowledged:</strong> ${payload.tattoo_age_restriction_acknowledged ? "Yes" : "No"}</p>
+      ` : ""}
       <p><strong>Requester email:</strong> ${payload.requester_email ?? "Not provided"}</p>
       <p><strong>Reason:</strong></p>
       <pre style="white-space:pre-wrap;font-family:inherit">${payload.submission_reason}</pre>

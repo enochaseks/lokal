@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, REGION_BANK, DEFAULT_BANK, isStoreBookable, getCategorySubcategories, isValidStoreSubcategory } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
-import { getImageUrl, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
+import { getImageUrl, isBodyContactService, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl } from "@/lib/utils";
 import { trackEvent, trackEventOnce } from "@/lib/analytics";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -109,11 +109,17 @@ function isValidImageReference(value: string) {
   }
 }
 
+const isBodyArtsArtistStore = (category: string, subcategory?: string | null) =>
+  isBodyContactService(category, subcategory);
+
 const storeSchema = z.object({
   name: z.string().trim().min(2, "Store name is too short").max(80),
   category: z.enum(CATEGORIES),
   selling_mode: z.enum(["products", "services"]).optional(),
   subcategory: z.string().trim().max(60).optional(),
+  minimum_age: z.number().int().min(18).max(99).optional().nullable(),
+  tattoo_portfolio_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid portfolio URL").optional().or(z.literal("")),
+  tattoo_license_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid licence URL").optional().or(z.literal("")),
   health_safety_certificate_url: z.string().trim().max(500).refine(isValidImageReference, "Must be a valid certificate URL").optional().or(z.literal("")),
   origin: z.enum(ORIGINS, { message: "Please select an African/Caribbean origin" }),
   description: z.string().trim().max(500).optional(),
@@ -141,6 +147,30 @@ const storeSchema = z.object({
 }, {
   message: "Health and safety certificate is required for Meat & Fish",
   path: ["health_safety_certificate_url"],
+}).refine((value) => {
+  if (!isBodyArtsArtistStore(value.category, value.subcategory)) return true;
+  return !!value.tattoo_portfolio_url?.trim();
+}, {
+  message: "Artist portfolio URL is required for Body Arts touch services",
+  path: ["tattoo_portfolio_url"],
+}).refine((value) => {
+  if (!isBodyArtsArtistStore(value.category, value.subcategory)) return true;
+  return !!value.tattoo_license_url?.trim();
+}, {
+  message: "Artist licence/ID URL is required for Body Arts touch services",
+  path: ["tattoo_license_url"],
+}).refine((value) => {
+  if (!isBodyArtsArtistStore(value.category, value.subcategory)) return true;
+  return (value.minimum_age ?? 0) >= 18;
+}, {
+  message: "Body Arts touch services must enforce a minimum age of at least 18",
+  path: ["minimum_age"],
+}).refine((value) => {
+  if (value.category !== "Body Arts & Crafts") return true;
+  return !!value.city?.trim();
+}, {
+  message: "City is required so customers can discover nearby Body Arts & Crafts services first",
+  path: ["city"],
 });
 
 const bankSchema = z.object({
@@ -172,6 +202,9 @@ function ListStorePage() {
   const [store, setStore] = useState({
     name: "", category: "Groceries" as (typeof CATEGORIES)[number], origin: ORIGINS[0] as (typeof ORIGINS)[number],
     subcategory: "",
+    minimum_age: null as number | null,
+    tattoo_portfolio_url: "",
+    tattoo_license_url: "",
     health_safety_certificate_url: "",
     description: "", address: "", city: "", postcode: "",
     timezone: getDetectedTimezone(),
@@ -295,6 +328,10 @@ function ListStorePage() {
         location_type: isServiceStore ? store.location_type : null,
         selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
         subcategory: parsedStore.subcategory?.trim() ? parsedStore.subcategory.trim() : null,
+        minimum_age: parsedStore.minimum_age ?? null,
+        tattoo_portfolio_url: parsedStore.tattoo_portfolio_url?.trim() ? parsedStore.tattoo_portfolio_url.trim() : null,
+        tattoo_license_url: parsedStore.tattoo_license_url?.trim() ? parsedStore.tattoo_license_url.trim() : null,
+        is_verified_tattoo_artist: false,
         health_safety_certificate_url: parsedStore.health_safety_certificate_url?.trim() ? parsedStore.health_safety_certificate_url.trim() : null,
         health_safety_certificate_status: requiresFoodSafetyApproval ? "pending" : "not_required",
       };
@@ -472,7 +509,17 @@ function ListStorePage() {
                         : (isStoreBookable(nextCategory) ? "services" : "products");
                       const nextSubcategory = getCategorySubcategories(nextCategory, nextMode).includes(prev.subcategory) ? prev.subcategory : "";
                       const nextCertificate = nextCategory === "Groceries" && nextSubcategory === "Meat & Fish" ? prev.health_safety_certificate_url : "";
-                      return { ...prev, category: nextCategory, subcategory: nextSubcategory, health_safety_certificate_url: nextCertificate, selling_mode: nextMode };
+                      const keepTattooFields = isBodyArtsArtistStore(nextCategory, nextSubcategory);
+                      return {
+                        ...prev,
+                        category: nextCategory,
+                        subcategory: nextSubcategory,
+                        health_safety_certificate_url: nextCertificate,
+                        minimum_age: keepTattooFields ? (prev.minimum_age ?? 18) : null,
+                        tattoo_portfolio_url: keepTattooFields ? prev.tattoo_portfolio_url : "",
+                        tattoo_license_url: keepTattooFields ? prev.tattoo_license_url : "",
+                        selling_mode: nextMode,
+                      };
                     })}
                   >
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -498,7 +545,15 @@ function ListStorePage() {
                   <Select value={store.subcategory || "none"} onValueChange={(v) => setStore((s) => {
                     const nextSubcategory = v === "none" ? "" : v;
                     const keepCertificate = s.category === "Groceries" && nextSubcategory === "Meat & Fish";
-                    return { ...s, subcategory: nextSubcategory, health_safety_certificate_url: keepCertificate ? s.health_safety_certificate_url : "" };
+                    const keepTattooFields = isBodyArtsArtistStore(s.category, nextSubcategory);
+                    return {
+                      ...s,
+                      subcategory: nextSubcategory,
+                      health_safety_certificate_url: keepCertificate ? s.health_safety_certificate_url : "",
+                      minimum_age: keepTattooFields ? (s.minimum_age ?? 18) : null,
+                      tattoo_portfolio_url: keepTattooFields ? s.tattoo_portfolio_url : "",
+                      tattoo_license_url: keepTattooFields ? s.tattoo_license_url : "",
+                    };
                   })}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
                     <SelectContent>
@@ -522,6 +577,45 @@ function ListStorePage() {
                     className="mt-1"
                   />
                   <p className="mt-1.5 text-xs text-muted-foreground">Required for Meat &amp; Fish stores. Your store stays hidden until approved.</p>
+                </div>
+              )}
+
+              {isBodyArtsArtistStore(store.category, store.subcategory) && (
+                <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                  <p className="text-sm font-medium text-amber-900">{store.subcategory || "Body Arts"} trust requirements</p>
+                  <p className="text-xs text-amber-800">Add these so customers and admins can verify you as a legitimate artist.</p>
+                  <div>
+                    <Label>Minimum age restriction *</Label>
+                    <Input
+                      type="number"
+                      min={18}
+                      max={99}
+                      value={store.minimum_age ?? 18}
+                      onChange={(e) => setStore((s) => ({ ...s, minimum_age: Number(e.target.value || 18) }))}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Must be 18+ for tattooing services.</p>
+                  </div>
+                  <div>
+                    <Label>Portfolio URL *</Label>
+                    <Input
+                      value={store.tattoo_portfolio_url}
+                      onChange={(e) => setStore((s) => ({ ...s, tattoo_portfolio_url: e.target.value }))}
+                      placeholder="Link to your artist portfolio"
+                      maxLength={500}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>Artist licence / ID URL *</Label>
+                    <Input
+                      value={store.tattoo_license_url}
+                      onChange={(e) => setStore((s) => ({ ...s, tattoo_license_url: e.target.value }))}
+                      placeholder="Link to your licence, permit, or ID evidence"
+                      maxLength={500}
+                      className="mt-1"
+                    />
+                  </div>
                 </div>
               )}
 

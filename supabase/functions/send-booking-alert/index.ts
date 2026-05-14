@@ -11,6 +11,8 @@ type BookingPayload = {
   service: string | null;
   slot_start: string; // "2026-05-10T09:00:00"
   note: string | null;
+  age_restricted?: boolean;
+  minimum_age_required?: number | null;
 };
 
 function toE164(raw: string | null | undefined): string | null {
@@ -82,6 +84,9 @@ Deno.serve(async (req) => {
 
     const slotStr = prettySlot(payload.slot_start);
     const serviceLabel = payload.service ? `<strong>Service:</strong> ${payload.service}<br>` : "";
+    const ageLabel = payload.age_restricted
+      ? `<strong>Age/ID check required:</strong> Yes (${payload.minimum_age_required ?? 18}+). Customer confirmed age and valid ID commitment.<br>`
+      : "";
 
     const html = `
       <h2>📅 New booking request on Lokal</h2>
@@ -89,6 +94,7 @@ Deno.serve(async (req) => {
       <p><strong>Customer:</strong> ${payload.customer_name}</p>
       <p><strong>Phone:</strong> ${payload.customer_phone}</p>
       ${serviceLabel}
+      ${ageLabel}
       <p><strong>Slot:</strong> ${slotStr}</p>
       ${payload.note ? `<p><strong>Note:</strong> ${payload.note}</p>` : ""}
       <p>Log in to confirm or cancel the booking: <a href="https://lokalshops.co.uk">Open Lokal →</a></p>
@@ -98,6 +104,7 @@ Deno.serve(async (req) => {
       `📅 New booking – ${payload.store_name}`,
       `${payload.customer_name} • ${slotStr}`,
       payload.service ? `Service: ${payload.service}` : null,
+      payload.age_restricted ? `ID check required (${payload.minimum_age_required ?? 18}+).` : null,
       `Phone: ${payload.customer_phone}`,
       `Manage: lokalshops.co.uk`,
     ].filter(Boolean).join("\n");

@@ -11,7 +11,7 @@ import { getCountries, getCountryCallingCode, type CountryCode } from "libphonen
 import type { Store } from "@/data/stores";
 import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region } from "@/data/stores";
-import { buildInstagramUrl, buildTikTokUrl, getImageUrl } from "@/lib/utils";
+import { buildInstagramUrl, buildTikTokUrl, getImageUrl, isBodyContactService } from "@/lib/utils";
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
@@ -207,6 +207,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
   const [bookPhone, setBookPhone] = useState("");
   const [bookPhoneCountry, setBookPhoneCountry] = useState<CountryCode>("GB");
   const [bookNote, setBookNote] = useState("");
+  const [bookAgeConfirmed, setBookAgeConfirmed] = useState(false);
+  const [bookIdCommitment, setBookIdCommitment] = useState(false);
   const [bookAvailability, setBookAvailability] = useState<AvailabilityRow[]>([]);
   const [bookStaff, setBookStaff] = useState<StaffRow[]>([]);
   const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
@@ -366,6 +368,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
 
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
+  const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
   const isStoreVerified = Boolean(store.verification_tier || store.is_verified);
   const unverifiedWarningText = "This store is not verified yet. Make sure you trust this seller before shopping with them.";
 
@@ -389,6 +392,13 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         return member.available_days.includes(selectedBookingDay);
       });
 
+  const ageRestrictedMinimum = (() => {
+    if (typeof store.minimum_age === "number" && store.minimum_age >= 18) return store.minimum_age;
+    if (["Barbers", "Hair & Beauty", "Body Arts & Crafts"].includes(store.category)) return 18;
+    return null;
+  })();
+  const requiresAgeVerification = isBookable(store.category, store.selling_mode) && ageRestrictedMinimum != null;
+
   const reset = () => {
     setStep("browse");
     setQty({});
@@ -404,6 +414,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
     setReviewRating(0); setReviewName(""); setReviewBody("");
     setShowBookingForm(false);
     setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
+    setBookAgeConfirmed(false); setBookIdCommitment(false);
     setBookAvailability([]); setBookStaff([]); setSlotCounts({}); setStaffBookingCounts({});
     setStaffRatings({});
     setStorePosts([]);
@@ -468,6 +479,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
             staff_phone: pendingBookingData.staff_phone ?? null,
             slot_start: pendingBookingData.slot_start,
             note: pendingBookingData.note || null,
+            age_restricted: pendingBookingData.age_restricted ?? false,
+            minimum_age_required: pendingBookingData.minimum_age_required ?? null,
           },
         });
 
@@ -678,6 +691,14 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       toast.error("Please choose a team member");
       return;
     }
+    if (requiresAgeVerification && !bookAgeConfirmed) {
+      toast.error(`Please confirm you meet the ${ageRestrictedMinimum}+ age requirement.`);
+      return;
+    }
+    if (requiresAgeVerification && !bookIdCommitment) {
+      toast.error("Please confirm you'll present valid ID at your appointment.");
+      return;
+    }
 
     // CHECK FOR DEPOSIT FIRST
     const serviceDeposit = bookService ? store!.products?.find((p) => p.name === bookService)?.deposit : undefined;
@@ -700,6 +721,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
         customer_phone: normalizedBookPhone,
         customer_email: bookEmail.trim() || null,
         service: bookService || null,
+        age_restricted: requiresAgeVerification,
+        minimum_age_required: ageRestrictedMinimum,
+        customer_age_confirmed: requiresAgeVerification ? bookAgeConfirmed : false,
+        customer_id_commitment: requiresAgeVerification ? bookIdCommitment : false,
         staff_id: selectedStaff?.id ?? null,
         staff_name: selectedStaff?.name ?? null,
         staff_phone: selectedStaff?.phone ?? null,
@@ -737,6 +762,10 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           customer_phone: normalizedBookPhone,
           customer_email: bookEmail.trim() || null,
           service: bookService || null,
+          age_restricted: requiresAgeVerification,
+          minimum_age_required: ageRestrictedMinimum,
+          customer_age_confirmed: requiresAgeVerification ? bookAgeConfirmed : false,
+          customer_id_commitment: requiresAgeVerification ? bookIdCommitment : false,
           staff_id: selectedStaff?.id ?? null,
           staff_name: selectedStaff?.name ?? null,
           staff_phone: selectedStaff?.phone ?? null,
@@ -791,6 +820,8 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
           staff_phone: selectedStaff?.phone ?? null,
           slot_start: `${bookDate}T${bookTime}:00`,
           note: bookNote.trim() || null,
+          age_restricted: requiresAgeVerification,
+          minimum_age_required: ageRestrictedMinimum,
         },
       });
 
@@ -810,6 +841,7 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
       }
       setShowBookingForm(false);
       setBookService(""); setBookStaffId(""); setBookDate(""); setBookTime(""); setBookName(""); setBookPhone(""); setBookNote(""); setBookEmail("");
+      setBookAgeConfirmed(false); setBookIdCommitment(false);
       setSlotCounts((prev) => ({ ...prev, [bookTime]: (prev[bookTime] ?? 0) + 1 }));
       if (selectedStaff?.id) {
         setStaffBookingCounts((prev) => ({ ...prev, [selectedStaff.id]: (prev[selectedStaff.id] ?? 0) + 1 }));
@@ -844,8 +876,22 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                 verificationTier={store.verification_tier ?? (store.is_verified ? "verified" : null)}
                 verificationReason={store.verification_reason ?? unverifiedWarningText}
                 showUnverified
+                isTattooArtistVerified={Boolean(store.is_verified_tattoo_artist && isBodyContactStore)}
               />
             </div>
+            {isBodyContactStore && (
+              <div className="pt-2 flex flex-wrap gap-2 text-xs">
+                {(store.minimum_age ?? 0) >= 18 && (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🔞 18+ policy</span>
+                )}
+                {store.tattoo_license_url && (
+                  <a href={store.tattoo_license_url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-100 px-2.5 py-1 font-medium text-teal-800 hover:opacity-90 dark:bg-teal-900/40 dark:text-teal-300">📜 Artist licence / ID</a>
+                )}
+                {store.tattoo_portfolio_url && (
+                  <a href={store.tattoo_portfolio_url} target="_blank" rel="noreferrer" className="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 hover:opacity-90 dark:bg-indigo-900/40 dark:text-indigo-300">🖼️ Portfolio</a>
+                )}
+              </div>
+            )}
           </DialogHeader>
 
           {!isStoreVerified && (
@@ -1160,9 +1206,32 @@ export function StoreDialog({ store, open, onOpenChange }: { store: Store | null
                           <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
                           <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} placeholder="Any special requests?" rows={2} className="mt-1" />
                         </div>
+                        {requiresAgeVerification && (
+                          <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                            <p className="font-medium">Age and ID confirmation required</p>
+                            <label className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={bookAgeConfirmed}
+                                onChange={(e) => setBookAgeConfirmed(e.target.checked)}
+                              />
+                              <span>I confirm I meet the minimum age requirement ({ageRestrictedMinimum}+).</span>
+                            </label>
+                            <label className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={bookIdCommitment}
+                                onChange={(e) => setBookIdCommitment(e.target.checked)}
+                              />
+                              <span>I will present a valid government-issued ID before service starts.</span>
+                            </label>
+                          </div>
+                        )}
                         <Button
                           size="sm"
-                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0))) || (store.products.length > 0 && !bookService)}
+                          disabled={!bookName.trim() || !bookPhone.trim() || !bookDate || !bookTime || submittingBooking || (bookStaff.length > 0 && (!bookStaffId || (!!bookDate && availableBookStaff.length === 0))) || (store.products.length > 0 && !bookService) || (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment))}
                           onClick={handleBook}
                           className="bg-gradient-primary text-primary-foreground"
                         >

@@ -3,7 +3,9 @@ import { createFileRoute, useNavigate, Link, redirect, useRouter } from "@tansta
 import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
+import { isAdminEmail } from "@/lib/admin";
 import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
+import { isBodyContactService } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
@@ -114,6 +116,10 @@ type StoreRow = {
   id: string; owner_id: string; name: string; category: string; origin: string | null;
   category_locked?: boolean | null;
   subcategory?: string | null;
+  minimum_age?: number | null;
+  tattoo_portfolio_url?: string | null;
+  tattoo_license_url?: string | null;
+  is_verified_tattoo_artist?: boolean | null;
   health_safety_certificate_url?: string | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   description: string | null; address: string | null; city: string | null;
@@ -156,6 +162,14 @@ type BookingRow = {
   slot_start: string; slot_end: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
   payment_status: string;
+  age_restricted?: boolean | null;
+  minimum_age_required?: number | null;
+  customer_age_confirmed?: boolean | null;
+  customer_id_commitment?: boolean | null;
+  merchant_age_verified?: boolean | null;
+  merchant_age_verified_at?: string | null;
+  completion_confirmed_by_merchant?: boolean | null;
+  completed_at?: string | null;
   note: string | null; created_at: string;
 };
 
@@ -229,10 +243,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
-  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; timezone: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const { user, roles } = useAuth();
+  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; minimum_age: string; tattoo_portfolio_url: string; tattoo_license_url: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; timezone: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
     name: store.name,
     category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
     subcategory: store.subcategory ?? "",
+    minimum_age: store.minimum_age != null ? String(store.minimum_age) : "18",
+    tattoo_portfolio_url: store.tattoo_portfolio_url ?? "",
+    tattoo_license_url: store.tattoo_license_url ?? "",
     health_safety_certificate_url: store.health_safety_certificate_url ?? "",
     health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
     origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
@@ -253,8 +271,11 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   const [uploading, setUploading] = useState(false);
   const [initialProducts, setInitialProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string; image_url: string }> | null>(null);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
+  const isTattooStore = form.category === "Body Arts & Crafts" && form.subcategory === "Tattooing";
+  const isAdminUser = roles.includes("admin") || isAdminEmail(user?.email);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
-  const categoryLocked = Boolean(store.category_locked ?? store.published);
+    const isBodyContact = isBodyContactService(form.category, form.subcategory);
+  const categoryLocked = Boolean(store.category_locked ?? store.published) && !isAdminUser;
 
   useEffect(() => {
     supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
@@ -323,12 +344,37 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       toast.error("Health and safety certificate is required for Meat & Fish");
       return;
     }
+    if (isBodyContact && !isAdminUser) {
+      const minimumAge = Number(form.minimum_age || 0);
+      if (!Number.isFinite(minimumAge) || minimumAge < 18) {
+        toast.error(`${form.subcategory ?? "This"} service must set a minimum age of at least 18`);
+        return;
+      }
+      if (!form.tattoo_portfolio_url.trim()) {
+        toast.error(`${form.subcategory ?? "Service"} portfolio URL is required`);
+        return;
+      }
+      if (!form.tattoo_license_url.trim()) {
+        toast.error(`${form.subcategory ?? "Service"} licence/ID URL is required`);
+        return;
+      }
+    }
     setSaving(true);
     try {
       const instagramHandle = normalizeInstagramHandle(form.instagram_handle);
       const tiktokHandle = normalizeTikTokHandle(form.tiktok_handle);
       const websiteUrl = normalizeWebsiteUrl(form.website_url);
       const validSubcategory = getCategorySubcategories(form.category, form.selling_mode).includes(form.subcategory) ? n(form.subcategory) : null;
+      const parsedMinimumAge = Number(form.minimum_age || 0);
+      const tattooMinimumAge = isBodyContact
+        ? (Number.isFinite(parsedMinimumAge) && parsedMinimumAge >= 18 ? parsedMinimumAge : 18)
+        : null;
+      const tattooPortfolioUrl = isBodyContact
+        ? (n(form.tattoo_portfolio_url) ?? (isAdminUser ? "https://lokal.admin/override/tattoo-portfolio" : null))
+        : null;
+      const tattooLicenseUrl = isBodyContact
+        ? (n(form.tattoo_license_url) ?? (isAdminUser ? "https://lokal.admin/override/tattoo-licence" : null))
+        : null;
       const certificateUrl = requiresFoodSafetyApproval ? n(form.health_safety_certificate_url) : null;
       const currentCertStatus = form.health_safety_certificate_status;
       const nextCertStatus = !requiresFoodSafetyApproval
@@ -342,6 +388,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       const { error: storeErr } = await (supabase as any).from("stores").update({
         name: form.name.trim(), category: form.category,
         subcategory: validSubcategory,
+        minimum_age: tattooMinimumAge,
+        tattoo_portfolio_url: tattooPortfolioUrl,
+        tattoo_license_url: tattooLicenseUrl,
         health_safety_certificate_url: certificateUrl,
         health_safety_certificate_status: nextCertStatus,
         origin: form.origin, description: n(form.description),
@@ -405,7 +454,7 @@ function EditStoreDialog({ store, onClose, onSaved }: {
         if (availErr) throw availErr;
       }
 
-      onSaved({ ...store, ...form, published: shouldPublish, subcategory: validSubcategory, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({ ...store, ...form, published: shouldPublish, subcategory: validSubcategory, minimum_age: tattooMinimumAge, tattoo_portfolio_url: tattooPortfolioUrl, tattoo_license_url: tattooLicenseUrl, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -435,10 +484,14 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                       : (isStoreBookable(nextCategory) ? "services" : "products");
                     const nextSubcategory = getCategorySubcategories(nextCategory, nextMode).includes(f.subcategory) ? f.subcategory : "";
                     const keepCertificate = nextCategory === "Groceries" && nextSubcategory === "Meat & Fish";
+                    const keepTattooFields = isBodyContactService(nextCategory, nextSubcategory);
                     return {
                       ...f,
                       category: nextCategory,
                       subcategory: nextSubcategory,
+                      minimum_age: keepTattooFields ? (f.minimum_age || "18") : "18",
+                      tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
+                      tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
                       health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
                       health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
                       selling_mode: nextMode,
@@ -450,6 +503,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                 </Select>
                 {categoryLocked && (
                   <p className="mt-1.5 text-xs text-muted-foreground">Category is locked while your store is live. Contact support to request a reviewed category change.</p>
+                )}
+                {!categoryLocked && isAdminUser && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">Admin override enabled: you can change the category for this store.</p>
                 )}
               </div>
               <div><Label>Origin</Label>
@@ -463,9 +519,13 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <Select value={form.subcategory || "none"} onValueChange={(v) => setForm((f) => {
                     const nextSubcategory = v === "none" ? "" : v;
                     const keepCertificate = f.category === "Groceries" && nextSubcategory === "Meat & Fish";
+                    const keepTattooFields = isBodyContactService(f.category, nextSubcategory);
                     return {
                       ...f,
                       subcategory: nextSubcategory,
+                      minimum_age: keepTattooFields ? (f.minimum_age || "18") : "18",
+                      tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
+                      tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
                       health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
                       health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
                     };
@@ -486,6 +546,27 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   <Input value={form.health_safety_certificate_url} onChange={(e) => setForm((f) => ({ ...f, health_safety_certificate_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to certificate document" />
                   <p className="mt-1.5 text-xs text-muted-foreground">Certificate review status: {form.health_safety_certificate_status}</p>
                 </div>
+              )}
+              {isBodyContact && (
+                <>
+                  <div>
+                    <Label>Minimum age{isAdminUser ? "" : " *"}</Label>
+                    <Input value={form.minimum_age} onChange={(e) => setForm((f) => ({ ...f, minimum_age: e.target.value }))} type="number" min={18} max={99} className="mt-1" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label>{form.subcategory || "Service"} portfolio URL{isAdminUser ? "" : " *"}</Label>
+                    <Input value={form.tattoo_portfolio_url} onChange={(e) => setForm((f) => ({ ...f, tattoo_portfolio_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to portfolio page or image" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label>{form.subcategory || "Service"} licence/ID URL{isAdminUser ? "" : " *"}</Label>
+                    <Input value={form.tattoo_license_url} onChange={(e) => setForm((f) => ({ ...f, tattoo_license_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to licence or certification" />
+                  </div>
+                  {isAdminUser && (
+                    <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Admin test override: if these verification fields are left blank, Lokal will use temporary placeholder values for saving.
+                    </div>
+                  )}
+                </>
               )}
               {form.category === "Clothes & Fashion" && (
                 <div className="sm:col-span-2"><Label>How do you want to sell?</Label>
@@ -1941,6 +2022,7 @@ function MerchantPage() {
                                   const statusMeta: Record<string, { label: string; color: string }> = {
                                     pending: { label: "Pending", color: "bg-amber-100 text-amber-800" },
                                     confirmed: { label: "Confirmed", color: "bg-green-100 text-green-700" },
+                                    cancelled: { label: "Cancelled", color: "bg-rose-100 text-rose-700" },
                                     completed: { label: "Done", color: "bg-secondary text-muted-foreground" },
                                   };
                                   const sm = statusMeta[b.status] ?? statusMeta.pending;
@@ -1955,11 +2037,18 @@ function MerchantPage() {
                                           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>{sm.label}</span>
                                           {b.payment_status === "deposit_paid" && <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">DEPOSIT RECEIVED</span>}
                                           {b.payment_status === "paid" && <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-semibold text-green-700">PAID</span>}
+                                          {b.age_restricted && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">ID REQUIRED ({b.minimum_age_required ?? 18}+)</span>}
+                                          {b.age_restricted && b.merchant_age_verified && <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-semibold text-teal-800">ID VERIFIED ON ARRIVAL</span>}
                                         </div>
                                         <div className="mt-1 font-medium text-sm">{b.customer_name}</div>
                                         {b.service && <div className="text-xs text-muted-foreground">{b.service}</div>}
                                         {b.staff_name && <div className="text-xs text-muted-foreground">With {b.staff_name}{b.staff_phone ? ` · ${b.staff_phone}` : ""}</div>}
                                         {b.note && <div className="mt-1 text-xs italic text-muted-foreground">"{b.note}"</div>}
+                                        {b.age_restricted && (
+                                          <div className="mt-1 text-xs text-amber-700">
+                                            Customer pre-confirmation: {b.customer_age_confirmed ? "age confirmed" : "age not confirmed"} · {b.customer_id_commitment ? "ID promised" : "ID not confirmed"}
+                                          </div>
+                                        )}
                                         <a href={`tel:${b.customer_phone}`} className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline">
                                           📞 {b.customer_phone}
                                         </a>
@@ -2010,6 +2099,8 @@ function MerchantPage() {
                                                   service: b.service,
                                                   staff_name: b.staff_name,
                                                   slot_start: b.slot_start,
+                                                  age_restricted: Boolean(b.age_restricted),
+                                                  minimum_age_required: b.minimum_age_required ?? null,
                                                 },
                                               });
                                               toast.success("Booking confirmed");
@@ -2039,10 +2130,44 @@ function MerchantPage() {
                                           </div>
                                         )}
                                         {b.status === "confirmed" && (
+                                          <>
+                                            {b.age_restricted && !b.merchant_age_verified && (
+                                              <Button size="sm" variant="outline" className="text-amber-700 hover:bg-amber-50" onClick={async () => {
+                                                const verifiedAt = new Date().toISOString();
+                                                const { error } = await db.from("store_bookings").update({
+                                                  merchant_age_verified: true,
+                                                  merchant_age_verified_at: verifiedAt,
+                                                  merchant_age_verified_by: user?.id ?? null,
+                                                }).eq("id", b.id);
+                                                if (error) { toast.error(error.message); return; }
+                                                setBookings((prev) => prev.map((x) => x.id === b.id ? {
+                                                  ...x,
+                                                  merchant_age_verified: true,
+                                                  merchant_age_verified_at: verifiedAt,
+                                                } : x));
+                                                toast.success("Arrival ID and age verified");
+                                              }}>
+                                                <Check className="mr-1.5 h-3.5 w-3.5" />Verify ID on arrival
+                                              </Button>
+                                            )}
                                           <Button size="sm" variant="outline" onClick={async () => {
-                                            const { error } = await db.from("store_bookings").update({ status: "completed" }).eq("id", b.id);
+                                            if (b.age_restricted && !b.merchant_age_verified) {
+                                              toast.error("Verify customer ID and age on arrival before marking complete");
+                                              return;
+                                            }
+                                            const completedAt = new Date().toISOString();
+                                            const { error } = await db.from("store_bookings").update({
+                                              status: "completed",
+                                              completion_confirmed_by_merchant: true,
+                                              completed_at: completedAt,
+                                            }).eq("id", b.id);
                                             if (error) { toast.error(error.message); return; }
-                                            setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "completed" } : x));
+                                            setBookings((prev) => prev.map((x) => x.id === b.id ? {
+                                              ...x,
+                                              status: "completed",
+                                              completion_confirmed_by_merchant: true,
+                                              completed_at: completedAt,
+                                            } : x));
                                             void supabase.functions.invoke("send-booking-complete", {
                                               body: {
                                                 booking_id: b.id,
@@ -2059,6 +2184,7 @@ function MerchantPage() {
                                           }}>
                                             <Check className="mr-1.5 h-3.5 w-3.5" />Mark done
                                           </Button>
+                                          </>
                                         )}
                                       </div>
                                     </div>
@@ -2286,7 +2412,15 @@ function MerchantPage() {
 
       {verificationRequestingStoreId && (
         <VerificationRequestDialog
-          store={{ id: verificationRequestingStoreId, name: stores.find((s) => s.id === verificationRequestingStoreId)?.name || "Store" }}
+          store={{
+            id: verificationRequestingStoreId,
+            name: stores.find((s) => s.id === verificationRequestingStoreId)?.name || "Store",
+            category: stores.find((s) => s.id === verificationRequestingStoreId)?.category,
+            subcategory: stores.find((s) => s.id === verificationRequestingStoreId)?.subcategory ?? null,
+            minimum_age: stores.find((s) => s.id === verificationRequestingStoreId)?.minimum_age ?? null,
+            tattoo_portfolio_url: stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_portfolio_url ?? null,
+            tattoo_license_url: stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_license_url ?? null,
+          }}
           open={verificationDialogOpen}
           onOpenChange={(open) => {
             setVerificationDialogOpen(open);

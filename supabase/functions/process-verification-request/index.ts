@@ -20,6 +20,7 @@ type VerificationRequestRow = {
   business_name: string;
   owner_name: string;
   verification_method: "registration_number" | "online_presence" | "manual_review" | null;
+  is_tattoo_verification?: boolean | null;
   status: "pending" | "approved" | "rejected";
 };
 
@@ -106,7 +107,7 @@ Deno.serve(async (req) => {
     };
 
     const reqRes = await fetchJson(
-      `${supabaseUrl}/rest/v1/store_verification_requests?id=eq.${payload.request_id}&select=id,store_id,owner_id,business_name,owner_name,verification_method,status`,
+      `${supabaseUrl}/rest/v1/store_verification_requests?id=eq.${payload.request_id}&select=id,store_id,owner_id,business_name,owner_name,verification_method,is_tattoo_verification,status`,
       { headers: adminHeaders },
     );
 
@@ -143,23 +144,31 @@ Deno.serve(async (req) => {
 
     if (payload.action === "approve") {
       const verificationReason =
-        requestRow.verification_method === "registration_number"
+        requestRow.is_tattoo_verification
+          ? "Verified artist"
+          : requestRow.verification_method === "registration_number"
           ? "Registered business verified"
           : requestRow.verification_method === "online_presence"
             ? "Online business verified"
             : "Store verified after manual review";
+
+      const storeUpdate: Record<string, unknown> = {
+        is_verified: true,
+        published: true,
+        verified_at: nowIso,
+        verification_reason: verificationReason,
+      };
+
+      if (requestRow.is_tattoo_verification) {
+        storeUpdate.is_verified_tattoo_artist = true;
+      }
 
       const updateStoreRes = await fetchJson(
         `${supabaseUrl}/rest/v1/stores?id=eq.${requestRow.store_id}`,
         {
           method: "PATCH",
           headers: adminHeaders,
-          body: JSON.stringify({
-            is_verified: true,
-            published: true,
-            verified_at: nowIso,
-            verification_reason: verificationReason,
-          }),
+          body: JSON.stringify(storeUpdate),
         },
       );
 

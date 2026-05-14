@@ -79,6 +79,16 @@ export function buildTikTokUrl(handle: string | null | undefined): string | null
   return normalized ? `https://www.tiktok.com/@${normalized}` : null;
 }
 
+/**
+ * Check if a category/subcategory combination requires body-contact verification
+ * (portfolio, license, age verification).
+ */
+export function isBodyContactService(category?: string | null, subcategory?: string | null): boolean {
+  if (category === "Body Arts & Crafts") {
+    return ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(subcategory ?? "");
+  }
+  return false;
+}
 export function formatCurrency(amount: number, currency: string = 'USD'): string {
   const currencyMap: Record<string, { symbol: string; locale: string }> = {
     'USD': { symbol: '$', locale: 'en-US' },
