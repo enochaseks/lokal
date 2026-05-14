@@ -150,6 +150,7 @@ export const Route = createFileRoute("/list-store")({
 
 const CATEGORIES = LIVE_CATEGORIES;
 const ORIGINS = LIVE_ORIGINS;
+const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
 
 function isValidImageReference(value: string) {
   if (!value) return true;
@@ -391,6 +392,7 @@ function ListStorePage() {
   );
   const [staff, setStaff] = useState<StaffDraft[]>([]);
   const isServiceStore = isStoreBookable(store.category, store.selling_mode);
+  const forcePayAtStore = PAY_AT_STORE_ONLY_CATEGORIES.has(store.category);
   const requiresFixedAddress = !isServiceStore || store.location_type === "salon";
 
   useEffect(() => {
@@ -511,7 +513,7 @@ function ListStorePage() {
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
         fulfillment:
-          isServiceStore && store.location_type === "travel"
+          PAY_AT_STORE_ONLY_CATEGORIES.has(parsedStore.category)
             ? "pay_at_store"
             : parsedStore.fulfillment,
         address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
@@ -808,6 +810,9 @@ function ListStorePage() {
                         return {
                           ...prev,
                           category: nextCategory,
+                          fulfillment: PAY_AT_STORE_ONLY_CATEGORIES.has(nextCategory)
+                            ? "pay_at_store"
+                            : prev.fulfillment,
                           subcategory: nextSubcategory,
                           health_safety_certificate_url: nextCertificate,
                           minimum_age: keepTattooFields ? (prev.minimum_age ?? 18) : null,
@@ -997,9 +1002,9 @@ function ListStorePage() {
 
               <div>
                 <Label>Fulfilment</Label>
-                {isServiceStore && store.location_type === "travel" ? (
+                {forcePayAtStore ? (
                   <div className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    🏦 Bank Transfer Only (auto for travel services)
+                    💰 Pay at store only (auto for this category)
                   </div>
                 ) : (
                   <>
@@ -1033,7 +1038,6 @@ function ListStorePage() {
                       setStore((prev) => ({
                         ...prev,
                         location_type: v as any,
-                        fulfillment: v === "travel" ? "pay_at_store" : prev.fulfillment,
                       }))
                     }
                   >
@@ -1045,9 +1049,9 @@ function ListStorePage() {
                       <SelectItem value="travel">🚗 We travel to you</SelectItem>
                     </SelectContent>
                   </Select>
-                  {store.location_type === "travel" && (
+                  {forcePayAtStore && (
                     <p className="mt-1.5 text-xs font-medium text-amber-700">
-                      🏦 Bank Transfer Only is shown to customers for travel bookings.
+                      💰 Pay at store is required for this service category.
                     </p>
                   )}
                 </div>

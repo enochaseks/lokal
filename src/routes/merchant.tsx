@@ -305,9 +305,14 @@ type VerificationTier = "verified" | "online_verified";
 
 const STRICT_VERIFICATION_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
 const TRUSTED_VERIFICATION_TIERS = new Set<VerificationTier>(["verified", "online_verified"]);
+const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
 
 function requiresTrustedVerificationTier(store: Pick<StoreRow, "category">): boolean {
   return STRICT_VERIFICATION_CATEGORIES.has(store.category);
+}
+
+function requiresPayAtStoreFulfillment(category: string): boolean {
+  return PAY_AT_STORE_ONLY_CATEGORIES.has(category);
 }
 
 type PostRow = {
@@ -432,7 +437,9 @@ function EditStoreDialog({
     instagram_handle: store.instagram_handle ?? "",
     tiktok_handle: store.tiktok_handle ?? "",
     website_url: store.website_url ?? "",
-    fulfillment: store.fulfillment ?? "collection",
+    fulfillment: requiresPayAtStoreFulfillment(store.category)
+      ? "pay_at_store"
+      : (store.fulfillment ?? "collection"),
     image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "",
     bank_account_name: store.bank_account_name ?? "",
@@ -478,6 +485,7 @@ function EditStoreDialog({
     image_url: string;
   }> | null>(null);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
+  const forcePayAtStore = requiresPayAtStoreFulfillment(form.category);
   const isTattooStore = form.category === "Body Arts & Crafts" && form.subcategory === "Tattooing";
   const isAdminUser = roles.includes("admin") || isAdminEmail(user?.email);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
@@ -664,8 +672,9 @@ function EditStoreDialog({
           timezone: form.timezone.trim(),
           hours: n(form.hours),
           phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone),
-          fulfillment:
-            isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment,
+          fulfillment: requiresPayAtStoreFulfillment(form.category)
+            ? "pay_at_store"
+            : form.fulfillment,
           image_url: n(form.image_url),
           accepts_refunds: form.accepts_refunds,
           refund_policy: n(form.refund_policy),
@@ -762,8 +771,9 @@ function EditStoreDialog({
         instagram_handle: instagramHandle,
         tiktok_handle: tiktokHandle,
         website_url: websiteUrl,
-        fulfillment:
-          isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment,
+        fulfillment: requiresPayAtStoreFulfillment(form.category)
+          ? "pay_at_store"
+          : form.fulfillment,
         image_url: n(form.image_url),
         bank_name: n(form.bank_name),
         bank_account_name: n(form.bank_account_name),
@@ -829,6 +839,9 @@ function EditStoreDialog({
                       return {
                         ...f,
                         category: nextCategory,
+                        fulfillment: requiresPayAtStoreFulfillment(nextCategory)
+                          ? "pay_at_store"
+                          : f.fulfillment,
                         subcategory: nextSubcategory,
                         minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
                         tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
@@ -1238,9 +1251,9 @@ function EditStoreDialog({
               </div>
               <div className="sm:col-span-2">
                 <Label>Fulfilment</Label>
-                {isServiceStore && form.location_type === "travel" ? (
+                {forcePayAtStore ? (
                   <div className="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    🏦 Bank Transfer Only (auto for travel services)
+                    💰 Pay at store only (auto for this category)
                   </div>
                 ) : (
                   <>
@@ -1274,7 +1287,6 @@ function EditStoreDialog({
                       setForm((f) => ({
                         ...f,
                         location_type: v,
-                        fulfillment: v === "travel" ? "pay_at_store" : f.fulfillment,
                       }))
                     }
                   >
