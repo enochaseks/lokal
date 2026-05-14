@@ -2535,9 +2535,15 @@ function MerchantPage() {
                       >
                         <Pencil className="h-3 w-3" /> Edit
                       </Button>
-                      <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" asChild>
-                        <Link to="/">View</Link>
-                      </Button>
+                      {s.published ? (
+                        <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" asChild>
+                          <Link to="/store/$id" params={{ id: s.id }}>View</Link>
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" disabled>
+                          View
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
