@@ -215,6 +215,7 @@ type StoreRow = {
   is_verified?: boolean | null;
   verified_at?: string | null;
   verification_reason?: string | null;
+  rating_digest_opt_in?: boolean | null;
 };
 
 type OrderRow = {
@@ -2126,6 +2127,23 @@ function MerchantPage() {
     }
   };
 
+  const toggleRatingDigest = async (s: StoreRow) => {
+    const next = !Boolean(s.rating_digest_opt_in);
+    const { error } = await (supabase as any)
+      .from("stores")
+      .update({ rating_digest_opt_in: next })
+      .eq("id", s.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setStores((prev) =>
+      prev.map((x) => (x.id === s.id ? { ...x, rating_digest_opt_in: next } : x)),
+    );
+    toast.success(next ? "Weekly rating digest enabled" : "Weekly rating digest disabled");
+  };
+
   const deleteAccount = async () => {
     setDeleting(true);
     try {
@@ -2506,6 +2524,10 @@ function MerchantPage() {
                           {s.bank_name} ····{(s.bank_account_number || "").slice(-4)}
                         </div>
                       )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block h-2 w-2 rounded-full bg-primary/70" />
+                        Weekly rating digest: {s.rating_digest_opt_in ? "On" : "Off"}
+                      </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {verificationStatusByStore[s.id] === "pending" && !s.is_verified && (
@@ -2589,6 +2611,14 @@ function MerchantPage() {
                             <Share2 className="h-3 w-3" /> Share
                           </>
                         )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-[5.5rem] flex-1"
+                        onClick={() => toggleRatingDigest(s)}
+                      >
+                        Digest {s.rating_digest_opt_in ? "On" : "Off"}
                       </Button>
                       {!verificationTierByStore[s.id] && (
                         <Button

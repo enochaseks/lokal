@@ -35,3 +35,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.fraud-review-action]
 verify_jwt = false
+
+[functions.send-merchant-rating-digest]
+verify_jwt = false
