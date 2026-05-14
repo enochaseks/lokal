@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     if (!brevoKey) {
       return new Response(
         JSON.stringify({ skipped: true, reason: "BREVO_API_KEY not configured" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
               Prefer: "return=minimal",
             },
             body: JSON.stringify({ rating_sent: true }),
-          }
+          },
         );
         ratingUpdate = {
           ok: updateRes.ok,
@@ -109,13 +109,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ sent: result.ok, status: result.status, body, rating_update: ratingUpdate }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
-    return new Response(
-      JSON.stringify({ sent: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ sent: false, error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

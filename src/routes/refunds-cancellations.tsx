@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
 
-
 export const Route = createFileRoute("/refunds-cancellations")({
   component: RefundsAndCancellationsPage,
   head: () => ({ meta: [{ title: "Refund & Cancellation · Lokal" }] }),
@@ -29,36 +28,42 @@ function RefundsAndCancellationsPage() {
         <div className="space-y-10">
           <Section title="How Refunds Work on Lokal">
             <p>
-              Lokal is a marketplace platform. Payments are made directly to the merchant by bank transfer.
-              Because Lokal does not hold customer funds, Lokal does not issue refunds.
+              Lokal is a marketplace platform. Payments are made directly to the merchant by bank
+              transfer. Because Lokal does not hold customer funds, Lokal does not issue refunds.
             </p>
             <p>
-              Any refund request must be resolved directly between the customer and the merchant according
-              to the policy shown on that merchant&apos;s store profile.
+              Any refund request must be resolved directly between the customer and the merchant
+              according to the policy shown on that merchant&apos;s store profile.
             </p>
           </Section>
 
           <Section title="How Cancellations Work">
             <p>
-              Booking or order cancellations are governed by each merchant&apos;s own cancellation policy.
-              Customers should review these terms before placing an order or requesting a booking.
+              Booking or order cancellations are governed by each merchant&apos;s own cancellation
+              policy. Customers should review these terms before placing an order or requesting a
+              booking.
             </p>
             <p>
               If a cancellation dispute arises, the customer and merchant must resolve it directly.
-              Lokal can provide platform support in good faith but cannot enforce a payout or refund.
+              Lokal can provide platform support in good faith but cannot enforce a payout or
+              refund.
             </p>
           </Section>
 
           <Section title="Merchant Responsibility">
             <p>
-              Merchants are responsible for clearly publishing their refund and cancellation terms and for
-              handling customer requests fairly and in line with applicable law.
+              Merchants are responsible for clearly publishing their refund and cancellation terms
+              and for handling customer requests fairly and in line with applicable law.
             </p>
           </Section>
 
           <Section title="Need Support?">
             <p>
-              If you need help contacting the other party, reach us via the <Link to="/help" className="text-primary hover:underline">Help Center</Link>.
+              If you need help contacting the other party, reach us via the{" "}
+              <Link to="/help" className="text-primary hover:underline">
+                Help Center
+              </Link>
+              .
             </p>
           </Section>
         </div>

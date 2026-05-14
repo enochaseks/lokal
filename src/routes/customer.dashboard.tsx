@@ -82,7 +82,9 @@ function CustomerDashboardPage() {
           customerId
             ? (supabase as any)
                 .from("store_bookings")
-                .select("id, store_id, service, slot_start, status, staff_name, stores(name,category)")
+                .select(
+                  "id, store_id, service, slot_start, status, staff_name, stores(name,category)",
+                )
                 .eq("customer_id", customerId)
                 .order("slot_start", { ascending: true })
                 .limit(40)
@@ -90,7 +92,9 @@ function CustomerDashboardPage() {
           customerPhone
             ? (supabase as any)
                 .from("store_bookings")
-                .select("id, store_id, service, slot_start, status, staff_name, stores(name,category)")
+                .select(
+                  "id, store_id, service, slot_start, status, staff_name, stores(name,category)",
+                )
                 .eq("customer_phone", customerPhone)
                 .order("slot_start", { ascending: true })
                 .limit(40)
@@ -118,7 +122,7 @@ function CustomerDashboardPage() {
             slot_start: b.slot_start,
             status: b.status,
             staff_name: b.staff_name,
-          })) ?? []
+          })) ?? [],
         );
 
         // Load orders by both customer_id and phone, then merge.
@@ -126,7 +130,9 @@ function CustomerDashboardPage() {
           customerId
             ? (supabase as any)
                 .from("orders")
-                .select("reference, store_id, total_gbp, status, created_at, items, stores(name,category)")
+                .select(
+                  "reference, store_id, total_gbp, status, created_at, items, stores(name,category)",
+                )
                 .eq("customer_id", customerId)
                 .order("created_at", { ascending: false })
                 .limit(40)
@@ -134,7 +140,9 @@ function CustomerDashboardPage() {
           customerPhone
             ? (supabase as any)
                 .from("orders")
-                .select("reference, store_id, total_gbp, status, created_at, items, stores(name,category)")
+                .select(
+                  "reference, store_id, total_gbp, status, created_at, items, stores(name,category)",
+                )
                 .eq("customer_phone", customerPhone)
                 .order("created_at", { ascending: false })
                 .limit(40)
@@ -162,7 +170,7 @@ function CustomerDashboardPage() {
             status: o.status,
             created_at: o.created_at,
             items: o.items ?? [],
-          })) ?? []
+          })) ?? [],
         );
 
         const counts = new Map<string, MostVisitedStore>();
@@ -188,7 +196,11 @@ function CustomerDashboardPage() {
             counts.set(id, { id, name, category: o.stores?.category ?? null, visits: 1 });
           }
         });
-        setMostVisitedStores(Array.from(counts.values()).sort((a, b) => b.visits - a.visits).slice(0, 3));
+        setMostVisitedStores(
+          Array.from(counts.values())
+            .sort((a, b) => b.visits - a.visits)
+            .slice(0, 3),
+        );
       } catch (e: any) {
         console.error(e);
         toast.error("Failed to load data");
@@ -216,7 +228,9 @@ function CustomerDashboardPage() {
     );
   }
 
-  const upcomingBookings = bookings.filter((b) => b.status === "pending" || b.status === "confirmed");
+  const upcomingBookings = bookings.filter(
+    (b) => b.status === "pending" || b.status === "confirmed",
+  );
   const pastBookings = bookings.filter((b) => b.status === "completed" || b.status === "cancelled");
   const activeOrders = orders.filter((o) => o.status !== "completed" && o.status !== "cancelled");
   const pastOrders = orders.filter((o) => o.status === "completed" || o.status === "cancelled");
@@ -264,16 +278,18 @@ function CustomerDashboardPage() {
             </h2>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {mostVisitedStores.map((s) => (
-                  <button
-                    key={`visited-${s.id}`}
-                    onClick={() => navigate({ to: `/store/${s.id}` })}
-                    className="rounded-lg border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-4 text-left hover:border-primary/50 hover:shadow-md transition-all"
-                  >
-                    <p className="font-semibold">{s.name}</p>
-                    <p className="text-xs text-muted-foreground">{s.category ?? "Store"}</p>
-                    <p className="text-xs text-primary mt-2 font-medium">{s.visits} visit{s.visits === 1 ? "" : "s"} →</p>
-                  </button>
-                ))}
+                <button
+                  key={`visited-${s.id}`}
+                  onClick={() => navigate({ to: `/store/${s.id}` })}
+                  className="rounded-lg border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-4 text-left hover:border-primary/50 hover:shadow-md transition-all"
+                >
+                  <p className="font-semibold">{s.name}</p>
+                  <p className="text-xs text-muted-foreground">{s.category ?? "Store"}</p>
+                  <p className="text-xs text-primary mt-2 font-medium">
+                    {s.visits} visit{s.visits === 1 ? "" : "s"} →
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -322,14 +338,20 @@ function CustomerDashboardPage() {
                             month: "long",
                             year: "numeric",
                           })}{" "}
-                          at {slotDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          at{" "}
+                          {slotDate.toLocaleTimeString("en-GB", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </p>
                         {b.service && <p className="text-sm mt-1">{b.service}</p>}
                         {b.staff_name && (
                           <p className="text-xs text-muted-foreground">with {b.staff_name}</p>
                         )}
                       </div>
-                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${badge.bg} ${badge.text}`}>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${badge.bg} ${badge.text}`}
+                      >
                         {b.status === "confirmed" ? "✓" : "⏳"} {b.status}
                       </span>
                     </div>
@@ -347,8 +369,13 @@ function CustomerDashboardPage() {
             </div>
           ) : (
             <div className="rounded-lg border border-secondary bg-secondary/30 p-6 text-center">
-              <p className="text-muted-foreground">No upcoming bookings. Browse stores and book now!</p>
-              <Button className="mt-4 bg-gradient-primary hover:opacity-95" onClick={() => navigate({ to: "/" })}>
+              <p className="text-muted-foreground">
+                No upcoming bookings. Browse stores and book now!
+              </p>
+              <Button
+                className="mt-4 bg-gradient-primary hover:opacity-95"
+                onClick={() => navigate({ to: "/" })}
+              >
                 Browse stores
               </Button>
             </div>
@@ -377,8 +404,12 @@ function CustomerDashboardPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-display text-lg font-bold">£{Number(o.total_gbp).toFixed(2)}</p>
-                      <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[o.status]?.bg} ${STATUS_BADGE[o.status]?.text}`}>
+                      <p className="font-display text-lg font-bold">
+                        £{Number(o.total_gbp).toFixed(2)}
+                      </p>
+                      <span
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[o.status]?.bg} ${STATUS_BADGE[o.status]?.text}`}
+                      >
                         {o.status}
                       </span>
                     </div>
@@ -404,7 +435,10 @@ function CustomerDashboardPage() {
           ) : (
             <div className="rounded-lg border border-secondary bg-secondary/30 p-6 text-center">
               <p className="text-muted-foreground">No active orders. Start shopping!</p>
-              <Button className="mt-4 bg-gradient-primary hover:opacity-95" onClick={() => navigate({ to: "/" })}>
+              <Button
+                className="mt-4 bg-gradient-primary hover:opacity-95"
+                onClick={() => navigate({ to: "/" })}
+              >
                 Browse stores
               </Button>
             </div>
@@ -414,21 +448,32 @@ function CustomerDashboardPage() {
         {/* Past Bookings */}
         {pastBookings.length > 0 && (
           <div className="mb-8">
-            <h2 className="font-display text-lg font-bold mb-4">Past bookings ({pastBookings.length})</h2>
+            <h2 className="font-display text-lg font-bold mb-4">
+              Past bookings ({pastBookings.length})
+            </h2>
             <div className="space-y-2">
               {pastBookings.map((b) => {
                 const slotDate = new Date(b.slot_start);
                 const badge = STATUS_BADGE[b.status] || STATUS_BADGE.completed;
                 return (
-                  <div key={b.id} className="flex items-center justify-between rounded-lg border border-secondary bg-secondary/30 p-3">
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between rounded-lg border border-secondary bg-secondary/30 p-3"
+                  >
                     <div>
                       <p className="text-sm font-semibold">{b.store_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {slotDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        {slotDate.toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}
+                      >
                         {b.status}
                       </span>
                       <Button
@@ -449,15 +494,22 @@ function CustomerDashboardPage() {
         {/* Past Orders */}
         {pastOrders.length > 0 && (
           <div className="mb-8">
-            <h2 className="font-display text-lg font-bold mb-4">Past orders ({pastOrders.length})</h2>
+            <h2 className="font-display text-lg font-bold mb-4">
+              Past orders ({pastOrders.length})
+            </h2>
             <div className="space-y-2">
               {pastOrders.map((o) => (
-                <div key={o.reference} className="flex items-center justify-between rounded-lg border border-secondary bg-secondary/30 p-3">
+                <div
+                  key={o.reference}
+                  className="flex items-center justify-between rounded-lg border border-secondary bg-secondary/30 p-3"
+                >
                   <div>
                     <p className="text-sm font-mono font-semibold text-primary">{o.reference}</p>
                     <p className="text-xs text-muted-foreground">{o.store_name}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[o.status]?.bg} ${STATUS_BADGE[o.status]?.text}`}>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[o.status]?.bg} ${STATUS_BADGE[o.status]?.text}`}
+                  >
                     {o.status}
                   </span>
                 </div>

@@ -77,8 +77,12 @@ Deno.serve(async (req) => {
 
     const slotStr = prettySlot(payload.slot_start);
     const endStr = prettySlot(payload.slot_end);
-    const serviceText = payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : "";
-    const staffText = payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : "";
+    const serviceText = payload.service
+      ? `<p><strong>Service:</strong> ${payload.service}</p>`
+      : "";
+    const staffText = payload.staff_name
+      ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>`
+      : "";
     const ageText = payload.age_restricted
       ? `<p><strong>Age-restricted service:</strong> Yes (minimum age ${payload.minimum_age_required ?? 18}+).</p>`
       : "";
@@ -123,28 +127,32 @@ Deno.serve(async (req) => {
 
     const sends: Array<Promise<Response>> = [];
     if (payload.customer_email) {
-      sends.push(fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: { "api-key": brevoKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sender: { email: emailFrom, name: "Lokal" },
-          to: [{ email: payload.customer_email, name: payload.customer_name }],
-          subject: `Reminder: appointment update for ${payload.store_name}`,
-          htmlContent: customerHtml,
+      sends.push(
+        fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: { email: emailFrom, name: "Lokal" },
+            to: [{ email: payload.customer_email, name: payload.customer_name }],
+            subject: `Reminder: appointment update for ${payload.store_name}`,
+            htmlContent: customerHtml,
+          }),
         }),
-      }));
+      );
     }
     if (merchantEmail) {
-      sends.push(fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: { "api-key": brevoKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sender: { email: emailFrom, name: "Lokal" },
-          to: [{ email: merchantEmail, name: payload.store_name }],
-          subject: `Action needed: confirm booking completion`,
-          htmlContent: merchantHtml,
+      sends.push(
+        fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: { email: emailFrom, name: "Lokal" },
+            to: [{ email: merchantEmail, name: payload.store_name }],
+            subject: `Action needed: confirm booking completion`,
+            htmlContent: merchantHtml,
+          }),
         }),
-      }));
+      );
     }
 
     const responses = await Promise.all(sends);

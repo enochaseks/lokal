@@ -4,7 +4,14 @@ import { Navbar } from "@/components/lokal/Navbar";
 import { useAuth } from "@/auth/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { isAdminEmail } from "@/lib/admin";
-import { getImageUrl, normalizeImagePath, normalizeInstagramHandle, normalizeTikTokHandle, normalizeWebsiteUrl, formatCurrency } from "@/lib/utils";
+import {
+  getImageUrl,
+  normalizeImagePath,
+  normalizeInstagramHandle,
+  normalizeTikTokHandle,
+  normalizeWebsiteUrl,
+  formatCurrency,
+} from "@/lib/utils";
 import { isBodyContactService } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { PostMedia } from "@/components/lokal/PostMedia";
@@ -14,13 +21,52 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { VerificationRequestDialog } from "@/components/merchant/VerificationRequestDialog";
-import { Plus, Store as StoreIcon, MapPin, Landmark, Eye, EyeOff, Pencil, Trash2, Loader2, ShoppingBag, Check, MessageSquare, Phone, Rss, Image as ImageIcon, Share2, BadgeCheck, AlertCircle } from "lucide-react";
+import {
+  Plus,
+  Store as StoreIcon,
+  MapPin,
+  Landmark,
+  Eye,
+  EyeOff,
+  Pencil,
+  Trash2,
+  Loader2,
+  ShoppingBag,
+  Check,
+  MessageSquare,
+  Phone,
+  Rss,
+  Image as ImageIcon,
+  Share2,
+  BadgeCheck,
+  AlertCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { LIVE_CATEGORIES, LIVE_ORIGINS, REGIONS, REGION_ADDRESS, DEFAULT_AREA, isStoreBookable, getCategorySubcategories } from "@/data/stores";
+import {
+  LIVE_CATEGORIES,
+  LIVE_ORIGINS,
+  REGIONS,
+  REGION_ADDRESS,
+  DEFAULT_AREA,
+  isStoreBookable,
+  getCategorySubcategories,
+} from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -45,7 +91,12 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   const countryCode = getCountryCallingCode(country);
   if (trimmed.startsWith("+")) return `+${digits}`;
   if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
-  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) return `+${digits}`;
+  if (
+    digits.startsWith(countryCode) &&
+    digits.length >= countryCode.length + 6 &&
+    digits.length <= 15
+  )
+    return `+${digits}`;
   const localDigits = digits.replace(/^0+/, "");
   if (!localDigits) return null;
   if (localDigits.length < 6 || localDigits.length > 14) return null;
@@ -71,15 +122,24 @@ function isValidIanaTimezone(value: string): boolean {
   }
 }
 
-
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-2xl font-bold">Could not load your stores</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{import.meta.env.DEV ? error.message : "Something went wrong. Please try again."}</p>
-        <button onClick={() => { router.invalidate(); reset(); }} className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Try again</button>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {import.meta.env.DEV ? error.message : "Something went wrong. Please try again."}
+        </p>
+        <button
+          onClick={() => {
+            router.invalidate();
+            reset();
+          }}
+          className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Try again
+        </button>
       </div>
     </div>
   );
@@ -88,16 +148,18 @@ function RouteError({ error, reset }: { error: Error; reset: () => void }) {
 export const Route = createFileRoute("/merchant")({
   beforeLoad: async () => {
     if (typeof window === "undefined") return;
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) throw redirect({ to: "/auth", search: { redirect: "/merchant" } });
-    
+
     // Check if user has created a store
     const { data: stores } = await supabase
       .from("stores")
       .select("id")
       .eq("owner_id", session.user.id)
       .limit(1);
-    
+
     if (!stores || stores.length === 0) {
       throw redirect({ to: "/list-store" });
     }
@@ -113,7 +175,11 @@ type Category = (typeof CATEGORIES)[number];
 type Origin = (typeof ORIGINS)[number];
 
 type StoreRow = {
-  id: string; owner_id: string; name: string; category: string; origin: string | null;
+  id: string;
+  owner_id: string;
+  name: string;
+  category: string;
+  origin: string | null;
   category_locked?: boolean | null;
   subcategory?: string | null;
   minimum_age?: number | null;
@@ -122,17 +188,29 @@ type StoreRow = {
   is_verified_tattoo_artist?: boolean | null;
   health_safety_certificate_url?: string | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
-  description: string | null; address: string | null; city: string | null;
-  postcode: string | null; timezone?: string | null; hours: string | null; phone: string | null;
+  description: string | null;
+  address: string | null;
+  city: string | null;
+  postcode: string | null;
+  timezone?: string | null;
+  hours: string | null;
+  phone: string | null;
   accepts_refunds?: boolean | null;
   refund_policy?: string | null;
   cancellation_policy?: string | null;
-  instagram_handle: string | null; tiktok_handle: string | null; website_url: string | null;
-  image_url: string | null; published: boolean; fulfillment: string;
-  bank_name: string | null; bank_account_name: string | null;
-  bank_account_number: string | null; bank_sort_code: string | null;
+  instagram_handle: string | null;
+  tiktok_handle: string | null;
+  website_url: string | null;
+  image_url: string | null;
+  published: boolean;
+  fulfillment: string;
+  bank_name: string | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
+  bank_sort_code: string | null;
   deposit_amount?: number | null;
-  region: string | null; currency: string | null;
+  region: string | null;
+  currency: string | null;
   selling_mode?: SellingMode | null;
   is_verified?: boolean | null;
   verified_at?: string | null;
@@ -140,26 +218,51 @@ type StoreRow = {
 };
 
 type OrderRow = {
-  id: string; reference: string; customer_name: string; customer_phone: string; customer_email: string | null;
-  note: string | null; items: Array<{ name: string; price: number; qty: number; unit?: string }>;
-  total_gbp: number; status: string; created_at: string; store_id: string;
+  id: string;
+  reference: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  note: string | null;
+  items: Array<{ name: string; price: number; qty: number; unit?: string }>;
+  total_gbp: number;
+  status: string;
+  created_at: string;
+  store_id: string;
 };
 
 type MessageRow = {
-  id: string; store_id: string; customer_name: string; customer_phone: string;
-  body: string; direction: "inbound" | "outbound"; created_at: string;
+  id: string;
+  store_id: string;
+  customer_name: string;
+  customer_phone: string;
+  body: string;
+  direction: "inbound" | "outbound";
+  created_at: string;
 };
 
 type AvailabilityRow = {
-  id: string; store_id: string; day_of_week: number;
-  start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number;
+  id: string;
+  store_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration_mins: number;
+  max_bookings_per_slot: number;
 };
 
 type BookingRow = {
-  id: string; store_id: string; customer_name: string; customer_phone: string;
-  customer_email: string | null; service: string | null;
-  staff_id: string | null; staff_name: string | null; staff_phone: string | null;
-  slot_start: string; slot_end: string;
+  id: string;
+  store_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  service: string | null;
+  staff_id: string | null;
+  staff_name: string | null;
+  staff_phone: string | null;
+  slot_start: string;
+  slot_end: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
   payment_status: string;
   age_restricted?: boolean | null;
@@ -170,7 +273,8 @@ type BookingRow = {
   merchant_age_verified_at?: string | null;
   completion_confirmed_by_merchant?: boolean | null;
   completed_at?: string | null;
-  note: string | null; created_at: string;
+  note: string | null;
+  created_at: string;
 };
 
 type StaffRow = {
@@ -197,11 +301,21 @@ type VerificationStatus = "pending" | "approved" | "rejected";
 type VerificationTier = "verified" | "online_verified" | "unsecured_verified";
 
 type PostRow = {
-  id: string; store_id: string; body: string; image_url: string | null; video_url: string | null; created_at: string;
+  id: string;
+  store_id: string;
+  body: string;
+  image_url: string | null;
+  video_url: string | null;
+  created_at: string;
 };
 
 type DayDraft = {
-  day: number; active: boolean; start_time: string; end_time: string; slot_duration_mins: number; max_bookings_per_slot: number;
+  day: number;
+  active: boolean;
+  start_time: string;
+  end_time: string;
+  slot_duration_mins: number;
+  max_bookings_per_slot: number;
 };
 
 const STAFF_DAY_OPTIONS: Array<{ day: number; label: string }> = [
@@ -238,62 +352,176 @@ function toWhatsAppNumber(input: string) {
   return digits;
 }
 
-function EditStoreDialog({ store, onClose, onSaved }: {
+function EditStoreDialog({
+  store,
+  onClose,
+  onSaved,
+}: {
   store: StoreRow;
   onClose: () => void;
   onSaved: (updated: StoreRow) => void;
 }) {
   const { user, roles } = useAuth();
-  const [form, setForm] = useState<{ name: string; category: Category; subcategory: string; minimum_age: string; tattoo_portfolio_url: string; tattoo_license_url: string; health_safety_certificate_url: string; health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected"; origin: Origin; description: string; address: string; city: string; postcode: string; timezone: string; hours: string; phone: string; accepts_refunds: boolean; refund_policy: string; cancellation_policy: string; instagram_handle: string; tiktok_handle: string; website_url: string; fulfillment: string; image_url: string; bank_name: string; bank_account_name: string; bank_account_number: string; bank_sort_code: string; location_type: string; region: string; currency: string; selling_mode: SellingMode }>({
+  const [form, setForm] = useState<{
+    name: string;
+    category: Category;
+    subcategory: string;
+    minimum_age: string;
+    tattoo_portfolio_url: string;
+    tattoo_license_url: string;
+    health_safety_certificate_url: string;
+    health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected";
+    origin: Origin;
+    description: string;
+    address: string;
+    city: string;
+    postcode: string;
+    timezone: string;
+    hours: string;
+    phone: string;
+    accepts_refunds: boolean;
+    refund_policy: string;
+    cancellation_policy: string;
+    instagram_handle: string;
+    tiktok_handle: string;
+    website_url: string;
+    fulfillment: string;
+    image_url: string;
+    bank_name: string;
+    bank_account_name: string;
+    bank_account_number: string;
+    bank_sort_code: string;
+    location_type: string;
+    region: string;
+    currency: string;
+    selling_mode: SellingMode;
+  }>({
     name: store.name,
-    category: (CATEGORIES.includes(store.category as Category) ? (store.category as Category) : "Groceries"),
+    category: CATEGORIES.includes(store.category as Category)
+      ? (store.category as Category)
+      : "Groceries",
     subcategory: store.subcategory ?? "",
     minimum_age: store.minimum_age != null ? String(store.minimum_age) : "18",
     tattoo_portfolio_url: store.tattoo_portfolio_url ?? "",
     tattoo_license_url: store.tattoo_license_url ?? "",
     health_safety_certificate_url: store.health_safety_certificate_url ?? "",
     health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
-    origin: (ORIGINS.includes((store.origin ?? "") as Origin) ? (store.origin as Origin) : ORIGINS[0]), description: store.description ?? "",
-    address: store.address ?? "", city: store.city ?? "", postcode: store.postcode ?? "", timezone: store.timezone ?? getDetectedTimezone(),
-    hours: store.hours ?? "", phone: store.phone ?? "", accepts_refunds: !!store.accepts_refunds, refund_policy: store.refund_policy ?? "", cancellation_policy: store.cancellation_policy ?? "", instagram_handle: store.instagram_handle ?? "", tiktok_handle: store.tiktok_handle ?? "", website_url: store.website_url ?? "", fulfillment: store.fulfillment ?? "collection", image_url: normalizeImagePath(store.image_url) ?? "",
-    bank_name: store.bank_name ?? "", bank_account_name: store.bank_account_name ?? "",
-    bank_account_number: store.bank_account_number ?? "", bank_sort_code: store.bank_sort_code ?? "",
+    origin: ORIGINS.includes((store.origin ?? "") as Origin)
+      ? (store.origin as Origin)
+      : ORIGINS[0],
+    description: store.description ?? "",
+    address: store.address ?? "",
+    city: store.city ?? "",
+    postcode: store.postcode ?? "",
+    timezone: store.timezone ?? getDetectedTimezone(),
+    hours: store.hours ?? "",
+    phone: store.phone ?? "",
+    accepts_refunds: !!store.accepts_refunds,
+    refund_policy: store.refund_policy ?? "",
+    cancellation_policy: store.cancellation_policy ?? "",
+    instagram_handle: store.instagram_handle ?? "",
+    tiktok_handle: store.tiktok_handle ?? "",
+    website_url: store.website_url ?? "",
+    fulfillment: store.fulfillment ?? "collection",
+    image_url: normalizeImagePath(store.image_url) ?? "",
+    bank_name: store.bank_name ?? "",
+    bank_account_name: store.bank_account_name ?? "",
+    bank_account_number: store.bank_account_number ?? "",
+    bank_sort_code: store.bank_sort_code ?? "",
     location_type: (store as any).location_type ?? "salon",
     region: store.region ?? "GB",
     currency: store.currency ?? "GBP",
     selling_mode: store.selling_mode === "services" ? "services" : "products",
   });
-  const [products, setProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string; image_url: string }>>([]);
+  const [products, setProducts] = useState<
+    Array<{
+      id?: string;
+      name: string;
+      price: string;
+      unit: string;
+      deposit: string;
+      image_url: string;
+    }>
+  >([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [editAvail, setEditAvail] = useState<DayDraft[]>([0,1,2,3,4,5,6].map((day) => ({ day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 })));
-  const [phoneCountry, setPhoneCountry] = useState<CountryCode>((store.region ?? "GB") as CountryCode);
+  const [editAvail, setEditAvail] = useState<DayDraft[]>(
+    [0, 1, 2, 3, 4, 5, 6].map((day) => ({
+      day,
+      active: false,
+      start_time: "09:00",
+      end_time: "18:00",
+      slot_duration_mins: 30,
+      max_bookings_per_slot: 1,
+    })),
+  );
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>(
+    (store.region ?? "GB") as CountryCode,
+  );
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [initialProducts, setInitialProducts] = useState<Array<{ id?: string; name: string; price: string; unit: string; deposit: string; image_url: string }> | null>(null);
+  const [initialProducts, setInitialProducts] = useState<Array<{
+    id?: string;
+    name: string;
+    price: string;
+    unit: string;
+    deposit: string;
+    image_url: string;
+  }> | null>(null);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
   const isTattooStore = form.category === "Body Arts & Crafts" && form.subcategory === "Tattooing";
   const isAdminUser = roles.includes("admin") || isAdminEmail(user?.email);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
-    const isBodyContact = isBodyContactService(form.category, form.subcategory);
+  const isBodyContact = isBodyContactService(form.category, form.subcategory);
   const categoryLocked = Boolean(store.category_locked ?? store.published) && !isAdminUser;
 
   useEffect(() => {
-    supabase.from("store_products").select("id,name,price,unit,deposit,image_url").eq("store_id", store.id).order("position")
+    supabase
+      .from("store_products")
+      .select("id,name,price,unit,deposit,image_url")
+      .eq("store_id", store.id)
+      .order("position")
       .then(({ data }) => {
-        const loadedProducts = (data ?? []).map((p: any) => ({ id: p.id, name: p.name, price: String(p.price), unit: p.unit ?? "", deposit: p.deposit != null ? String(p.deposit) : "", image_url: p.image_url ?? "" }));
+        const loadedProducts = (data ?? []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: String(p.price),
+          unit: p.unit ?? "",
+          deposit: p.deposit != null ? String(p.deposit) : "",
+          image_url: p.image_url ?? "",
+        }));
         setProducts(loadedProducts);
         setInitialProducts(loadedProducts);
         setLoadingProducts(false);
       });
-    (supabase as any).from("store_availability").select("*").eq("store_id", store.id)
+    (supabase as any)
+      .from("store_availability")
+      .select("*")
+      .eq("store_id", store.id)
       .then((result: any) => {
         const data: any[] | null = result.data;
         if (data && data.length > 0) {
-          setEditAvail([0,1,2,3,4,5,6].map((day) => {
-            const row = (data as any[]).find((r) => r.day_of_week === day);
-            if (row) return { day, active: true, start_time: row.start_time.slice(0, 5), end_time: row.end_time.slice(0, 5), slot_duration_mins: row.slot_duration_mins, max_bookings_per_slot: row.max_bookings_per_slot ?? 1 };
-            return { day, active: false, start_time: "09:00", end_time: "18:00", slot_duration_mins: 30, max_bookings_per_slot: 1 };
-          }));
+          setEditAvail(
+            [0, 1, 2, 3, 4, 5, 6].map((day) => {
+              const row = (data as any[]).find((r) => r.day_of_week === day);
+              if (row)
+                return {
+                  day,
+                  active: true,
+                  start_time: row.start_time.slice(0, 5),
+                  end_time: row.end_time.slice(0, 5),
+                  slot_duration_mins: row.slot_duration_mins,
+                  max_bookings_per_slot: row.max_bookings_per_slot ?? 1,
+                };
+              return {
+                day,
+                active: false,
+                start_time: "09:00",
+                end_time: "18:00",
+                slot_duration_mins: 30,
+                max_bookings_per_slot: 1,
+              };
+            }),
+          );
         }
       });
   }, [store.id]);
@@ -305,7 +533,9 @@ function EditStoreDialog({ store, onClose, onSaved }: {
     try {
       const ext = file.name.split(".").pop();
       const path = `${store.owner_id}/${store.id}/cover.${ext}`;
-      const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: true });
+      const { error } = await supabase.storage
+        .from("store-images")
+        .upload(path, file, { upsert: true });
       if (error) throw error;
       setForm((f) => ({ ...f, image_url: path }));
       toast.success("Image uploaded");
@@ -318,17 +548,26 @@ function EditStoreDialog({ store, onClose, onSaved }: {
 
   const n = (v: string) => v.trim() || null;
 
-  const hasProductChanges = initialProducts !== null && (
-    products.length !== initialProducts.length ||
-    products.some((p, i) => {
-      const orig = initialProducts[i];
-      if (!orig) return true;
-      return p.name !== orig.name || p.price !== orig.price || p.unit !== orig.unit || p.deposit !== orig.deposit || p.image_url !== orig.image_url;
-    })
-  );
+  const hasProductChanges =
+    initialProducts !== null &&
+    (products.length !== initialProducts.length ||
+      products.some((p, i) => {
+        const orig = initialProducts[i];
+        if (!orig) return true;
+        return (
+          p.name !== orig.name ||
+          p.price !== orig.price ||
+          p.unit !== orig.unit ||
+          p.deposit !== orig.deposit ||
+          p.image_url !== orig.image_url
+        );
+      }));
 
   const handleSave = async () => {
-    if (!form.name.trim()) { toast.error("Store name is required"); return; }
+    if (!form.name.trim()) {
+      toast.error("Store name is required");
+      return;
+    }
     if (!isValidIanaTimezone(form.timezone)) {
       toast.error("Enter a valid IANA timezone (e.g. Africa/Lagos)");
       return;
@@ -339,7 +578,8 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       });
       return;
     }
-    const requiresFoodSafetyApproval = form.category === "Groceries" && form.subcategory === "Meat & Fish";
+    const requiresFoodSafetyApproval =
+      form.category === "Groceries" && form.subcategory === "Meat & Fish";
     if (requiresFoodSafetyApproval && !form.health_safety_certificate_url.trim()) {
       toast.error("Health and safety certificate is required for Meat & Fish");
       return;
@@ -364,18 +604,28 @@ function EditStoreDialog({ store, onClose, onSaved }: {
       const instagramHandle = normalizeInstagramHandle(form.instagram_handle);
       const tiktokHandle = normalizeTikTokHandle(form.tiktok_handle);
       const websiteUrl = normalizeWebsiteUrl(form.website_url);
-      const validSubcategory = getCategorySubcategories(form.category, form.selling_mode).includes(form.subcategory) ? n(form.subcategory) : null;
+      const validSubcategory = getCategorySubcategories(form.category, form.selling_mode).includes(
+        form.subcategory,
+      )
+        ? n(form.subcategory)
+        : null;
       const parsedMinimumAge = Number(form.minimum_age || 0);
       const tattooMinimumAge = isBodyContact
-        ? (Number.isFinite(parsedMinimumAge) && parsedMinimumAge >= 18 ? parsedMinimumAge : 18)
+        ? Number.isFinite(parsedMinimumAge) && parsedMinimumAge >= 18
+          ? parsedMinimumAge
+          : 18
         : null;
       const tattooPortfolioUrl = isBodyContact
-        ? (n(form.tattoo_portfolio_url) ?? (isAdminUser ? "https://lokal.admin/override/tattoo-portfolio" : null))
+        ? (n(form.tattoo_portfolio_url) ??
+          (isAdminUser ? "https://lokal.admin/override/tattoo-portfolio" : null))
         : null;
       const tattooLicenseUrl = isBodyContact
-        ? (n(form.tattoo_license_url) ?? (isAdminUser ? "https://lokal.admin/override/tattoo-licence" : null))
+        ? (n(form.tattoo_license_url) ??
+          (isAdminUser ? "https://lokal.admin/override/tattoo-licence" : null))
         : null;
-      const certificateUrl = requiresFoodSafetyApproval ? n(form.health_safety_certificate_url) : null;
+      const certificateUrl = requiresFoodSafetyApproval
+        ? n(form.health_safety_certificate_url)
+        : null;
       const currentCertStatus = form.health_safety_certificate_status;
       const nextCertStatus = !requiresFoodSafetyApproval
         ? "not_required"
@@ -385,54 +635,85 @@ function EditStoreDialog({ store, onClose, onSaved }: {
             ? "pending"
             : currentCertStatus;
 
-      const { error: storeErr } = await (supabase as any).from("stores").update({
-        name: form.name.trim(), category: form.category,
-        subcategory: validSubcategory,
-        minimum_age: tattooMinimumAge,
-        tattoo_portfolio_url: tattooPortfolioUrl,
-        tattoo_license_url: tattooLicenseUrl,
-        health_safety_certificate_url: certificateUrl,
-        health_safety_certificate_status: nextCertStatus,
-        origin: form.origin, description: n(form.description),
-        address: requiresFixedAddress ? n(form.address) : null,
-        city: requiresFixedAddress ? n(form.city) : null,
-        postcode: requiresFixedAddress ? n(form.postcode) : null,
-        timezone: form.timezone.trim(),
-        hours: n(form.hours), phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone), fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url),
-        accepts_refunds: form.accepts_refunds,
-        refund_policy: n(form.refund_policy),
-        cancellation_policy: n(form.cancellation_policy),
-        location_type: isServiceStore ? (form.location_type || null) : null,
-        selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
-        instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl,
-        bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name),
-        bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code),
-        region: form.region, currency: form.currency,
-      }).eq("id", store.id);
+      const { error: storeErr } = await (supabase as any)
+        .from("stores")
+        .update({
+          name: form.name.trim(),
+          category: form.category,
+          subcategory: validSubcategory,
+          minimum_age: tattooMinimumAge,
+          tattoo_portfolio_url: tattooPortfolioUrl,
+          tattoo_license_url: tattooLicenseUrl,
+          health_safety_certificate_url: certificateUrl,
+          health_safety_certificate_status: nextCertStatus,
+          origin: form.origin,
+          description: n(form.description),
+          address: requiresFixedAddress ? n(form.address) : null,
+          city: requiresFixedAddress ? n(form.city) : null,
+          postcode: requiresFixedAddress ? n(form.postcode) : null,
+          timezone: form.timezone.trim(),
+          hours: n(form.hours),
+          phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone),
+          fulfillment:
+            isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment,
+          image_url: n(form.image_url),
+          accepts_refunds: form.accepts_refunds,
+          refund_policy: n(form.refund_policy),
+          cancellation_policy: n(form.cancellation_policy),
+          location_type: isServiceStore ? form.location_type || null : null,
+          selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
+          instagram_handle: instagramHandle,
+          tiktok_handle: tiktokHandle,
+          website_url: websiteUrl,
+          bank_name: n(form.bank_name),
+          bank_account_name: n(form.bank_account_name),
+          bank_account_number: n(form.bank_account_number),
+          bank_sort_code: n(form.bank_sort_code),
+          region: form.region,
+          currency: form.currency,
+        })
+        .eq("id", store.id);
       if (storeErr) throw storeErr;
 
       const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
       if (hasProductChanges) {
-        console.log("Product changes detected:", { originalCount: initialProducts?.length, currentCount: validProducts.length });
+        console.log("Product changes detected:", {
+          originalCount: initialProducts?.length,
+          currentCount: validProducts.length,
+        });
       }
       await supabase.from("store_products").delete().eq("store_id", store.id);
       let shouldPublish = store.published;
       if (validProducts.length > 0) {
         const { error: prodErr } = await (supabase as any).from("store_products").insert(
-          validProducts.map((p, i) => ({ store_id: store.id, name: p.name.trim().slice(0, 80), price: Number(p.price), unit: p.unit.trim() || null, deposit: p.deposit.trim() ? Number(p.deposit) : null, image_url: p.image_url || null, position: i }))
+          validProducts.map((p, i) => ({
+            store_id: store.id,
+            name: p.name.trim().slice(0, 80),
+            price: Number(p.price),
+            unit: p.unit.trim() || null,
+            deposit: p.deposit.trim() ? Number(p.deposit) : null,
+            image_url: p.image_url || null,
+            position: i,
+          })),
         );
         if (prodErr) throw prodErr;
 
         // Auto-publish if adding products to unpublished store (only if verified)
         if (!store.published && store.is_verified) {
-          const { error: pubErr } = await supabase.from("stores").update({ published: true }).eq("id", store.id);
+          const { error: pubErr } = await supabase
+            .from("stores")
+            .update({ published: true })
+            .eq("id", store.id);
           if (pubErr) throw pubErr;
           shouldPublish = true;
         }
       } else {
         // Unpublish if all products are deleted
         if (store.published) {
-          const { error: unpubErr } = await supabase.from("stores").update({ published: false }).eq("id", store.id);
+          const { error: unpubErr } = await supabase
+            .from("stores")
+            .update({ published: false })
+            .eq("id", store.id);
           if (unpubErr) throw unpubErr;
           shouldPublish = false;
         }
@@ -449,12 +730,46 @@ function EditStoreDialog({ store, onClose, onSaved }: {
             end_time: d.end_time,
             slot_duration_mins: isServiceStore ? d.slot_duration_mins : 60,
             max_bookings_per_slot: isServiceStore ? d.max_bookings_per_slot : 1,
-          }))
+          })),
         );
         if (availErr) throw availErr;
       }
 
-      onSaved({ ...store, ...form, published: shouldPublish, subcategory: validSubcategory, minimum_age: tattooMinimumAge, tattoo_portfolio_url: tattooPortfolioUrl, tattoo_license_url: tattooLicenseUrl, health_safety_certificate_url: certificateUrl, health_safety_certificate_status: nextCertStatus, origin: form.origin, description: n(form.description), address: requiresFixedAddress ? n(form.address) : null, city: requiresFixedAddress ? n(form.city) : null, postcode: requiresFixedAddress ? n(form.postcode) : null, timezone: form.timezone.trim(), hours: n(form.hours), phone: n(form.phone), accepts_refunds: form.accepts_refunds, refund_policy: n(form.refund_policy), cancellation_policy: n(form.cancellation_policy), instagram_handle: instagramHandle, tiktok_handle: tiktokHandle, website_url: websiteUrl, fulfillment: isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment, image_url: n(form.image_url), bank_name: n(form.bank_name), bank_account_name: n(form.bank_account_name), bank_account_number: n(form.bank_account_number), bank_sort_code: n(form.bank_sort_code), region: form.region, currency: form.currency, selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null });
+      onSaved({
+        ...store,
+        ...form,
+        published: shouldPublish,
+        subcategory: validSubcategory,
+        minimum_age: tattooMinimumAge,
+        tattoo_portfolio_url: tattooPortfolioUrl,
+        tattoo_license_url: tattooLicenseUrl,
+        health_safety_certificate_url: certificateUrl,
+        health_safety_certificate_status: nextCertStatus,
+        origin: form.origin,
+        description: n(form.description),
+        address: requiresFixedAddress ? n(form.address) : null,
+        city: requiresFixedAddress ? n(form.city) : null,
+        postcode: requiresFixedAddress ? n(form.postcode) : null,
+        timezone: form.timezone.trim(),
+        hours: n(form.hours),
+        phone: n(form.phone),
+        accepts_refunds: form.accepts_refunds,
+        refund_policy: n(form.refund_policy),
+        cancellation_policy: n(form.cancellation_policy),
+        instagram_handle: instagramHandle,
+        tiktok_handle: tiktokHandle,
+        website_url: websiteUrl,
+        fulfillment:
+          isServiceStore && form.location_type === "travel" ? "pay_at_store" : form.fulfillment,
+        image_url: n(form.image_url),
+        bank_name: n(form.bank_name),
+        bank_account_name: n(form.bank_account_name),
+        bank_account_number: n(form.bank_account_number),
+        bank_sort_code: n(form.bank_sort_code),
+        region: form.region,
+        currency: form.currency,
+        selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
+      });
       toast.success("Store updated");
       onClose();
     } catch (e: any) {
@@ -467,75 +782,145 @@ function EditStoreDialog({ store, onClose, onSaved }: {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader><DialogTitle>Edit {store.name}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Edit {store.name}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-5 py-2">
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Store info</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Store info
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Label>Store name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} maxLength={80} className="mt-1" /></div>
-              <div><Label>Category</Label>
+              <div className="sm:col-span-2">
+                <Label>Store name *</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  maxLength={80}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Category</Label>
                 <Select
                   value={form.category}
                   disabled={categoryLocked}
-                  onValueChange={(v) => setForm((f) => {
-                    const nextCategory = v as Category;
-                    const nextMode: SellingMode = nextCategory === "Clothes & Fashion"
-                      ? f.selling_mode
-                      : (isStoreBookable(nextCategory) ? "services" : "products");
-                    const nextSubcategory = getCategorySubcategories(nextCategory, nextMode).includes(f.subcategory) ? f.subcategory : "";
-                    const keepCertificate = nextCategory === "Groceries" && nextSubcategory === "Meat & Fish";
-                    const keepTattooFields = isBodyContactService(nextCategory, nextSubcategory);
-                    return {
-                      ...f,
-                      category: nextCategory,
-                      subcategory: nextSubcategory,
-                      minimum_age: keepTattooFields ? (f.minimum_age || "18") : "18",
-                      tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
-                      tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
-                      health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
-                      health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
-                      selling_mode: nextMode,
-                    };
-                  })}
+                  onValueChange={(v) =>
+                    setForm((f) => {
+                      const nextCategory = v as Category;
+                      const nextMode: SellingMode =
+                        nextCategory === "Clothes & Fashion"
+                          ? f.selling_mode
+                          : isStoreBookable(nextCategory)
+                            ? "services"
+                            : "products";
+                      const nextSubcategory = getCategorySubcategories(
+                        nextCategory,
+                        nextMode,
+                      ).includes(f.subcategory)
+                        ? f.subcategory
+                        : "";
+                      const keepCertificate =
+                        nextCategory === "Groceries" && nextSubcategory === "Meat & Fish";
+                      const keepTattooFields = isBodyContactService(nextCategory, nextSubcategory);
+                      return {
+                        ...f,
+                        category: nextCategory,
+                        subcategory: nextSubcategory,
+                        minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
+                        tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
+                        tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
+                        health_safety_certificate_url: keepCertificate
+                          ? f.health_safety_certificate_url
+                          : "",
+                        health_safety_certificate_status: keepCertificate
+                          ? f.health_safety_certificate_status
+                          : "not_required",
+                        selling_mode: nextMode,
+                      };
+                    })
+                  }
                 >
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
                 {categoryLocked && (
-                  <p className="mt-1.5 text-xs text-muted-foreground">Category is locked while your store is live. Contact support to request a reviewed category change.</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Category is locked while your store is live. Contact support to request a
+                    reviewed category change.
+                  </p>
                 )}
                 {!categoryLocked && isAdminUser && (
-                  <p className="mt-1.5 text-xs text-muted-foreground">Admin override enabled: you can change the category for this store.</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Admin override enabled: you can change the category for this store.
+                  </p>
                 )}
               </div>
-              <div><Label>Origin</Label>
-                <Select value={form.origin} onValueChange={(v) => setForm((f) => ({ ...f, origin: v as Origin }))}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{ORIGINS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+              <div>
+                <Label>Origin</Label>
+                <Select
+                  value={form.origin}
+                  onValueChange={(v) => setForm((f) => ({ ...f, origin: v as Origin }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORIGINS.map((o) => (
+                      <SelectItem key={o} value={o}>
+                        {o}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               {getCategorySubcategories(form.category, form.selling_mode).length > 0 && (
-                <div className="sm:col-span-2"><Label>Subcategory</Label>
-                  <Select value={form.subcategory || "none"} onValueChange={(v) => setForm((f) => {
-                    const nextSubcategory = v === "none" ? "" : v;
-                    const keepCertificate = f.category === "Groceries" && nextSubcategory === "Meat & Fish";
-                    const keepTattooFields = isBodyContactService(f.category, nextSubcategory);
-                    return {
-                      ...f,
-                      subcategory: nextSubcategory,
-                      minimum_age: keepTattooFields ? (f.minimum_age || "18") : "18",
-                      tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
-                      tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
-                      health_safety_certificate_url: keepCertificate ? f.health_safety_certificate_url : "",
-                      health_safety_certificate_status: keepCertificate ? f.health_safety_certificate_status : "not_required",
-                    };
-                  })}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select a subcategory" /></SelectTrigger>
+                <div className="sm:col-span-2">
+                  <Label>Subcategory</Label>
+                  <Select
+                    value={form.subcategory || "none"}
+                    onValueChange={(v) =>
+                      setForm((f) => {
+                        const nextSubcategory = v === "none" ? "" : v;
+                        const keepCertificate =
+                          f.category === "Groceries" && nextSubcategory === "Meat & Fish";
+                        const keepTattooFields = isBodyContactService(f.category, nextSubcategory);
+                        return {
+                          ...f,
+                          subcategory: nextSubcategory,
+                          minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
+                          tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
+                          tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
+                          health_safety_certificate_url: keepCertificate
+                            ? f.health_safety_certificate_url
+                            : "",
+                          health_safety_certificate_status: keepCertificate
+                            ? f.health_safety_certificate_status
+                            : "not_required",
+                        };
+                      })
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select a subcategory" />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General</SelectItem>
-                      {getCategorySubcategories(form.category, form.selling_mode).map((subcategory) => (
-                        <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
-                      ))}
+                      {getCategorySubcategories(form.category, form.selling_mode).map(
+                        (subcategory) => (
+                          <SelectItem key={subcategory} value={subcategory}>
+                            {subcategory}
+                          </SelectItem>
+                        ),
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -543,97 +928,246 @@ function EditStoreDialog({ store, onClose, onSaved }: {
               {form.category === "Groceries" && form.subcategory === "Meat & Fish" && (
                 <div className="sm:col-span-2">
                   <Label>Health and safety certificate URL *</Label>
-                  <Input value={form.health_safety_certificate_url} onChange={(e) => setForm((f) => ({ ...f, health_safety_certificate_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to certificate document" />
-                  <p className="mt-1.5 text-xs text-muted-foreground">Certificate review status: {form.health_safety_certificate_status}</p>
+                  <Input
+                    value={form.health_safety_certificate_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, health_safety_certificate_url: e.target.value }))
+                    }
+                    maxLength={500}
+                    className="mt-1"
+                    placeholder="Link to certificate document"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Certificate review status: {form.health_safety_certificate_status}
+                  </p>
                 </div>
               )}
               {isBodyContact && (
                 <>
                   <div>
                     <Label>Minimum age{isAdminUser ? "" : " *"}</Label>
-                    <Input value={form.minimum_age} onChange={(e) => setForm((f) => ({ ...f, minimum_age: e.target.value }))} type="number" min={18} max={99} className="mt-1" />
+                    <Input
+                      value={form.minimum_age}
+                      onChange={(e) => setForm((f) => ({ ...f, minimum_age: e.target.value }))}
+                      type="number"
+                      min={18}
+                      max={99}
+                      className="mt-1"
+                    />
                   </div>
                   <div className="sm:col-span-2">
-                    <Label>{form.subcategory || "Service"} portfolio URL{isAdminUser ? "" : " *"}</Label>
-                    <Input value={form.tattoo_portfolio_url} onChange={(e) => setForm((f) => ({ ...f, tattoo_portfolio_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to portfolio page or image" />
+                    <Label>
+                      {form.subcategory || "Service"} portfolio URL{isAdminUser ? "" : " *"}
+                    </Label>
+                    <Input
+                      value={form.tattoo_portfolio_url}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, tattoo_portfolio_url: e.target.value }))
+                      }
+                      maxLength={500}
+                      className="mt-1"
+                      placeholder="Link to portfolio page or image"
+                    />
                   </div>
                   <div className="sm:col-span-2">
-                    <Label>{form.subcategory || "Service"} licence/ID URL{isAdminUser ? "" : " *"}</Label>
-                    <Input value={form.tattoo_license_url} onChange={(e) => setForm((f) => ({ ...f, tattoo_license_url: e.target.value }))} maxLength={500} className="mt-1" placeholder="Link to licence or certification" />
+                    <Label>
+                      {form.subcategory || "Service"} licence/ID URL{isAdminUser ? "" : " *"}
+                    </Label>
+                    <Input
+                      value={form.tattoo_license_url}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, tattoo_license_url: e.target.value }))
+                      }
+                      maxLength={500}
+                      className="mt-1"
+                      placeholder="Link to licence or certification"
+                    />
                   </div>
                   {isAdminUser && (
                     <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Admin test override: if these verification fields are left blank, Lokal will use temporary placeholder values for saving.
+                      Admin test override: if these verification fields are left blank, Lokal will
+                      use temporary placeholder values for saving.
                     </div>
                   )}
                 </>
               )}
               {form.category === "Clothes & Fashion" && (
-                <div className="sm:col-span-2"><Label>How do you want to sell?</Label>
-                  <Select value={form.selling_mode} onValueChange={(v) => setForm((f) => {
-                    const nextMode = v as SellingMode;
-                    const nextSubcategory = getCategorySubcategories("Clothes & Fashion", nextMode).includes(f.subcategory) ? f.subcategory : "";
-                    return { ...f, selling_mode: nextMode, subcategory: nextSubcategory };
-                  })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <div className="sm:col-span-2">
+                  <Label>How do you want to sell?</Label>
+                  <Select
+                    value={form.selling_mode}
+                    onValueChange={(v) =>
+                      setForm((f) => {
+                        const nextMode = v as SellingMode;
+                        const nextSubcategory = getCategorySubcategories(
+                          "Clothes & Fashion",
+                          nextMode,
+                        ).includes(f.subcategory)
+                          ? f.subcategory
+                          : "";
+                        return { ...f, selling_mode: nextMode, subcategory: nextSubcategory };
+                      })
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="products">Product store (ready-made items)</SelectItem>
-                      <SelectItem value="services">Service store (custom-made / made-to-order)</SelectItem>
+                      <SelectItem value="services">
+                        Service store (custom-made / made-to-order)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
-              <div className="sm:col-span-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} maxLength={500} rows={3} className="mt-1" /></div>
+              <div className="sm:col-span-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  maxLength={500}
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Cover photo</Label>
-            {form.image_url && <div className="h-28 w-full overflow-hidden rounded-lg bg-secondary"><img src={getImageUrl(form.image_url) || ""} alt="" className="h-full w-full object-cover" /></div>}
-            <label className="cursor-pointer">
-              <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}>
-                {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : "Upload photo"}
+            {form.image_url && (
+              <div className="h-28 w-full overflow-hidden rounded-lg bg-secondary">
+                <img
+                  src={getImageUrl(form.image_url) || ""}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
               </div>
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+            )}
+            <label className="cursor-pointer">
+              <div
+                className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploading ? " opacity-50" : ""}`}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Uploading…
+                  </>
+                ) : (
+                  "Upload photo"
+                )}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+                disabled={uploading}
+              />
             </label>
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location &amp; contact</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Location &amp; contact
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {requiresFixedAddress ? (
                 <>
-                  <div className="sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} maxLength={200} className="mt-1" /></div>
-                  <div><Label>City</Label><Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} maxLength={60} className="mt-1" /></div>
-                  <div><Label>{(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaLabel}</Label><Input value={form.postcode} onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))} placeholder={(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaPlaceholder} maxLength={40} className="mt-1" /></div>
+                  <div className="sm:col-span-2">
+                    <Label>Address</Label>
+                    <Input
+                      value={form.address}
+                      onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                      maxLength={200}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>City</Label>
+                    <Input
+                      value={form.city}
+                      onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                      maxLength={60}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>
+                      {(REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaLabel}
+                    </Label>
+                    <Input
+                      value={form.postcode}
+                      onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))}
+                      placeholder={
+                        (REGION_ADDRESS[form.region as Region] ?? DEFAULT_AREA).areaPlaceholder
+                      }
+                      maxLength={40}
+                      className="mt-1"
+                    />
+                  </div>
                 </>
               ) : (
                 <div className="sm:col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  Service location is set to We travel to you, so no fixed customer-facing address will be shown.
+                  Service location is set to We travel to you, so no fixed customer-facing address
+                  will be shown.
                 </div>
               )}
               <div>
                 <Label>Phone</Label>
                 <div className="mt-1 grid grid-cols-12 gap-2">
                   <div className="col-span-5 sm:col-span-4">
-                    <Select value={phoneCountry} onValueChange={(v) => setPhoneCountry(v as CountryCode)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                    <Select
+                      value={phoneCountry}
+                      onValueChange={(v) => setPhoneCountry(v as CountryCode)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_OPTIONS.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div className="col-span-7 sm:col-span-8">
-                    <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Local number" maxLength={40} />
+                    <Input
+                      value={form.phone}
+                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="Local number"
+                      maxLength={40}
+                    />
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Order alerts sent by email and SMS to this number.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Order alerts sent by email and SMS to this number.
+                </p>
               </div>
-              <div><Label>Opening hours</Label><Input value={form.hours} onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))} placeholder="Mon–Sat 9am–8pm" maxLength={80} className="mt-1" /></div>
+              <div>
+                <Label>Opening hours</Label>
+                <Input
+                  value={form.hours}
+                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
+                  placeholder="Mon–Sat 9am–8pm"
+                  maxLength={80}
+                  className="mt-1"
+                />
+              </div>
               <div className="sm:col-span-2 rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
                 <Label>Refunds & cancellation policy</Label>
                 <div>
                   <Label className="text-xs text-muted-foreground">Do you accept refunds?</Label>
-                  <Select value={form.accepts_refunds ? "yes" : "no"} onValueChange={(v) => setForm((f) => ({ ...f, accepts_refunds: v === "yes" }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.accepts_refunds ? "yes" : "no"}
+                    onValueChange={(v) => setForm((f) => ({ ...f, accepts_refunds: v === "yes" }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="yes">Yes, refunds may be accepted</SelectItem>
                       <SelectItem value="no">No refunds</SelectItem>
@@ -641,17 +1175,64 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Refund policy details (shown to customers)</Label>
-                  <Textarea value={form.refund_policy} onChange={(e) => setForm((f) => ({ ...f, refund_policy: e.target.value }))} rows={2} maxLength={1000} className="mt-1" placeholder="Example: Full refund if cancelled 24+ hours before appointment." />
+                  <Label className="text-xs text-muted-foreground">
+                    Refund policy details (shown to customers)
+                  </Label>
+                  <Textarea
+                    value={form.refund_policy}
+                    onChange={(e) => setForm((f) => ({ ...f, refund_policy: e.target.value }))}
+                    rows={2}
+                    maxLength={1000}
+                    className="mt-1"
+                    placeholder="Example: Full refund if cancelled 24+ hours before appointment."
+                  />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Cancellation policy details (shown to customers)</Label>
-                  <Textarea value={form.cancellation_policy} onChange={(e) => setForm((f) => ({ ...f, cancellation_policy: e.target.value }))} rows={2} maxLength={1000} className="mt-1" placeholder="Example: Deposit is non-refundable for no-shows." />
+                  <Label className="text-xs text-muted-foreground">
+                    Cancellation policy details (shown to customers)
+                  </Label>
+                  <Textarea
+                    value={form.cancellation_policy}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, cancellation_policy: e.target.value }))
+                    }
+                    rows={2}
+                    maxLength={1000}
+                    className="mt-1"
+                    placeholder="Example: Deposit is non-refundable for no-shows."
+                  />
                 </div>
               </div>
-              <div><Label>Instagram</Label><Input value={form.instagram_handle} onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
-              <div><Label>TikTok</Label><Input value={form.tiktok_handle} onChange={(e) => setForm((f) => ({ ...f, tiktok_handle: e.target.value }))} placeholder="Handle or profile URL" maxLength={80} className="mt-1" /></div>
-              <div className="sm:col-span-2"><Label>Website</Label><Input value={form.website_url} onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))} placeholder="https://..." maxLength={200} className="mt-1" /></div>
+              <div>
+                <Label>Instagram</Label>
+                <Input
+                  value={form.instagram_handle}
+                  onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))}
+                  placeholder="Handle or profile URL"
+                  maxLength={80}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>TikTok</Label>
+                <Input
+                  value={form.tiktok_handle}
+                  onChange={(e) => setForm((f) => ({ ...f, tiktok_handle: e.target.value }))}
+                  placeholder="Handle or profile URL"
+                  maxLength={80}
+                  className="mt-1"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Website</Label>
+                <Input
+                  value={form.website_url}
+                  onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
+                  placeholder="https://..."
+                  maxLength={200}
+                  className="mt-1"
+                />
+              </div>
               <div className="sm:col-span-2">
                 <Label>Fulfilment</Label>
                 {isServiceStore && form.location_type === "travel" ? (
@@ -660,8 +1241,13 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                   </div>
                 ) : (
                   <>
-                    <Select value={form.fulfillment} onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <Select
+                      value={form.fulfillment}
+                      onValueChange={(v) => setForm((f) => ({ ...f, fulfillment: v }))}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="collection">🏪 Collection only</SelectItem>
                         <SelectItem value="delivery">🚚 Delivery only</SelectItem>
@@ -669,15 +1255,29 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                         <SelectItem value="pay_at_store">💰 Pay at store</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="mt-1 text-xs text-muted-foreground">Let customers know how they can receive their order. You arrange this directly with the customer.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Let customers know how they can receive their order. You arrange this directly
+                      with the customer.
+                    </p>
                   </>
                 )}
               </div>
               {isServiceStore && (
                 <div className="sm:col-span-2">
                   <Label>Where do you offer services?</Label>
-                  <Select value={form.location_type} onValueChange={(v) => setForm((f) => ({ ...f, location_type: v, fulfillment: v === "travel" ? "pay_at_store" : f.fulfillment }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.location_type}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        location_type: v,
+                        fulfillment: v === "travel" ? "pay_at_store" : f.fulfillment,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="salon">🏠 At my salon / premises</SelectItem>
                       <SelectItem value="travel">🚗 We travel to you</SelectItem>
@@ -689,83 +1289,275 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Region &amp; currency</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Region &amp; currency
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><Label>Region</Label>
-                <Select value={form.region} onValueChange={(v) => setForm((f) => ({ ...f, region: v, currency: REGIONS[v as keyof typeof REGIONS]?.currency || f.currency }))}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <div>
+                <Label>Region</Label>
+                <Select
+                  value={form.region}
+                  onValueChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      region: v,
+                      currency: REGIONS[v as keyof typeof REGIONS]?.currency || f.currency,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {Object.entries(REGIONS).map(([key, region]) => (
-                      <SelectItem key={key} value={key}>{region.name}</SelectItem>
+                      <SelectItem key={key} value={key}>
+                        {region.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Currency</Label>
+              <div>
+                <Label>Currency</Label>
                 <div className="mt-1 flex items-center justify-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                  <span className="text-muted-foreground">{REGIONS[form.region as keyof typeof REGIONS]?.symbol || "£"} {form.currency}</span>
+                  <span className="text-muted-foreground">
+                    {REGIONS[form.region as keyof typeof REGIONS]?.symbol || "£"} {form.currency}
+                  </span>
                 </div>
               </div>
               <div className="sm:col-span-2">
                 <Label>Store timezone *</Label>
                 <div className="mt-1 flex gap-2">
-                  <Input value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))} placeholder="Africa/Lagos" maxLength={80} />
-                  <Button type="button" variant="outline" onClick={() => setForm((f) => ({ ...f, timezone: getDetectedTimezone() }))}>Use mine</Button>
+                  <Input
+                    value={form.timezone}
+                    onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+                    placeholder="Africa/Lagos"
+                    maxLength={80}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setForm((f) => ({ ...f, timezone: getDetectedTimezone() }))}
+                  >
+                    Use mine
+                  </Button>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Used for accurate open/closed status globally. Example: Europe/London, America/Toronto.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Used for accurate open/closed status globally. Example: Europe/London,
+                  America/Toronto.
+                </p>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bank details</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Bank details
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><Label>Bank name</Label><Input value={form.bank_name} onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))} placeholder={form.region === "NG" ? "First Bank" : form.region === "JM" ? "NCB" : "Barclays"} maxLength={60} className="mt-1" /></div>
-              <div><Label>Account name</Label><Input value={form.bank_account_name} onChange={(e) => setForm((f) => ({ ...f, bank_account_name: e.target.value }))} placeholder="Business Name" maxLength={80} className="mt-1" /></div>
-              <div><Label>Account number</Label><Input value={form.bank_account_number} onChange={(e) => setForm((f) => ({ ...f, bank_account_number: e.target.value.replace(/\D/g, "") }))} inputMode="numeric" placeholder={form.region === "NG" ? "1234567890" : form.region === "JM" ? "00012345678" : "20451887"} maxLength={20} className="mt-1 font-mono" /></div>
               <div>
-                <Label>{form.region === "NG" ? "Bank code (SWIFT)" : form.region === "JM" ? "Branch / Routing number" : "Sort code"}</Label>
-                <Input value={form.bank_sort_code} onChange={(e) => setForm((f) => ({ ...f, bank_sort_code: e.target.value }))} placeholder={form.region === "NG" ? "WEMA code" : form.region === "JM" ? "Branch code" : "20-00-00"} maxLength={10} className="mt-1 font-mono" />
+                <Label>Bank name</Label>
+                <Input
+                  value={form.bank_name}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
+                  placeholder={
+                    form.region === "NG" ? "First Bank" : form.region === "JM" ? "NCB" : "Barclays"
+                  }
+                  maxLength={60}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Account name</Label>
+                <Input
+                  value={form.bank_account_name}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_account_name: e.target.value }))}
+                  placeholder="Business Name"
+                  maxLength={80}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Account number</Label>
+                <Input
+                  value={form.bank_account_number}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      bank_account_number: e.target.value.replace(/\D/g, ""),
+                    }))
+                  }
+                  inputMode="numeric"
+                  placeholder={
+                    form.region === "NG"
+                      ? "1234567890"
+                      : form.region === "JM"
+                        ? "00012345678"
+                        : "20451887"
+                  }
+                  maxLength={20}
+                  className="mt-1 font-mono"
+                />
+              </div>
+              <div>
+                <Label>
+                  {form.region === "NG"
+                    ? "Bank code (SWIFT)"
+                    : form.region === "JM"
+                      ? "Branch / Routing number"
+                      : "Sort code"}
+                </Label>
+                <Input
+                  value={form.bank_sort_code}
+                  onChange={(e) => setForm((f) => ({ ...f, bank_sort_code: e.target.value }))}
+                  placeholder={
+                    form.region === "NG"
+                      ? "WEMA code"
+                      : form.region === "JM"
+                        ? "Branch code"
+                        : "20-00-00"
+                  }
+                  maxLength={10}
+                  className="mt-1 font-mono"
+                />
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isServiceStore ? "Services" : "Products"}</p>
-              <Button size="sm" variant="outline" onClick={() => setProducts((p) => [...p, { name: "", price: "", unit: "", deposit: "", image_url: "" }])}><Plus className="mr-1 h-3.5 w-3.5" />{isServiceStore ? "Add service" : "Add"}</Button>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {isServiceStore ? "Services" : "Products"}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setProducts((p) => [
+                    ...p,
+                    { name: "", price: "", unit: "", deposit: "", image_url: "" },
+                  ])
+                }
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                {isServiceStore ? "Add service" : "Add"}
+              </Button>
             </div>
-            {loadingProducts ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+            {loadingProducts ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
               <div className="space-y-2">
                 {products.map((p, i) => (
                   <div key={i} className="space-y-1">
                     <div className="grid grid-cols-12 gap-2">
-                      <Input className={isServiceStore ? "col-span-6" : "col-span-5"} placeholder={isServiceStore ? "Service name" : "Product name"} value={p.name} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))} maxLength={80} />
-                      <Input className="col-span-3 font-mono" placeholder={`${REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}0.00`} value={p.price} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, price: e.target.value } : x))} />
-                      {isServiceStore
-                        ? <Input className="col-span-2" placeholder="e.g. 30 min" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
-                        : <Input className="col-span-3" placeholder="unit" value={p.unit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x))} maxLength={20} />
-                      }
-                      <button onClick={() => setProducts((prev) => prev.filter((_, idx) => idx !== i))} className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                      <Input
+                        className={isServiceStore ? "col-span-6" : "col-span-5"}
+                        placeholder={isServiceStore ? "Service name" : "Product name"}
+                        value={p.name}
+                        onChange={(e) =>
+                          setProducts((prev) =>
+                            prev.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)),
+                          )
+                        }
+                        maxLength={80}
+                      />
+                      <Input
+                        className="col-span-3 font-mono"
+                        placeholder={`${REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}0.00`}
+                        value={p.price}
+                        onChange={(e) =>
+                          setProducts((prev) =>
+                            prev.map((x, idx) => (idx === i ? { ...x, price: e.target.value } : x)),
+                          )
+                        }
+                      />
+                      {isServiceStore ? (
+                        <Input
+                          className="col-span-2"
+                          placeholder="e.g. 30 min"
+                          value={p.unit}
+                          onChange={(e) =>
+                            setProducts((prev) =>
+                              prev.map((x, idx) =>
+                                idx === i ? { ...x, unit: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          maxLength={20}
+                        />
+                      ) : (
+                        <Input
+                          className="col-span-3"
+                          placeholder="unit"
+                          value={p.unit}
+                          onChange={(e) =>
+                            setProducts((prev) =>
+                              prev.map((x, idx) =>
+                                idx === i ? { ...x, unit: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          maxLength={20}
+                        />
+                      )}
+                      <button
+                        onClick={() => setProducts((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                     {form.category === "Hair & Beauty" && (
                       <div className="flex items-center gap-2 pl-1">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">Deposit {REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}</span>
-                        <Input className="h-7 w-28 text-xs font-mono" placeholder="0.00 (optional)" inputMode="decimal" value={p.deposit} onChange={(e) => setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, deposit: e.target.value.replace(/[^0-9.]/g, "") } : x))} />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          Deposit {REGIONS[form.region as keyof typeof REGIONS]?.symbol ?? "£"}
+                        </span>
+                        <Input
+                          className="h-7 w-28 text-xs font-mono"
+                          placeholder="0.00 (optional)"
+                          inputMode="decimal"
+                          value={p.deposit}
+                          onChange={(e) =>
+                            setProducts((prev) =>
+                              prev.map((x, idx) =>
+                                idx === i
+                                  ? { ...x, deposit: e.target.value.replace(/[^0-9.]/g, "") }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
                       </div>
                     )}
                     <label className="flex cursor-pointer items-center gap-1.5 pl-1 text-xs text-muted-foreground hover:text-foreground">
-                      {p.image_url
-                        ? <span className="text-primary">✓ Photo added</span>
-                        : <><span className="text-base">📷</span> Add photo</>}
-                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                        const f = e.target.files?.[0]; if (!f) return;
-                        const ext = f.name.split(".").pop();
-                        const path = `${store.owner_id}/${store.id}/products/${Date.now()}.${ext}`;
-                        const { error } = await supabase.storage.from("store-images").upload(path, f, { upsert: true });
-                        if (error) { toast.error("Photo upload failed"); return; }
-                        setProducts((prev) => prev.map((x, idx) => idx === i ? { ...x, image_url: path } : x));
-                      }} />
+                      {p.image_url ? (
+                        <span className="text-primary">✓ Photo added</span>
+                      ) : (
+                        <>
+                          <span className="text-base">📷</span> Add photo
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const ext = f.name.split(".").pop();
+                          const path = `${store.owner_id}/${store.id}/products/${Date.now()}.${ext}`;
+                          const { error } = await supabase.storage
+                            .from("store-images")
+                            .upload(path, f, { upsert: true });
+                          if (error) {
+                            toast.error("Photo upload failed");
+                            return;
+                          }
+                          setProducts((prev) =>
+                            prev.map((x, idx) => (idx === i ? { ...x, image_url: path } : x)),
+                          );
+                        }}
+                      />
                     </label>
                   </div>
                 ))}
@@ -774,22 +1566,68 @@ function EditStoreDialog({ store, onClose, onSaved }: {
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isServiceStore ? "Booking schedule" : "Business hours"}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {isServiceStore ? "Booking schedule" : "Business hours"}
+            </p>
             <div className="space-y-2">
               {editAvail.map((d, i) => (
                 <div key={d.day} className="rounded-lg border border-border p-3">
                   <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={d.active} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, active: e.target.checked } : x))} className="h-4 w-4 accent-primary" />
-                    <span className="w-10 text-sm font-medium">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.day]}</span>
+                    <input
+                      type="checkbox"
+                      checked={d.active}
+                      onChange={(e) =>
+                        setEditAvail((s) =>
+                          s.map((x, idx) => (idx === i ? { ...x, active: e.target.checked } : x)),
+                        )
+                      }
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span className="w-10 text-sm font-medium">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.day]}
+                    </span>
                     {d.active && (
                       <div className="flex flex-1 flex-wrap items-center gap-2">
-                        <Input type="time" value={d.start_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, start_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                        <Input
+                          type="time"
+                          value={d.start_time}
+                          onChange={(e) =>
+                            setEditAvail((s) =>
+                              s.map((x, idx) =>
+                                idx === i ? { ...x, start_time: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          className="h-8 text-xs w-28"
+                        />
                         <span className="text-sm text-muted-foreground">to</span>
-                        <Input type="time" value={d.end_time} onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, end_time: e.target.value } : x))} className="h-8 text-xs w-28" />
+                        <Input
+                          type="time"
+                          value={d.end_time}
+                          onChange={(e) =>
+                            setEditAvail((s) =>
+                              s.map((x, idx) =>
+                                idx === i ? { ...x, end_time: e.target.value } : x,
+                              ),
+                            )
+                          }
+                          className="h-8 text-xs w-28"
+                        />
                         {isServiceStore && (
                           <>
-                            <Select value={String(d.slot_duration_mins)} onValueChange={(v) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, slot_duration_mins: Number(v) } : x))}>
-                              <SelectTrigger className="h-8 text-xs w-24"><SelectValue /></SelectTrigger>
+                            <Select
+                              value={String(d.slot_duration_mins)}
+                              onValueChange={(v) =>
+                                setEditAvail((s) =>
+                                  s.map((x, idx) =>
+                                    idx === i ? { ...x, slot_duration_mins: Number(v) } : x,
+                                  ),
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs w-24">
+                                <SelectValue />
+                              </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="15">15 min</SelectItem>
                                 <SelectItem value="30">30 min</SelectItem>
@@ -804,7 +1642,21 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                                 min={1}
                                 max={20}
                                 value={d.max_bookings_per_slot}
-                                onChange={(e) => setEditAvail((s) => s.map((x, idx) => idx === i ? { ...x, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : x))}
+                                onChange={(e) =>
+                                  setEditAvail((s) =>
+                                    s.map((x, idx) =>
+                                      idx === i
+                                        ? {
+                                            ...x,
+                                            max_bookings_per_slot: Math.max(
+                                              1,
+                                              Number(e.target.value),
+                                            ),
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
                                 className="h-8 text-xs w-14 font-mono"
                               />
                               <span className="text-xs text-muted-foreground">clients</span>
@@ -817,13 +1669,31 @@ function EditStoreDialog({ store, onClose, onSaved }: {
                 </div>
               ))}
             </div>
-            {!isServiceStore && <p className="text-xs text-muted-foreground">Night shifts are supported. Example: 22:00 to 02:00.</p>}
+            {!isServiceStore && (
+              <p className="text-xs text-muted-foreground">
+                Night shifts are supported. Example: 22:00 to 02:00.
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || loadingProducts} className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" title={hasProductChanges ? "Store details and products updated" : ""}>
-            {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save changes"}
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={saving || loadingProducts}
+            className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+            title={hasProductChanges ? "Store details and products updated" : ""}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -844,14 +1714,18 @@ function MerchantPage() {
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
   const [editingStore, setEditingStore] = useState<StoreRow | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-    const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
-    const [verificationRequestingStoreId, setVerificationRequestingStoreId] = useState<string | null>(null);
+  const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+  const [verificationRequestingStoreId, setVerificationRequestingStoreId] = useState<string | null>(
+    null,
+  );
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [storeAvailability, setStoreAvailability] = useState<AvailabilityRow[]>([]);
   const [storeStaff, setStoreStaff] = useState<StaffRow[]>([]);
-  const [staffRatingSummary, setStaffRatingSummary] = useState<Record<string, { avg: number; count: number }>>({}); 
+  const [staffRatingSummary, setStaffRatingSummary] = useState<
+    Record<string, { avg: number; count: number }>
+  >({});
   const [editingAvailStoreId, setEditingAvailStoreId] = useState<string | null>(null);
   const [editingTeamStoreId, setEditingTeamStoreId] = useState<string | null>(null);
   const [availDraft, setAvailDraft] = useState<DayDraft[]>([]);
@@ -867,11 +1741,16 @@ function MerchantPage() {
   const [sharedStoreIds, setSharedStoreIds] = useState<Set<string>>(new Set());
   const [listingCountByStore, setListingCountByStore] = useState<Record<string, number>>({});
   const [onboardingStoreId, setOnboardingStoreId] = useState<string | null>(null);
-  const [verificationStatusByStore, setVerificationStatusByStore] = useState<Record<string, VerificationStatus>>({});
-  const [verificationTierByStore, setVerificationTierByStore] = useState<Record<string, VerificationTier>>({});
+  const [verificationStatusByStore, setVerificationStatusByStore] = useState<
+    Record<string, VerificationStatus>
+  >({});
+  const [verificationTierByStore, setVerificationTierByStore] = useState<
+    Record<string, VerificationTier>
+  >({});
 
   const handleShareStore = (storeId: string) => {
-    const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+    const domain =
+      typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
     const shareUrl = `${domain}/store/${storeId}`;
     navigator.clipboard.writeText(shareUrl);
     trackEvent("merchant_store_share", { store_id: storeId, source: "merchant_dashboard" });
@@ -921,9 +1800,17 @@ function MerchantPage() {
     let realtimeChannel: any = null;
 
     (async () => {
-      const { data: storesData, error } = await supabase.from("stores").select("*").eq("owner_id", user.id).order("created_at", { ascending: false });
+      const { data: storesData, error } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false });
       if (!isActive) return;
-      if (error) { toast.error(error.message); setBusy(false); return; }
+      if (error) {
+        toast.error(error.message);
+        setBusy(false);
+        return;
+      }
       const rows = (storesData as unknown as StoreRow[]) ?? [];
       setStores(rows);
       setVerificationStatusByStore({});
@@ -933,7 +1820,10 @@ function MerchantPage() {
       if (rows.length === 0) return;
       const storeIds = rows.map((s) => s.id);
 
-      const { data: productsData } = await db.from("store_products").select("store_id").in("store_id", storeIds);
+      const { data: productsData } = await db
+        .from("store_products")
+        .select("store_id")
+        .in("store_id", storeIds);
       const counts: Record<string, number> = {};
       for (const row of (productsData ?? []) as Array<{ store_id: string }>) {
         counts[row.store_id] = (counts[row.store_id] ?? 0) + 1;
@@ -954,14 +1844,19 @@ function MerchantPage() {
 
         const latestByStore: Record<string, VerificationStatus> = {};
         const tierByStore: Record<string, VerificationTier> = {};
-        for (const req of (reqData ?? []) as Array<{ store_id: string; status: VerificationStatus; verification_method?: string | null }>) {
+        for (const req of (reqData ?? []) as Array<{
+          store_id: string;
+          status: VerificationStatus;
+          verification_method?: string | null;
+        }>) {
           if (!latestByStore[req.store_id]) latestByStore[req.store_id] = req.status;
           if (!tierByStore[req.store_id] && req.status === "approved") {
-            tierByStore[req.store_id] = req.verification_method === "registration_number"
-              ? "verified"
-              : req.verification_method === "online_presence"
-                ? "online_verified"
-                : "unsecured_verified";
+            tierByStore[req.store_id] =
+              req.verification_method === "registration_number"
+                ? "verified"
+                : req.verification_method === "online_presence"
+                  ? "online_verified"
+                  : "unsecured_verified";
           }
         }
         setVerificationStatusByStore(latestByStore);
@@ -970,31 +1865,65 @@ function MerchantPage() {
         // Table may not be migrated yet.
       }
 
-      const { data: ordersData } = await db.from("orders").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(100);
-      setOrders(((ordersData ?? []) as unknown) as OrderRow[]);
+      const { data: ordersData } = await db
+        .from("orders")
+        .select("*")
+        .in("store_id", storeIds)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      setOrders((ordersData ?? []) as unknown as OrderRow[]);
 
       // Load messages (graceful if table not yet migrated)
       try {
-          const { data: msgsData } = await db.from("messages").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(200);
+        const { data: msgsData } = await db
+          .from("messages")
+          .select("*")
+          .in("store_id", storeIds)
+          .order("created_at", { ascending: false })
+          .limit(200);
         setMessages((msgsData ?? []) as MessageRow[]);
-      } catch { /* messages table not yet created */ }
+      } catch {
+        /* messages table not yet created */
+      }
 
       // Load posts
       try {
-        const { data: postsData } = await db.from("store_posts").select("*").in("store_id", storeIds).order("created_at", { ascending: false }).limit(200);
+        const { data: postsData } = await db
+          .from("store_posts")
+          .select("*")
+          .in("store_id", storeIds)
+          .order("created_at", { ascending: false })
+          .limit(200);
         setPosts((postsData ?? []) as PostRow[]);
-      } catch { /* posts table may not exist yet */ }
+      } catch {
+        /* posts table may not exist yet */
+      }
 
       // Load bookings and availability for Barbers/Beauty stores
-      const bookableIds = rows.filter((s) => isStoreBookable(s.category, s.selling_mode)).map((s) => s.id);
+      const bookableIds = rows
+        .filter((s) => isStoreBookable(s.category, s.selling_mode))
+        .map((s) => s.id);
       if (bookableIds.length > 0) {
         try {
-          const [{ data: availData }, { data: bookingsData }, { data: staffData }, { data: reviewsData }] = await Promise.all([
+          const [
+            { data: availData },
+            { data: bookingsData },
+            { data: staffData },
+            { data: reviewsData },
+          ] = await Promise.all([
             db.from("store_availability").select("*").in("store_id", bookableIds),
-            db.from("store_bookings").select("*").in("store_id", bookableIds)
+            db
+              .from("store_bookings")
+              .select("*")
+              .in("store_id", bookableIds)
               .gte("slot_start", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 19))
-              .order("slot_start", { ascending: true }).limit(200),
-            db.from("store_staff").select("*").in("store_id", bookableIds).order("position", { ascending: true }),
+              .order("slot_start", { ascending: true })
+              .limit(200),
+            db
+              .from("store_staff")
+              .select("*")
+              .in("store_id", bookableIds)
+              .order("position", { ascending: true }),
             db.from("staff_reviews").select("staff_id, rating").in("store_id", bookableIds),
           ]);
           setStoreAvailability((availData ?? []) as AvailabilityRow[]);
@@ -1007,49 +1936,115 @@ function MerchantPage() {
             sums[r.staff_id].count += 1;
           });
           const rmap: Record<string, { avg: number; count: number }> = {};
-          Object.keys(sums).forEach((k) => { rmap[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count }; });
+          Object.keys(sums).forEach((k) => {
+            rmap[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count };
+          });
           setStaffRatingSummary(rmap);
-        } catch { /* bookings tables not yet created */ }
+        } catch {
+          /* bookings tables not yet created */
+        }
       }
 
       // Real-time subscriptions
       realtimeChannel = supabase
         .channel("merchant-realtime")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
-          setOrders((prev) => [payload.new as OrderRow, ...prev]);
-          toast("New order received!", { description: `${(payload.new as OrderRow).reference} — ${formatCurrency(Number((payload.new as OrderRow).total_gbp), getOrderCurrency((payload.new as OrderRow).store_id))} · ${stores.find((s) => s.id === (payload.new as OrderRow).store_id)?.name ?? ""}` });
-        })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
-          setOrders((prev) => prev.map((o) => o.id === (payload.new as OrderRow).id ? payload.new as OrderRow : o));
-        })
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
-          setMessages((prev) => [payload.new as MessageRow, ...prev]);
-          toast("💬 New message!", { description: `From ${(payload.new as MessageRow).customer_name}` });
-        })
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_bookings", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
-          setBookings((prev) => [...prev, payload.new as BookingRow].sort((a, b) => a.slot_start.localeCompare(b.slot_start)));
-          toast("📅 New booking request!", { description: `${(payload.new as BookingRow).customer_name} — ${(payload.new as BookingRow).slot_start.slice(0, 16).replace("T", " ")}` });
-        })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "store_verification_requests", filter: `store_id=in.(${storeIds.join(",")})` }, (payload) => {
-          const updated = payload.new as any;
-          if (updated.status === "approved") {
-            const storeName = stores.find((s) => s.id === updated.store_id)?.name ?? "Your store";
-            toast.success(`🎉 ${storeName} is now verified!`, {
-              description: "You can now publish your store and go live on Lokal.",
-              duration: 8000,
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "orders",
+            filter: `store_id=in.(${storeIds.join(",")})`,
+          },
+          (payload) => {
+            setOrders((prev) => [payload.new as OrderRow, ...prev]);
+            toast("New order received!", {
+              description: `${(payload.new as OrderRow).reference} — ${formatCurrency(Number((payload.new as OrderRow).total_gbp), getOrderCurrency((payload.new as OrderRow).store_id))} · ${stores.find((s) => s.id === (payload.new as OrderRow).store_id)?.name ?? ""}`,
             });
-            // Update local verification status and tier
-            setVerificationStatusByStore((prev) => ({ ...prev, [updated.store_id]: "approved" }));
-            const tier = updated.verification_method === "registration_number"
-              ? "verified"
-              : updated.verification_method === "online_presence"
-                ? "online_verified"
-                : "unsecured_verified";
-            setVerificationTierByStore((prev) => ({ ...prev, [updated.store_id]: tier }));
-            // Update store is_verified flag
-            setStores((prev) => prev.map((s) => s.id === updated.store_id ? { ...s, is_verified: true } : s));
-          }
-        })
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `store_id=in.(${storeIds.join(",")})`,
+          },
+          (payload) => {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === (payload.new as OrderRow).id ? (payload.new as OrderRow) : o,
+              ),
+            );
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `store_id=in.(${storeIds.join(",")})`,
+          },
+          (payload) => {
+            setMessages((prev) => [payload.new as MessageRow, ...prev]);
+            toast("💬 New message!", {
+              description: `From ${(payload.new as MessageRow).customer_name}`,
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "store_bookings",
+            filter: `store_id=in.(${storeIds.join(",")})`,
+          },
+          (payload) => {
+            setBookings((prev) =>
+              [...prev, payload.new as BookingRow].sort((a, b) =>
+                a.slot_start.localeCompare(b.slot_start),
+              ),
+            );
+            toast("📅 New booking request!", {
+              description: `${(payload.new as BookingRow).customer_name} — ${(payload.new as BookingRow).slot_start.slice(0, 16).replace("T", " ")}`,
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "store_verification_requests",
+            filter: `store_id=in.(${storeIds.join(",")})`,
+          },
+          (payload) => {
+            const updated = payload.new as any;
+            if (updated.status === "approved") {
+              const storeName = stores.find((s) => s.id === updated.store_id)?.name ?? "Your store";
+              toast.success(`🎉 ${storeName} is now verified!`, {
+                description: "You can now publish your store and go live on Lokal.",
+                duration: 8000,
+              });
+              // Update local verification status and tier
+              setVerificationStatusByStore((prev) => ({ ...prev, [updated.store_id]: "approved" }));
+              const tier =
+                updated.verification_method === "registration_number"
+                  ? "verified"
+                  : updated.verification_method === "online_presence"
+                    ? "online_verified"
+                    : "unsecured_verified";
+              setVerificationTierByStore((prev) => ({ ...prev, [updated.store_id]: tier }));
+              // Update store is_verified flag
+              setStores((prev) =>
+                prev.map((s) => (s.id === updated.store_id ? { ...s, is_verified: true } : s)),
+              );
+            }
+          },
+        )
         .subscribe();
     })();
 
@@ -1077,7 +2072,8 @@ function MerchantPage() {
       // Check if store is verified
       if (!s.is_verified) {
         toast.error("Store not verified", {
-          description: "Your store must be verified before publishing. Submit a verification request from the Verification tab.",
+          description:
+            "Your store must be verified before publishing. Submit a verification request from the Verification tab.",
           duration: 5000,
         });
         return;
@@ -1092,13 +2088,19 @@ function MerchantPage() {
         return;
       }
 
-      const { count } = await supabase.from("store_products").select("id", { count: "exact", head: true }).eq("store_id", s.id);
+      const { count } = await supabase
+        .from("store_products")
+        .select("id", { count: "exact", head: true })
+        .eq("store_id", s.id);
       if (!count || count === 0) {
         toast.error("Add at least one product or service before publishing");
         return;
       }
     }
-    const { error } = await supabase.from("stores").update({ published: !s.published }).eq("id", s.id);
+    const { error } = await supabase
+      .from("stores")
+      .update({ published: !s.published })
+      .eq("id", s.id);
     if (error) return toast.error(error.message);
     setStores((prev) => prev.map((x) => (x.id === s.id ? { ...x, published: !s.published } : x)));
     if (!s.published) {
@@ -1115,7 +2117,6 @@ function MerchantPage() {
     setDeleting(true);
     try {
       await supabase.auth.signOut();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabaseAny = supabase as any;
       const { error } = await supabaseAny.rpc("delete_user_account");
       if (error) throw error;
@@ -1131,7 +2132,7 @@ function MerchantPage() {
   const updateOrderStatus = async (orderId: string, status: string) => {
     const { error } = await db.from("orders").update({ status }).eq("id", orderId);
     if (error) return toast.error(error.message);
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
     const labels: Record<string, string> = {
       transfer_received: "Marked as transfer received",
       ready: "Order marked ready",
@@ -1179,21 +2180,32 @@ function MerchantPage() {
   const storeCurrencyMap = Object.fromEntries(stores.map((s) => [s.id, s.currency || "GBP"]));
   const getOrderCurrency = (storeId: string) => storeCurrencyMap[storeId] || "GBP";
 
-  const pendingCount = orders.filter((o) => ["pending_transfer", "transfer_received"].includes(o.status)).length;
-  const unreadMessages = messages.filter((m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id)).length;
+  const pendingCount = orders.filter((o) =>
+    ["pending_transfer", "transfer_received"].includes(o.status),
+  ).length;
+  const unreadMessages = messages.filter(
+    (m) => m.direction === "inbound" && !seenInboundMessageIds.has(m.id),
+  ).length;
   const storesWithoutPhone = stores.filter((s) => !s.phone);
   const hasOrderableStore = stores.some((s) => !isStoreBookable(s.category, s.selling_mode));
   const hasBookableStore = stores.some((s) => isStoreBookable(s.category, s.selling_mode));
-  const onboardingStore = onboardingStoreId ? stores.find((s) => s.id === onboardingStoreId) ?? null : null;
+  const onboardingStore = onboardingStoreId
+    ? (stores.find((s) => s.id === onboardingStoreId) ?? null)
+    : null;
   const onboardingChecklist = onboardingStore
     ? {
         hasListing: (listingCountByStore[onboardingStore.id] ?? 0) > 0,
-        hasVerificationStep: onboardingStore.is_verified || verificationStatusByStore[onboardingStore.id] === "pending" || verificationStatusByStore[onboardingStore.id] === "approved",
+        hasVerificationStep:
+          onboardingStore.is_verified ||
+          verificationStatusByStore[onboardingStore.id] === "pending" ||
+          verificationStatusByStore[onboardingStore.id] === "approved",
         hasSharedLink: sharedStoreIds.has(onboardingStore.id),
       }
     : null;
   const checklistDone = onboardingChecklist
-    ? onboardingChecklist.hasListing && onboardingChecklist.hasVerificationStep && onboardingChecklist.hasSharedLink
+    ? onboardingChecklist.hasListing &&
+      onboardingChecklist.hasVerificationStep &&
+      onboardingChecklist.hasSharedLink
     : false;
 
   const dismissOnboardingChecklist = () => {
@@ -1215,7 +2227,6 @@ function MerchantPage() {
     <div className="min-h-screen overflow-x-hidden bg-background">
       <Navbar />
       <main className="container mx-auto max-w-5xl px-4 py-12">
-
         {/* Header */}
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -1223,7 +2234,10 @@ function MerchantPage() {
             <p className="mt-1 text-muted-foreground">Manage your stores and incoming orders.</p>
           </div>
           {stores.length === 0 && (
-            <Button className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95 gap-2" onClick={() => navigate({ to: "/list-store" })}>
+            <Button
+              className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95 gap-2"
+              onClick={() => navigate({ to: "/list-store" })}
+            >
               <Plus className="h-4 w-4" /> Add a store
             </Button>
           )}
@@ -1248,19 +2262,25 @@ function MerchantPage() {
 
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex items-center gap-2">
-                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasListing ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasListing ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}
+                >
                   {onboardingChecklist.hasListing ? "✓" : "1"}
                 </span>
                 <span>Add your first product or service</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasVerificationStep ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasVerificationStep ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}
+                >
                   {onboardingChecklist.hasVerificationStep ? "✓" : "2"}
                 </span>
                 <span>Submit verification request (or get verified)</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasSharedLink ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}>
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${onboardingChecklist.hasSharedLink ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}
+                >
                   {onboardingChecklist.hasSharedLink ? "✓" : "3"}
                 </span>
                 <span>Share your store link</span>
@@ -1288,8 +2308,16 @@ function MerchantPage() {
         {storesWithoutPhone.length > 0 && (
           <div className="mt-8 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
             <Phone className="h-4 w-4 shrink-0 text-amber-600" />
-            <span className="text-amber-800 font-medium">{storesWithoutPhone.length} store{storesWithoutPhone.length > 1 ? "s" : ""} missing a phone number — WhatsApp alerts won't work until you add one.</span>
-            <button onClick={() => setEditingStore(storesWithoutPhone[0])} className="ml-auto shrink-0 text-amber-700 underline text-xs font-semibold">Fix now →</button>
+            <span className="text-amber-800 font-medium">
+              {storesWithoutPhone.length} store{storesWithoutPhone.length > 1 ? "s" : ""} missing a
+              phone number — WhatsApp alerts won't work until you add one.
+            </span>
+            <button
+              onClick={() => setEditingStore(storesWithoutPhone[0])}
+              className="ml-auto shrink-0 text-amber-700 underline text-xs font-semibold"
+            >
+              Fix now →
+            </button>
           </div>
         )}
 
@@ -1298,7 +2326,11 @@ function MerchantPage() {
           <Check className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
           <div className="text-blue-900">
             <p className="font-medium">Store Verification</p>
-            <p className="mt-1 text-xs text-blue-800">Verified stores get a blue badge on their store card and detail page. Our admin team verifies stores based on business documents, reviews, and reliability metrics. This badge builds customer trust!</p>
+            <p className="mt-1 text-xs text-blue-800">
+              Verified stores get a blue badge on their store card and detail page. Our admin team
+              verifies stores based on business documents, reviews, and reliability metrics. This
+              badge builds customer trust!
+            </p>
           </div>
         </div>
 
@@ -1342,7 +2374,9 @@ function MerchantPage() {
                 Bookings
                 {bookings.filter((b) => b.status === "pending").length > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                    {bookings.filter((b) => b.status === "pending").length > 9 ? "9+" : bookings.filter((b) => b.status === "pending").length}
+                    {bookings.filter((b) => b.status === "pending").length > 9
+                      ? "9+"
+                      : bookings.filter((b) => b.status === "pending").length}
                   </span>
                 )}
               </button>
@@ -1357,8 +2391,8 @@ function MerchantPage() {
         </div>
 
         {/* Stores tab */}
-        {tab === "stores" && (
-          busy ? (
+        {tab === "stores" &&
+          (busy ? (
             <div className="mt-12 text-center text-muted-foreground">Loading your stores…</div>
           ) : stores.length === 0 ? (
             <div className="mt-8 rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
@@ -1366,36 +2400,81 @@ function MerchantPage() {
                 <StoreIcon className="h-6 w-6" />
               </div>
               <h2 className="mt-4 font-display text-2xl font-bold">No stores yet</h2>
-              <p className="mt-1 text-muted-foreground">List your first store to start receiving orders.</p>
-              <Button className="mt-5 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" onClick={() => navigate({ to: "/list-store" })}>
+              <p className="mt-1 text-muted-foreground">
+                List your first store to start receiving orders.
+              </p>
+              <Button
+                className="mt-5 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                onClick={() => navigate({ to: "/list-store" })}
+              >
                 List a store
               </Button>
             </div>
           ) : (
             <div className="mt-8 grid gap-5 md:grid-cols-2">
               {stores.map((s) => (
-                <div key={s.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+                <div
+                  key={s.id}
+                  className="overflow-hidden rounded-2xl border border-border bg-card shadow-card"
+                >
                   <div className="relative aspect-[5/2] bg-secondary">
                     {s.image_url ? (
-                      <img src={getImageUrl(s.image_url) || ""} alt={s.name} className="h-full w-full object-cover" />
+                      <img
+                        src={getImageUrl(s.image_url) || ""}
+                        alt={s.name}
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-muted-foreground"><StoreIcon className="h-8 w-8" /></div>
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        <StoreIcon className="h-8 w-8" />
+                      </div>
                     )}
-                    <div className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur ${s.published ? "bg-primary/90 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    <div
+                      className={`absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur ${s.published ? "bg-primary/90 text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                    >
                       {s.published ? "Live" : "Hidden"}
                     </div>
                   </div>
                   <div className="p-5">
                     <div className="flex items-center gap-2">
                       <h3 className="font-display text-xl font-bold">{s.name}</h3>
-                      <span className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium">{s.category}</span>
-                      {s.subcategory && <span className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{s.subcategory}</span>}
+                      <span className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium">
+                        {s.category}
+                      </span>
+                      {s.subcategory && (
+                        <span className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {s.subcategory}
+                        </span>
+                      )}
                     </div>
-                    {s.description && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description}</p>}
+                    {s.description && (
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                        {s.description}
+                      </p>
+                    )}
                     <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                      {s.region && REGIONS[s.region as keyof typeof REGIONS] && <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{REGIONS[s.region as keyof typeof REGIONS].name}{s.currency ? ` · ${REGIONS[s.region as keyof typeof REGIONS].symbol}${s.currency}` : ""}</div>}
-                      {s.address && <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" />{s.address}{s.city ? `, ${s.city}` : ""}</div>}
-                      {s.bank_name && <div className="flex items-center gap-1.5"><Landmark className="h-3 w-3" />{s.bank_name} ····{(s.bank_account_number || "").slice(-4)}</div>}
+                      {s.region && REGIONS[s.region as keyof typeof REGIONS] && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3 w-3" />
+                          {REGIONS[s.region as keyof typeof REGIONS].name}
+                          {s.currency
+                            ? ` · ${REGIONS[s.region as keyof typeof REGIONS].symbol}${s.currency}`
+                            : ""}
+                        </div>
+                      )}
+                      {s.address && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3 w-3" />
+                          {s.address}
+                          {s.city ? `, ${s.city}` : ""}
+                        </div>
+                      )}
+                      {s.bank_name && (
+                        <div className="flex items-center gap-1.5">
+                          <Landmark className="h-3 w-3" />
+                          {s.bank_name} ····{(s.bank_account_number || "").slice(-4)}
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {verificationStatusByStore[s.id] === "pending" && !s.is_verified && (
@@ -1410,7 +2489,9 @@ function MerchantPage() {
                         </div>
                       )}
                       {verificationTierByStore[s.id] && (
-                        <div className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : verificationTierByStore[s.id] === "online_verified" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                        <div
+                          className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : verificationTierByStore[s.id] === "online_verified" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}
+                        >
                           <BadgeCheck className="h-3 w-3" />
                           <span>
                             {verificationTierByStore[s.id] === "verified"
@@ -1421,22 +2502,58 @@ function MerchantPage() {
                           </span>
                         </div>
                       )}
-                      {s.category === "Groceries" && s.subcategory === "Meat & Fish" && s.health_safety_certificate_status !== "approved" && (
-                        <div className="w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
-                          Health &amp; safety certificate review: {s.health_safety_certificate_status ?? "pending"}
-                        </div>
-                      )}
-                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => togglePublish(s)} disabled={!s.is_verified && !s.published}>
-                        {s.published ? <><EyeOff className="h-3 w-3" /> Hide</> : <><Eye className="h-3 w-3" /> Publish</>}
+                      {s.category === "Groceries" &&
+                        s.subcategory === "Meat & Fish" &&
+                        s.health_safety_certificate_status !== "approved" && (
+                          <div className="w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                            Health &amp; safety certificate review:{" "}
+                            {s.health_safety_certificate_status ?? "pending"}
+                          </div>
+                        )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-[6.5rem] flex-1 gap-1.5"
+                        onClick={() => togglePublish(s)}
+                        disabled={!s.is_verified && !s.published}
+                      >
+                        {s.published ? (
+                          <>
+                            <EyeOff className="h-3 w-3" /> Hide
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3 w-3" /> Publish
+                          </>
+                        )}
                       </Button>
-                      <Button size="sm" variant="outline" className="min-w-[6.5rem] flex-1 gap-1.5" onClick={() => setEditingStore(s)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-[6.5rem] flex-1 gap-1.5"
+                        onClick={() => setEditingStore(s)}
+                      >
                         <Pencil className="h-3 w-3" /> Edit
                       </Button>
                       <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1" asChild>
                         <Link to="/">View</Link>
                       </Button>
-                      <Button size="sm" variant="outline" className="min-w-[5.5rem] flex-1 gap-1.5" onClick={() => handleShareStore(s.id)} title="Copy shareable link">
-                        {sharedStoreId === s.id ? <><Check className="h-3 w-3" /> Done</> : <><Share2 className="h-3 w-3" /> Share</>}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-[5.5rem] flex-1 gap-1.5"
+                        onClick={() => handleShareStore(s.id)}
+                        title="Copy shareable link"
+                      >
+                        {sharedStoreId === s.id ? (
+                          <>
+                            <Check className="h-3 w-3" /> Done
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-3 w-3" /> Share
+                          </>
+                        )}
                       </Button>
                       {!verificationTierByStore[s.id] && (
                         <Button
@@ -1459,18 +2576,31 @@ function MerchantPage() {
                       )}
                     </div>
                     {/* Orders for this store */}
-                    {orders.filter((o) => o.store_id === s.id && ["pending_transfer", "transfer_received"].includes(o.status)).length > 0 && (
-                      <button onClick={() => setTab("orders")} className="mt-3 w-full rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-left text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors">
+                    {orders.filter(
+                      (o) =>
+                        o.store_id === s.id &&
+                        ["pending_transfer", "transfer_received"].includes(o.status),
+                    ).length > 0 && (
+                      <button
+                        onClick={() => setTab("orders")}
+                        className="mt-3 w-full rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-left text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                      >
                         <ShoppingBag className="inline h-3.5 w-3.5 mr-1.5" />
-                        {orders.filter((o) => o.store_id === s.id && ["pending_transfer", "transfer_received"].includes(o.status)).length} active order(s) — view dashboard →
+                        {
+                          orders.filter(
+                            (o) =>
+                              o.store_id === s.id &&
+                              ["pending_transfer", "transfer_received"].includes(o.status),
+                          ).length
+                        }{" "}
+                        active order(s) — view dashboard →
                       </button>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-          )
-        )}
+          ))}
 
         {/* Orders tab */}
         {tab === "orders" && (
@@ -1481,18 +2611,41 @@ function MerchantPage() {
                   <ShoppingBag className="h-6 w-6" />
                 </div>
                 <h2 className="mt-4 font-display text-2xl font-bold">No orders yet</h2>
-                <p className="mt-1 text-muted-foreground">When shoppers place orders, they'll appear here instantly.</p>
+                <p className="mt-1 text-muted-foreground">
+                  When shoppers place orders, they'll appear here instantly.
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
                 {/* Filter row */}
                 <div className="flex gap-2 text-xs font-medium flex-wrap">
-                  {["all", "pending_transfer", "transfer_received", "ready", "completed", "cancelled"].map((f) => {
-                    const labels: Record<string, string> = { all: "All", pending_transfer: "Awaiting transfer", transfer_received: "Transfer received", ready: "Ready", completed: "Done", cancelled: "Cancelled" };
-                    const count = f === "all" ? orders.length : orders.filter((o) => o.status === f).length;
+                  {[
+                    "all",
+                    "pending_transfer",
+                    "transfer_received",
+                    "ready",
+                    "completed",
+                    "cancelled",
+                  ].map((f) => {
+                    const labels: Record<string, string> = {
+                      all: "All",
+                      pending_transfer: "Awaiting transfer",
+                      transfer_received: "Transfer received",
+                      ready: "Ready",
+                      completed: "Done",
+                      cancelled: "Cancelled",
+                    };
+                    const count =
+                      f === "all" ? orders.length : orders.filter((o) => o.status === f).length;
                     return (
-                      <span key={f} className="rounded-full bg-secondary px-3 py-1 text-muted-foreground">
-                        {labels[f]} {count > 0 && <span className="ml-1 font-bold text-foreground">{count}</span>}
+                      <span
+                        key={f}
+                        className="rounded-full bg-secondary px-3 py-1 text-muted-foreground"
+                      >
+                        {labels[f]}{" "}
+                        {count > 0 && (
+                          <span className="ml-1 font-bold text-foreground">{count}</span>
+                        )}
                       </span>
                     );
                   })}
@@ -1501,22 +2654,42 @@ function MerchantPage() {
                 {orders.map((o) => {
                   const storeName = stores.find((s) => s.id === o.store_id)?.name ?? "—";
                   const statusMeta: Record<string, { label: string; color: string }> = {
-                    pending_transfer: { label: "Awaiting transfer", color: "bg-amber-100 text-amber-800" },
-                    transfer_received: { label: "Transfer received", color: "bg-blue-100 text-blue-700" },
-                    payment_received: { label: "Transfer received", color: "bg-blue-100 text-blue-700" },
+                    pending_transfer: {
+                      label: "Awaiting transfer",
+                      color: "bg-amber-100 text-amber-800",
+                    },
+                    transfer_received: {
+                      label: "Transfer received",
+                      color: "bg-blue-100 text-blue-700",
+                    },
+                    payment_received: {
+                      label: "Transfer received",
+                      color: "bg-blue-100 text-blue-700",
+                    },
                     ready: { label: "Ready", color: "bg-green-100 text-green-700" },
                     completed: { label: "Done", color: "bg-secondary text-muted-foreground" },
                     cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
                   };
                   const sm = statusMeta[o.status] ?? statusMeta.pending_transfer;
-                  const isActive = ["pending_transfer", "transfer_received", "payment_received"].includes(o.status);
+                  const isActive = [
+                    "pending_transfer",
+                    "transfer_received",
+                    "payment_received",
+                  ].includes(o.status);
                   return (
-                    <div key={o.id} className={`rounded-xl border bg-card p-4 transition-colors ${isActive ? "border-amber-200 bg-amber-50/30" : "border-border"}`}>
+                    <div
+                      key={o.id}
+                      className={`rounded-xl border bg-card p-4 transition-colors ${isActive ? "border-amber-200 bg-amber-50/30" : "border-border"}`}
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-sm font-bold text-primary">{o.reference}</span>
-                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>
+                            <span className="font-mono text-sm font-bold text-primary">
+                              {o.reference}
+                            </span>
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}
+                            >
                               {sm.label}
                             </span>
                             <span className="text-xs text-muted-foreground">{storeName}</span>
@@ -1525,47 +2698,85 @@ function MerchantPage() {
                           {/* Customer */}
                           <div className="mt-2 flex flex-wrap items-center gap-3">
                             <span className="font-semibold text-sm">{o.customer_name}</span>
-                            <a href={`tel:${o.customer_phone}`} className="flex items-center gap-1 text-sm text-primary hover:underline">
+                            <a
+                              href={`tel:${o.customer_phone}`}
+                              className="flex items-center gap-1 text-sm text-primary hover:underline"
+                            >
                               📞 {o.customer_phone}
                             </a>
                           </div>
 
-                          {o.note && <p className="mt-1 text-xs italic text-muted-foreground">"{o.note}"</p>}
+                          {o.note && (
+                            <p className="mt-1 text-xs italic text-muted-foreground">"{o.note}"</p>
+                          )}
 
                           {/* Items */}
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {o.items.map((it, i) => (
                               <span key={i} className="rounded-md bg-secondary px-2 py-0.5 text-xs">
-                                {it.qty}× {it.name}{it.unit ? ` (${it.unit})` : ""} — {formatCurrency(it.price * it.qty, getOrderCurrency(o.store_id))}
+                                {it.qty}× {it.name}
+                                {it.unit ? ` (${it.unit})` : ""} —{" "}
+                                {formatCurrency(it.price * it.qty, getOrderCurrency(o.store_id))}
                               </span>
                             ))}
                           </div>
 
                           <div className="mt-2 text-xs text-muted-foreground">
-                            {new Date(o.created_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            {new Date(o.created_at).toLocaleDateString("en-GB", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </div>
                         </div>
 
                         {/* Amount + actions */}
                         <div className="flex flex-col items-end gap-2">
-                          <div className="font-display text-2xl font-bold">{formatCurrency(Number(o.total_gbp), getOrderCurrency(o.store_id))}</div>
+                          <div className="font-display text-2xl font-bold">
+                            {formatCurrency(Number(o.total_gbp), getOrderCurrency(o.store_id))}
+                          </div>
                           <div className="flex gap-2 flex-wrap">
                             {["pending_transfer"].includes(o.status) && (
                               <>
-                                <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => cancelOrder(o.id)}>Cancel</Button>
-                                <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => markOrderPaid(o.id)}>
-                                  <Check className="mr-1.5 h-3.5 w-3.5" />Transfer received
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 hover:bg-red-50"
+                                  onClick={() => cancelOrder(o.id)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="bg-blue-600 text-white hover:bg-blue-700"
+                                  onClick={() => markOrderPaid(o.id)}
+                                >
+                                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                                  Transfer received
                                 </Button>
                               </>
                             )}
                             {["transfer_received", "payment_received"].includes(o.status) && (
-                              <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={() => updateOrderStatus(o.id, "ready")}>
-                                <Check className="mr-1.5 h-3.5 w-3.5" />Mark ready
+                              <Button
+                                size="sm"
+                                className="bg-green-600 text-white hover:bg-green-700"
+                                onClick={() => updateOrderStatus(o.id, "ready")}
+                              >
+                                <Check className="mr-1.5 h-3.5 w-3.5" />
+                                Mark ready
                               </Button>
                             )}
                             {o.status === "ready" && (
-                              <Button size="sm" variant="outline" onClick={() => updateOrderStatus(o.id, "completed")}>
-                                <Check className="mr-1.5 h-3.5 w-3.5" />Complete
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => updateOrderStatus(o.id, "completed")}
+                              >
+                                <Check className="mr-1.5 h-3.5 w-3.5" />
+                                Complete
                               </Button>
                             )}
                           </div>
@@ -1582,7 +2793,6 @@ function MerchantPage() {
         {/* Messages tab */}
         {tab === "messages" && (
           <div className="mt-8 space-y-5">
-
             {/* WhatsApp Setup Card */}
             <div className="rounded-xl border bg-card p-5">
               <div className="mb-4 flex items-center gap-3">
@@ -1591,26 +2801,36 @@ function MerchantPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm">WhatsApp order alerts</h3>
-                  <p className="text-xs text-muted-foreground">Alerts fire to your store phone number when orders or messages arrive.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Alerts fire to your store phone number when orders or messages arrive.
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">
                 {stores.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No stores yet.</p>
-                ) : stores.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2.5 text-sm">
-                    <span className="font-medium truncate mr-3">{s.name}</span>
-                    {s.phone ? (
-                      <span className="flex items-center gap-1.5 text-green-600 text-xs font-semibold shrink-0">
-                        <Check className="h-3.5 w-3.5" /> {s.phone}
-                      </span>
-                    ) : (
-                      <button onClick={() => setEditingStore(s)} className="shrink-0 text-xs font-semibold text-amber-600 hover:underline">
-                        ⚠ Set number →
-                      </button>
-                    )}
-                  </div>
-                ))}
+                ) : (
+                  stores.map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2.5 text-sm"
+                    >
+                      <span className="font-medium truncate mr-3">{s.name}</span>
+                      {s.phone ? (
+                        <span className="flex items-center gap-1.5 text-green-600 text-xs font-semibold shrink-0">
+                          <Check className="h-3.5 w-3.5" /> {s.phone}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setEditingStore(s)}
+                          className="shrink-0 text-xs font-semibold text-amber-600 hover:underline"
+                        >
+                          ⚠ Set number →
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1621,80 +2841,138 @@ function MerchantPage() {
                   <MessageSquare className="h-6 w-6" />
                 </div>
                 <h2 className="mt-4 font-display text-2xl font-bold">No messages yet</h2>
-                <p className="mt-1 text-muted-foreground">When customers message your stores, they'll appear here in real time.</p>
+                <p className="mt-1 text-muted-foreground">
+                  When customers message your stores, they'll appear here in real time.
+                </p>
               </div>
-            ) : (() => {
-              const convMap: Record<string, { storeId: string; customerName: string; customerPhone: string; msgs: MessageRow[]; lastAt: string }> = {};
-              messages.forEach((m) => {
-                const k = `${m.store_id}::${m.customer_phone}`;
-                if (!convMap[k]) convMap[k] = { storeId: m.store_id, customerName: m.customer_name, customerPhone: m.customer_phone, msgs: [], lastAt: m.created_at };
-                convMap[k].msgs.push(m);
-                if (m.created_at > convMap[k].lastAt) convMap[k].lastAt = m.created_at;
-              });
-              const convs = Object.entries(convMap).sort(([, a], [, b]) => b.lastAt.localeCompare(a.lastAt));
-              return (
-                <div className="space-y-2">
-                  {convs.map(([key, conv]) => {
-                    const storeName = stores.find((s) => s.id === conv.storeId)?.name ?? "—";
-                    const waDigits = toWhatsAppNumber(conv.customerPhone);
-                    const waLink = waDigits
-                      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`
-                      : null;
-                    const isExpanded = expandedConv === key;
-                    const thread = [...conv.msgs].sort((a, b) => a.created_at.localeCompare(b.created_at));
-                    return (
-                      <div key={key} className="overflow-hidden rounded-xl border border-border bg-card">
-                        <button
-                          onClick={() => setExpandedConv(isExpanded ? null : key)}
-                          className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-secondary/50"
+            ) : (
+              (() => {
+                const convMap: Record<
+                  string,
+                  {
+                    storeId: string;
+                    customerName: string;
+                    customerPhone: string;
+                    msgs: MessageRow[];
+                    lastAt: string;
+                  }
+                > = {};
+                messages.forEach((m) => {
+                  const k = `${m.store_id}::${m.customer_phone}`;
+                  if (!convMap[k])
+                    convMap[k] = {
+                      storeId: m.store_id,
+                      customerName: m.customer_name,
+                      customerPhone: m.customer_phone,
+                      msgs: [],
+                      lastAt: m.created_at,
+                    };
+                  convMap[k].msgs.push(m);
+                  if (m.created_at > convMap[k].lastAt) convMap[k].lastAt = m.created_at;
+                });
+                const convs = Object.entries(convMap).sort(([, a], [, b]) =>
+                  b.lastAt.localeCompare(a.lastAt),
+                );
+                return (
+                  <div className="space-y-2">
+                    {convs.map(([key, conv]) => {
+                      const storeName = stores.find((s) => s.id === conv.storeId)?.name ?? "—";
+                      const waDigits = toWhatsAppNumber(conv.customerPhone);
+                      const waLink = waDigits
+                        ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`
+                        : null;
+                      const isExpanded = expandedConv === key;
+                      const thread = [...conv.msgs].sort((a, b) =>
+                        a.created_at.localeCompare(b.created_at),
+                      );
+                      return (
+                        <div
+                          key={key}
+                          className="overflow-hidden rounded-xl border border-border bg-card"
                         >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
-                              {conv.customerName.charAt(0).toUpperCase()}
+                          <button
+                            onClick={() => setExpandedConv(isExpanded ? null : key)}
+                            className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-secondary/50"
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold">
+                                {conv.customerName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-sm">{conv.customerName}</div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {thread[thread.length - 1]?.body}
+                                </div>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <div className="font-semibold text-sm">{conv.customerName}</div>
-                              <div className="truncate text-xs text-muted-foreground">{thread[thread.length - 1]?.body}</div>
+                            <div className="ml-2 flex shrink-0 items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{storeName}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {isExpanded ? "▲" : "▼"}
+                              </span>
                             </div>
-                          </div>
-                          <div className="ml-2 flex shrink-0 items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{storeName}</span>
-                            <span className="text-xs text-muted-foreground">{isExpanded ? "▲" : "▼"}</span>
-                          </div>
-                        </button>
-                        {isExpanded && (
-                          <div className="border-t border-border px-4 pb-4 pt-3">
-                            <div className="mb-4 max-h-64 space-y-2 overflow-y-auto">
-                              {thread.map((m) => (
-                                <div key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
-                                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
-                                    {m.body}
-                                    <div className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                                      {new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-border px-4 pb-4 pt-3">
+                              <div className="mb-4 max-h-64 space-y-2 overflow-y-auto">
+                                {thread.map((m) => (
+                                  <div
+                                    key={m.id}
+                                    className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}
+                                  >
+                                    <div
+                                      className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
+                                    >
+                                      {m.body}
+                                      <div
+                                        className={`mt-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                      >
+                                        {new Date(m.created_at).toLocaleTimeString("en-GB", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <a
+                                  href={`tel:${conv.customerPhone}`}
+                                  className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary"
+                                >
+                                  📞 Call
+                                </a>
+                                <a
+                                  href={waLink ?? "#"}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-disabled={!waLink}
+                                  onClick={(e) => {
+                                    if (!waLink) e.preventDefault();
+                                  }}
+                                  className={`rounded-full px-3 py-1.5 text-xs font-medium text-white transition-colors ${waLink ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-green-400/70"}`}
+                                >
+                                  Reply on WhatsApp
+                                </a>
+                                {!waLink && (
+                                  <span className="text-[10px] text-amber-600">
+                                    Customer phone missing country code
+                                  </span>
+                                )}
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  {conv.customerPhone}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <a href={`tel:${conv.customerPhone}`} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary">
-                                📞 Call
-                              </a>
-                              <a href={waLink ?? "#"} target="_blank" rel="noopener noreferrer" aria-disabled={!waLink} onClick={(e) => { if (!waLink) e.preventDefault(); }} className={`rounded-full px-3 py-1.5 text-xs font-medium text-white transition-colors ${waLink ? "bg-green-600 hover:bg-green-700" : "cursor-not-allowed bg-green-400/70"}`}>
-                                Reply on WhatsApp
-                              </a>
-                              {!waLink && <span className="text-[10px] text-amber-600">Customer phone missing country code</span>}
-                              <span className="ml-auto text-xs text-muted-foreground">{conv.customerPhone}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            )}
           </div>
         )}
 
@@ -1702,13 +2980,19 @@ function MerchantPage() {
         {tab === "bookings" && (
           <div className="mt-8">
             {(() => {
-              const bookableStores = stores.filter((s) => isStoreBookable(s.category, s.selling_mode));
+              const bookableStores = stores.filter((s) =>
+                isStoreBookable(s.category, s.selling_mode),
+              );
               if (bookableStores.length === 0) {
                 return (
                   <div className="rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary text-2xl">✂️</div>
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary text-2xl">
+                      ✂️
+                    </div>
                     <h2 className="mt-4 font-display text-2xl font-bold">No bookable stores</h2>
-                    <p className="mt-1 text-muted-foreground">Add a Barbers or Hair &amp; Beauty store to enable appointment booking.</p>
+                    <p className="mt-1 text-muted-foreground">
+                      Add a Barbers or Hair &amp; Beauty store to enable appointment booking.
+                    </p>
                   </div>
                 );
               }
@@ -1717,16 +3001,23 @@ function MerchantPage() {
                   {bookableStores.map((s) => {
                     const storeBookings = bookings.filter((b) => b.store_id === s.id);
                     const now = new Date().toISOString().slice(0, 19);
-                    const upcomingBookings = storeBookings.filter((b) => b.status !== "cancelled" && b.slot_start >= now);
+                    const upcomingBookings = storeBookings.filter(
+                      (b) => b.status !== "cancelled" && b.slot_start >= now,
+                    );
                     const pendingCount = storeBookings.filter((b) => b.status === "pending").length;
                     const storeAvail = storeAvailability.filter((a) => a.store_id === s.id);
-                    const members = storeStaff.filter((m) => m.store_id === s.id).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+                    const members = storeStaff
+                      .filter((m) => m.store_id === s.id)
+                      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
                     const isEditingAvail = editingAvailStoreId === s.id;
                     const isEditingTeam = editingTeamStoreId === s.id;
                     const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
                     return (
-                      <div key={s.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                      <div
+                        key={s.id}
+                        className="overflow-hidden rounded-2xl border border-border bg-card"
+                      >
                         <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-5 py-4">
                           <div>
                             <h3 className="font-display text-xl font-bold">{s.name}</h3>
@@ -1743,44 +3034,114 @@ function MerchantPage() {
                           {/* Schedule editor */}
                           <div>
                             <div className="mb-3 flex items-center justify-between">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Booking schedule</p>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Booking schedule
+                              </p>
                               <Button
-                                size="sm" variant="outline"
+                                size="sm"
+                                variant="outline"
                                 onClick={() => {
                                   if (isEditingAvail) {
                                     setEditingAvailStoreId(null);
                                   } else {
                                     const draft: DayDraft[] = [0, 1, 2, 3, 4, 5, 6].map((day) => {
                                       const ex = storeAvail.find((a) => a.day_of_week === day);
-                                      return { day, active: !!ex, start_time: ex?.start_time.slice(0, 5) ?? "09:00", end_time: ex?.end_time.slice(0, 5) ?? "18:00", slot_duration_mins: ex?.slot_duration_mins ?? 30, max_bookings_per_slot: ex?.max_bookings_per_slot ?? 1 };
+                                      return {
+                                        day,
+                                        active: !!ex,
+                                        start_time: ex?.start_time.slice(0, 5) ?? "09:00",
+                                        end_time: ex?.end_time.slice(0, 5) ?? "18:00",
+                                        slot_duration_mins: ex?.slot_duration_mins ?? 30,
+                                        max_bookings_per_slot: ex?.max_bookings_per_slot ?? 1,
+                                      };
                                     });
                                     setAvailDraft(draft);
                                     setEditingAvailStoreId(s.id);
                                   }
                                 }}
                               >
-                                {isEditingAvail ? "Cancel" : storeAvail.length === 0 ? "Set schedule" : "Edit schedule"}
+                                {isEditingAvail
+                                  ? "Cancel"
+                                  : storeAvail.length === 0
+                                    ? "Set schedule"
+                                    : "Edit schedule"}
                               </Button>
                             </div>
 
                             {isEditingAvail ? (
                               <div className="space-y-2">
                                 {availDraft.map((dayRow, i) => (
-                                  <div key={dayRow.day} className={`grid grid-cols-12 items-center gap-2 rounded-lg px-3 py-2 transition-opacity ${dayRow.active ? "bg-secondary/60" : "opacity-50 bg-secondary/20"}`}>
+                                  <div
+                                    key={dayRow.day}
+                                    className={`grid grid-cols-12 items-center gap-2 rounded-lg px-3 py-2 transition-opacity ${dayRow.active ? "bg-secondary/60" : "opacity-50 bg-secondary/20"}`}
+                                  >
                                     <div className="col-span-2 flex items-center gap-2">
-                                      <input type="checkbox" checked={dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, active: e.target.checked } : d))} className="h-4 w-4 accent-primary" />
-                                      <span className="text-xs font-semibold">{DAY_LABELS[dayRow.day]}</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={dayRow.active}
+                                        onChange={(e) =>
+                                          setAvailDraft((prev) =>
+                                            prev.map((d, idx) =>
+                                              idx === i ? { ...d, active: e.target.checked } : d,
+                                            ),
+                                          )
+                                        }
+                                        className="h-4 w-4 accent-primary"
+                                      />
+                                      <span className="text-xs font-semibold">
+                                        {DAY_LABELS[dayRow.day]}
+                                      </span>
                                     </div>
                                     <div className="col-span-4">
-                                      <Input type="time" value={dayRow.start_time} disabled={!dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, start_time: e.target.value } : d))} className="h-8 text-xs" />
+                                      <Input
+                                        type="time"
+                                        value={dayRow.start_time}
+                                        disabled={!dayRow.active}
+                                        onChange={(e) =>
+                                          setAvailDraft((prev) =>
+                                            prev.map((d, idx) =>
+                                              idx === i ? { ...d, start_time: e.target.value } : d,
+                                            ),
+                                          )
+                                        }
+                                        className="h-8 text-xs"
+                                      />
                                     </div>
                                     <div className="col-span-4 flex items-center gap-1">
-                                      <span className="shrink-0 text-xs text-muted-foreground">to</span>
-                                      <Input type="time" value={dayRow.end_time} disabled={!dayRow.active} onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, end_time: e.target.value } : d))} className="h-8 text-xs" />
+                                      <span className="shrink-0 text-xs text-muted-foreground">
+                                        to
+                                      </span>
+                                      <Input
+                                        type="time"
+                                        value={dayRow.end_time}
+                                        disabled={!dayRow.active}
+                                        onChange={(e) =>
+                                          setAvailDraft((prev) =>
+                                            prev.map((d, idx) =>
+                                              idx === i ? { ...d, end_time: e.target.value } : d,
+                                            ),
+                                          )
+                                        }
+                                        className="h-8 text-xs"
+                                      />
                                     </div>
                                     <div className="col-span-2">
-                                      <Select value={String(dayRow.slot_duration_mins)} disabled={!dayRow.active} onValueChange={(v) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, slot_duration_mins: Number(v) } : d))}>
-                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                      <Select
+                                        value={String(dayRow.slot_duration_mins)}
+                                        disabled={!dayRow.active}
+                                        onValueChange={(v) =>
+                                          setAvailDraft((prev) =>
+                                            prev.map((d, idx) =>
+                                              idx === i
+                                                ? { ...d, slot_duration_mins: Number(v) }
+                                                : d,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
                                         <SelectContent>
                                           <SelectItem value="15">15m</SelectItem>
                                           <SelectItem value="30">30m</SelectItem>
@@ -1796,10 +3157,26 @@ function MerchantPage() {
                                         max={20}
                                         disabled={!dayRow.active}
                                         value={dayRow.max_bookings_per_slot}
-                                        onChange={(e) => setAvailDraft((prev) => prev.map((d, idx) => idx === i ? { ...d, max_bookings_per_slot: Math.max(1, Number(e.target.value)) } : d))}
+                                        onChange={(e) =>
+                                          setAvailDraft((prev) =>
+                                            prev.map((d, idx) =>
+                                              idx === i
+                                                ? {
+                                                    ...d,
+                                                    max_bookings_per_slot: Math.max(
+                                                      1,
+                                                      Number(e.target.value),
+                                                    ),
+                                                  }
+                                                : d,
+                                            ),
+                                          )
+                                        }
                                         className="h-8 text-xs w-12 font-mono"
                                       />
-                                      <span className="shrink-0 text-xs text-muted-foreground">max</span>
+                                      <span className="shrink-0 text-xs text-muted-foreground">
+                                        max
+                                      </span>
                                     </div>
                                   </div>
                                 ))}
@@ -1807,35 +3184,66 @@ function MerchantPage() {
                                   className="mt-2 w-full bg-gradient-primary text-primary-foreground"
                                   onClick={async () => {
                                     try {
-                                      await db.from("store_availability").delete().eq("store_id", s.id);
+                                      await db
+                                        .from("store_availability")
+                                        .delete()
+                                        .eq("store_id", s.id);
                                       const activeDays = availDraft.filter((d) => d.active);
                                       if (activeDays.length > 0) {
-                                        const { error } = await db.from("store_availability").insert(
-                                          activeDays.map((d) => ({ store_id: s.id, day_of_week: d.day, start_time: d.start_time, end_time: d.end_time, slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot }))
-                                        );
+                                        const { error } = await db
+                                          .from("store_availability")
+                                          .insert(
+                                            activeDays.map((d) => ({
+                                              store_id: s.id,
+                                              day_of_week: d.day,
+                                              start_time: d.start_time,
+                                              end_time: d.end_time,
+                                              slot_duration_mins: d.slot_duration_mins,
+                                              max_bookings_per_slot: d.max_bookings_per_slot,
+                                            })),
+                                          );
                                         if (error) throw error;
                                       }
                                       setStoreAvailability((prev) => [
                                         ...prev.filter((a) => a.store_id !== s.id),
-                                        ...activeDays.map((d, idx) => ({ id: `new-${idx}`, store_id: s.id, day_of_week: d.day, start_time: d.start_time + ":00", end_time: d.end_time + ":00", slot_duration_mins: d.slot_duration_mins, max_bookings_per_slot: d.max_bookings_per_slot })),
+                                        ...activeDays.map((d, idx) => ({
+                                          id: `new-${idx}`,
+                                          store_id: s.id,
+                                          day_of_week: d.day,
+                                          start_time: d.start_time + ":00",
+                                          end_time: d.end_time + ":00",
+                                          slot_duration_mins: d.slot_duration_mins,
+                                          max_bookings_per_slot: d.max_bookings_per_slot,
+                                        })),
                                       ]);
                                       setEditingAvailStoreId(null);
                                       toast.success("Schedule saved");
-                                    } catch (e: any) { toast.error(e.message ?? "Could not save schedule"); }
+                                    } catch (e: any) {
+                                      toast.error(e.message ?? "Could not save schedule");
+                                    }
                                   }}
                                 >
                                   Save schedule
                                 </Button>
                               </div>
                             ) : storeAvail.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">No schedule set yet. Customers won't be able to book until you add one.</p>
+                              <p className="text-sm text-muted-foreground">
+                                No schedule set yet. Customers won't be able to book until you add
+                                one.
+                              </p>
                             ) : (
                               <div className="flex flex-wrap gap-2">
-                                {storeAvail.sort((a, b) => a.day_of_week - b.day_of_week).map((a) => (
-                                  <span key={a.id} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">
-                                    {DAY_LABELS[a.day_of_week]} {a.start_time.slice(0, 5)}–{a.end_time.slice(0, 5)} ({a.slot_duration_mins}m slots)
-                                  </span>
-                                ))}
+                                {storeAvail
+                                  .sort((a, b) => a.day_of_week - b.day_of_week)
+                                  .map((a) => (
+                                    <span
+                                      key={a.id}
+                                      className="rounded-full bg-secondary px-3 py-1 text-xs font-medium"
+                                    >
+                                      {DAY_LABELS[a.day_of_week]} {a.start_time.slice(0, 5)}–
+                                      {a.end_time.slice(0, 5)} ({a.slot_duration_mins}m slots)
+                                    </span>
+                                  ))}
                               </div>
                             )}
                           </div>
@@ -1843,7 +3251,9 @@ function MerchantPage() {
                           {/* Team editor */}
                           <div>
                             <div className="mb-3 flex items-center justify-between">
-                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Team members</p>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Team members
+                              </p>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1857,35 +3267,57 @@ function MerchantPage() {
                                         name: m.name,
                                         phone: m.phone ?? "",
                                         active: m.active,
-                                        daily_capacity: m.daily_capacity != null ? String(m.daily_capacity) : "",
-                                        available_days: Array.isArray(m.available_days) && m.available_days.length > 0
-                                          ? [...m.available_days].sort((a, b) => a - b)
-                                          : STAFF_DAY_OPTIONS.map((d) => d.day),
-                                      }))
+                                        daily_capacity:
+                                          m.daily_capacity != null ? String(m.daily_capacity) : "",
+                                        available_days:
+                                          Array.isArray(m.available_days) &&
+                                          m.available_days.length > 0
+                                            ? [...m.available_days].sort((a, b) => a - b)
+                                            : STAFF_DAY_OPTIONS.map((d) => d.day),
+                                      })),
                                     );
                                     setEditingTeamStoreId(s.id);
                                   }
                                 }}
                               >
-                                {isEditingTeam ? "Cancel" : members.length === 0 ? "Add team" : "Edit team"}
+                                {isEditingTeam
+                                  ? "Cancel"
+                                  : members.length === 0
+                                    ? "Add team"
+                                    : "Edit team"}
                               </Button>
                             </div>
 
                             {isEditingTeam ? (
                               <div className="space-y-2">
                                 {teamDraft.map((member, idx) => (
-                                  <div key={`${member.id ?? "new"}-${idx}`} className="rounded-lg bg-secondary/50 px-3 py-2">
+                                  <div
+                                    key={`${member.id ?? "new"}-${idx}`}
+                                    className="rounded-lg bg-secondary/50 px-3 py-2"
+                                  >
                                     <div className="grid grid-cols-12 items-center gap-2">
                                       <Input
                                         value={member.name}
-                                        onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, name: e.target.value } : m))}
+                                        onChange={(e) =>
+                                          setTeamDraft((prev) =>
+                                            prev.map((m, i) =>
+                                              i === idx ? { ...m, name: e.target.value } : m,
+                                            ),
+                                          )
+                                        }
                                         placeholder="Name"
                                         className="col-span-4 h-8 text-xs"
                                         maxLength={80}
                                       />
                                       <Input
                                         value={member.phone}
-                                        onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, phone: e.target.value } : m))}
+                                        onChange={(e) =>
+                                          setTeamDraft((prev) =>
+                                            prev.map((m, i) =>
+                                              i === idx ? { ...m, phone: e.target.value } : m,
+                                            ),
+                                          )
+                                        }
                                         placeholder="Phone"
                                         className="col-span-3 h-8 text-xs"
                                         maxLength={40}
@@ -1896,7 +3328,15 @@ function MerchantPage() {
                                           min={1}
                                           max={99}
                                           value={member.daily_capacity}
-                                          onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, daily_capacity: e.target.value } : m))}
+                                          onChange={(e) =>
+                                            setTeamDraft((prev) =>
+                                              prev.map((m, i) =>
+                                                i === idx
+                                                  ? { ...m, daily_capacity: e.target.value }
+                                                  : m,
+                                              ),
+                                            )
+                                          }
                                           placeholder="∞"
                                           title="Max bookings per day (leave blank for unlimited)"
                                           className="h-8 text-xs w-full font-mono"
@@ -1906,34 +3346,50 @@ function MerchantPage() {
                                         <input
                                           type="checkbox"
                                           checked={member.active}
-                                          onChange={(e) => setTeamDraft((prev) => prev.map((m, i) => i === idx ? { ...m, active: e.target.checked } : m))}
+                                          onChange={(e) =>
+                                            setTeamDraft((prev) =>
+                                              prev.map((m, i) =>
+                                                i === idx ? { ...m, active: e.target.checked } : m,
+                                              ),
+                                            )
+                                          }
                                           className="h-4 w-4 accent-primary"
                                         />
                                         Active
                                       </label>
                                       <button
-                                        onClick={() => setTeamDraft((prev) => prev.filter((_, i) => i !== idx))}
+                                        onClick={() =>
+                                          setTeamDraft((prev) => prev.filter((_, i) => i !== idx))
+                                        }
                                         className="col-span-1 flex items-center justify-center text-muted-foreground hover:text-destructive"
                                       >
                                         <Trash2 className="h-4 w-4" />
                                       </button>
                                     </div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                      <span className="mr-1 text-[11px] font-medium text-muted-foreground">Available days:</span>
+                                      <span className="mr-1 text-[11px] font-medium text-muted-foreground">
+                                        Available days:
+                                      </span>
                                       {STAFF_DAY_OPTIONS.map((d) => {
                                         const selected = member.available_days.includes(d.day);
                                         return (
                                           <button
                                             key={d.day}
                                             type="button"
-                                            onClick={() => setTeamDraft((prev) => prev.map((m, i) => {
-                                              if (i !== idx) return m;
-                                              const has = m.available_days.includes(d.day);
-                                              const available_days = has
-                                                ? m.available_days.filter((x) => x !== d.day)
-                                                : [...m.available_days, d.day].sort((a, b) => a - b);
-                                              return { ...m, available_days };
-                                            }))}
+                                            onClick={() =>
+                                              setTeamDraft((prev) =>
+                                                prev.map((m, i) => {
+                                                  if (i !== idx) return m;
+                                                  const has = m.available_days.includes(d.day);
+                                                  const available_days = has
+                                                    ? m.available_days.filter((x) => x !== d.day)
+                                                    : [...m.available_days, d.day].sort(
+                                                        (a, b) => a - b,
+                                                      );
+                                                  return { ...m, available_days };
+                                                }),
+                                              )
+                                            }
                                             className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ${selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
                                           >
                                             {d.label}
@@ -1946,7 +3402,18 @@ function MerchantPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setTeamDraft((prev) => [...prev, { name: "", phone: "", active: true, daily_capacity: "", available_days: STAFF_DAY_OPTIONS.map((d) => d.day) }])}
+                                  onClick={() =>
+                                    setTeamDraft((prev) => [
+                                      ...prev,
+                                      {
+                                        name: "",
+                                        phone: "",
+                                        active: true,
+                                        daily_capacity: "",
+                                        available_days: STAFF_DAY_OPTIONS.map((d) => d.day),
+                                      },
+                                    ])
+                                  }
                                   className="gap-1"
                                 >
                                   <Plus className="h-3 w-3" /> Add member
@@ -1956,7 +3423,11 @@ function MerchantPage() {
                                   onClick={async () => {
                                     try {
                                       const cleaned = teamDraft
-                                        .map((m) => ({ ...m, name: m.name.trim(), phone: m.phone.trim() }))
+                                        .map((m) => ({
+                                          ...m,
+                                          name: m.name.trim(),
+                                          phone: m.phone.trim(),
+                                        }))
                                         .filter((m) => m.name.length > 0);
                                       await db.from("store_staff").delete().eq("store_id", s.id);
                                       if (cleaned.length > 0) {
@@ -1967,14 +3438,23 @@ function MerchantPage() {
                                             phone: m.phone || null,
                                             active: m.active,
                                             position: i,
-                                            daily_capacity: m.daily_capacity.trim() ? Number(m.daily_capacity) : null,
+                                            daily_capacity: m.daily_capacity.trim()
+                                              ? Number(m.daily_capacity)
+                                              : null,
                                             available_days: m.available_days,
-                                          }))
+                                          })),
                                         );
                                         if (error) throw error;
                                       }
-                                      const { data: fresh } = await db.from("store_staff").select("*").eq("store_id", s.id).order("position", { ascending: true });
-                                      setStoreStaff((prev) => [...prev.filter((m) => m.store_id !== s.id), ...((fresh ?? []) as StaffRow[])]);
+                                      const { data: fresh } = await db
+                                        .from("store_staff")
+                                        .select("*")
+                                        .eq("store_id", s.id)
+                                        .order("position", { ascending: true });
+                                      setStoreStaff((prev) => [
+                                        ...prev.filter((m) => m.store_id !== s.id),
+                                        ...((fresh ?? []) as StaffRow[]),
+                                      ]);
                                       setEditingTeamStoreId(null);
                                       toast.success("Team saved");
                                     } catch (e: any) {
@@ -1986,21 +3466,33 @@ function MerchantPage() {
                                 </Button>
                               </div>
                             ) : members.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">No team added yet. Add members so customers can pick who they book with.</p>
+                              <p className="text-sm text-muted-foreground">
+                                No team added yet. Add members so customers can pick who they book
+                                with.
+                              </p>
                             ) : (
                               <div className="flex flex-wrap gap-2">
                                 {members.map((m) => {
                                   const r = staffRatingSummary[m.id];
-                                  const dayLabel = Array.isArray(m.available_days) && m.available_days.length > 0
-                                    ? m.available_days
-                                        .slice()
-                                        .sort((a, b) => a - b)
-                                        .map((d) => STAFF_DAY_OPTIONS.find((x) => x.day === d)?.label ?? d)
-                                        .join(",")
-                                    : "All days";
+                                  const dayLabel =
+                                    Array.isArray(m.available_days) && m.available_days.length > 0
+                                      ? m.available_days
+                                          .slice()
+                                          .sort((a, b) => a - b)
+                                          .map(
+                                            (d) =>
+                                              STAFF_DAY_OPTIONS.find((x) => x.day === d)?.label ??
+                                              d,
+                                          )
+                                          .join(",")
+                                      : "All days";
                                   return (
-                                    <span key={m.id} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium">
-                                      {m.name}{m.phone ? ` · ${m.phone}` : ""}
+                                    <span
+                                      key={m.id}
+                                      className="rounded-full bg-secondary px-3 py-1 text-xs font-medium"
+                                    >
+                                      {m.name}
+                                      {m.phone ? ` · ${m.phone}` : ""}
                                       {r ? ` · ★ ${r.avg.toFixed(1)} (${r.count})` : ""}
                                       {` · ${dayLabel}`}
                                       {m.active ? "" : " (inactive)"}
@@ -2013,177 +3505,368 @@ function MerchantPage() {
 
                           {/* Bookings list */}
                           <div>
-                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upcoming bookings</p>
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Upcoming bookings
+                            </p>
                             {upcomingBookings.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">No upcoming bookings yet.</p>
+                              <p className="text-sm text-muted-foreground">
+                                No upcoming bookings yet.
+                              </p>
                             ) : (
                               <div className="space-y-2">
                                 {upcomingBookings.map((b) => {
-                                  const statusMeta: Record<string, { label: string; color: string }> = {
-                                    pending: { label: "Pending", color: "bg-amber-100 text-amber-800" },
-                                    confirmed: { label: "Confirmed", color: "bg-green-100 text-green-700" },
-                                    cancelled: { label: "Cancelled", color: "bg-rose-100 text-rose-700" },
-                                    completed: { label: "Done", color: "bg-secondary text-muted-foreground" },
+                                  const statusMeta: Record<
+                                    string,
+                                    { label: string; color: string }
+                                  > = {
+                                    pending: {
+                                      label: "Pending",
+                                      color: "bg-amber-100 text-amber-800",
+                                    },
+                                    confirmed: {
+                                      label: "Confirmed",
+                                      color: "bg-green-100 text-green-700",
+                                    },
+                                    cancelled: {
+                                      label: "Cancelled",
+                                      color: "bg-rose-100 text-rose-700",
+                                    },
+                                    completed: {
+                                      label: "Done",
+                                      color: "bg-secondary text-muted-foreground",
+                                    },
                                   };
                                   const sm = statusMeta[b.status] ?? statusMeta.pending;
                                   const [datePart, timePart] = b.slot_start.split("T");
                                   const [yr, mo, dy] = datePart.split("-").map(Number);
-                                  const prettyDate = new Date(yr, mo - 1, dy).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+                                  const prettyDate = new Date(yr, mo - 1, dy).toLocaleDateString(
+                                    "en-GB",
+                                    { weekday: "short", day: "numeric", month: "short" },
+                                  );
                                   return (
-                                    <div key={b.id} className={`flex items-start justify-between gap-3 rounded-xl border bg-card p-4 transition-colors ${b.status === "pending" ? "border-amber-200 bg-amber-50/30" : "border-border"}`}>
+                                    <div
+                                      key={b.id}
+                                      className={`flex items-start justify-between gap-3 rounded-xl border bg-card p-4 transition-colors ${b.status === "pending" ? "border-amber-200 bg-amber-50/30" : "border-border"}`}
+                                    >
                                       <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <span className="font-semibold text-sm">{prettyDate} at {timePart.slice(0, 5)}</span>
-                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}>{sm.label}</span>
-                                          {b.payment_status === "deposit_paid" && <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">DEPOSIT RECEIVED</span>}
-                                          {b.payment_status === "paid" && <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-semibold text-green-700">PAID</span>}
-                                          {b.age_restricted && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">ID REQUIRED ({b.minimum_age_required ?? 18}+)</span>}
-                                          {b.age_restricted && b.merchant_age_verified && <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-semibold text-teal-800">ID VERIFIED ON ARRIVAL</span>}
+                                          <span className="font-semibold text-sm">
+                                            {prettyDate} at {timePart.slice(0, 5)}
+                                          </span>
+                                          <span
+                                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sm.color}`}
+                                          >
+                                            {sm.label}
+                                          </span>
+                                          {b.payment_status === "deposit_paid" && (
+                                            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                              DEPOSIT RECEIVED
+                                            </span>
+                                          )}
+                                          {b.payment_status === "paid" && (
+                                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-semibold text-green-700">
+                                              PAID
+                                            </span>
+                                          )}
+                                          {b.age_restricted && (
+                                            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                              ID REQUIRED ({b.minimum_age_required ?? 18}+)
+                                            </span>
+                                          )}
+                                          {b.age_restricted && b.merchant_age_verified && (
+                                            <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-semibold text-teal-800">
+                                              ID VERIFIED ON ARRIVAL
+                                            </span>
+                                          )}
                                         </div>
-                                        <div className="mt-1 font-medium text-sm">{b.customer_name}</div>
-                                        {b.service && <div className="text-xs text-muted-foreground">{b.service}</div>}
-                                        {b.staff_name && <div className="text-xs text-muted-foreground">With {b.staff_name}{b.staff_phone ? ` · ${b.staff_phone}` : ""}</div>}
-                                        {b.note && <div className="mt-1 text-xs italic text-muted-foreground">"{b.note}"</div>}
-                                        {b.age_restricted && (
-                                          <div className="mt-1 text-xs text-amber-700">
-                                            Customer pre-confirmation: {b.customer_age_confirmed ? "age confirmed" : "age not confirmed"} · {b.customer_id_commitment ? "ID promised" : "ID not confirmed"}
+                                        <div className="mt-1 font-medium text-sm">
+                                          {b.customer_name}
+                                        </div>
+                                        {b.service && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {b.service}
                                           </div>
                                         )}
-                                        <a href={`tel:${b.customer_phone}`} className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline">
+                                        {b.staff_name && (
+                                          <div className="text-xs text-muted-foreground">
+                                            With {b.staff_name}
+                                            {b.staff_phone ? ` · ${b.staff_phone}` : ""}
+                                          </div>
+                                        )}
+                                        {b.note && (
+                                          <div className="mt-1 text-xs italic text-muted-foreground">
+                                            "{b.note}"
+                                          </div>
+                                        )}
+                                        {b.age_restricted && (
+                                          <div className="mt-1 text-xs text-amber-700">
+                                            Customer pre-confirmation:{" "}
+                                            {b.customer_age_confirmed
+                                              ? "age confirmed"
+                                              : "age not confirmed"}{" "}
+                                            ·{" "}
+                                            {b.customer_id_commitment
+                                              ? "ID promised"
+                                              : "ID not confirmed"}
+                                          </div>
+                                        )}
+                                        <a
+                                          href={`tel:${b.customer_phone}`}
+                                          className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+                                        >
                                           📞 {b.customer_phone}
                                         </a>
                                       </div>
                                       <div className="flex shrink-0 flex-col items-end gap-2">
                                         {b.status === "pending" && (
                                           <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={async () => {
-                                              await db.from("store_bookings").update({ status: "cancelled" }).eq("id", b.id);
-                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "cancelled" } : x));
-                                              const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("send-booking-cancelled", {
-                                                body: {
-                                                  booking_id: b.id,
-                                                  store_id: s.id,
-                                                  store_name: s.name,
-                                                  customer_name: b.customer_name,
-                                                  customer_email: b.customer_email,
-                                                  customer_phone: b.customer_phone,
-                                                  service: b.service,
-                                                  staff_name: b.staff_name,
-                                                  slot_start: b.slot_start,
-                                                  cancelled_by: "merchant",
-                                                },
-                                              });
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="text-red-600 hover:bg-red-50"
+                                              onClick={async () => {
+                                                await db
+                                                  .from("store_bookings")
+                                                  .update({ status: "cancelled" })
+                                                  .eq("id", b.id);
+                                                setBookings((prev) =>
+                                                  prev.map((x) =>
+                                                    x.id === b.id
+                                                      ? { ...x, status: "cancelled" }
+                                                      : x,
+                                                  ),
+                                                );
+                                                const { data: notifyResult, error: notifyError } =
+                                                  await supabase.functions.invoke(
+                                                    "send-booking-cancelled",
+                                                    {
+                                                      body: {
+                                                        booking_id: b.id,
+                                                        store_id: s.id,
+                                                        store_name: s.name,
+                                                        customer_name: b.customer_name,
+                                                        customer_email: b.customer_email,
+                                                        customer_phone: b.customer_phone,
+                                                        service: b.service,
+                                                        staff_name: b.staff_name,
+                                                        slot_start: b.slot_start,
+                                                        cancelled_by: "merchant",
+                                                      },
+                                                    },
+                                                  );
 
-                                              if (notifyError) {
-                                                toast.error("Booking cancelled, but customer notification failed");
-                                              } else if (!notifyResult?.sent) {
-                                                toast.warning("Booking cancelled, but no customer contact method was available");
-                                              } else {
-                                                toast.success("Booking cancelled and customer notified");
-                                              }
-                                            }}>Cancel</Button>
-                                            <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={async () => {
-                                              const { error } = await db.from("store_bookings").update({ status: "confirmed" }).eq("id", b.id);
-                                              if (error) {
-                                                toast.error(error.message);
-                                                return;
-                                              }
-                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, status: "confirmed" } : x));
-                                              void supabase.functions.invoke("send-booking-confirmed", {
-                                                body: {
-                                                  booking_id: b.id,
-                                                  store_name: s.name,
-                                                  customer_name: b.customer_name,
-                                                  customer_email: b.customer_email,
-                                                  customer_phone: b.customer_phone,
-                                                  service: b.service,
-                                                  staff_name: b.staff_name,
-                                                  slot_start: b.slot_start,
-                                                  age_restricted: Boolean(b.age_restricted),
-                                                  minimum_age_required: b.minimum_age_required ?? null,
-                                                },
-                                              });
-                                              toast.success("Booking confirmed");
-                                            }}>
-                                              <Check className="mr-1.5 h-3.5 w-3.5" />Confirm
+                                                if (notifyError) {
+                                                  toast.error(
+                                                    "Booking cancelled, but customer notification failed",
+                                                  );
+                                                } else if (!notifyResult?.sent) {
+                                                  toast.warning(
+                                                    "Booking cancelled, but no customer contact method was available",
+                                                  );
+                                                } else {
+                                                  toast.success(
+                                                    "Booking cancelled and customer notified",
+                                                  );
+                                                }
+                                              }}
+                                            >
+                                              Cancel
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              className="bg-green-600 text-white hover:bg-green-700"
+                                              onClick={async () => {
+                                                const { error } = await db
+                                                  .from("store_bookings")
+                                                  .update({ status: "confirmed" })
+                                                  .eq("id", b.id);
+                                                if (error) {
+                                                  toast.error(error.message);
+                                                  return;
+                                                }
+                                                setBookings((prev) =>
+                                                  prev.map((x) =>
+                                                    x.id === b.id
+                                                      ? { ...x, status: "confirmed" }
+                                                      : x,
+                                                  ),
+                                                );
+                                                void supabase.functions.invoke(
+                                                  "send-booking-confirmed",
+                                                  {
+                                                    body: {
+                                                      booking_id: b.id,
+                                                      store_name: s.name,
+                                                      customer_name: b.customer_name,
+                                                      customer_email: b.customer_email,
+                                                      customer_phone: b.customer_phone,
+                                                      service: b.service,
+                                                      staff_name: b.staff_name,
+                                                      slot_start: b.slot_start,
+                                                      age_restricted: Boolean(b.age_restricted),
+                                                      minimum_age_required:
+                                                        b.minimum_age_required ?? null,
+                                                    },
+                                                  },
+                                                );
+                                                toast.success("Booking confirmed");
+                                              }}
+                                            >
+                                              <Check className="mr-1.5 h-3.5 w-3.5" />
+                                              Confirm
                                             </Button>
                                           </div>
                                         )}
-                                        {(b.status === "confirmed" || b.status === "completed") && b.payment_status !== "paid" && (
-                                          <div className="flex flex-wrap gap-2">
-                                            {s.deposit_amount && b.payment_status === "unpaid" && (
-                                              <Button size="sm" variant="outline" className="text-blue-600 hover:bg-blue-50" onClick={async () => {
-                                                await db.from("store_bookings").update({ payment_status: "deposit_paid" }).eq("id", b.id);
-                                                setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, payment_status: "deposit_paid" } : x));
-                                                toast.success("Deposit confirmed");
-                                              }}>
-                                                💳 Deposit (£{Number(s.deposit_amount).toFixed(2)})
+                                        {(b.status === "confirmed" || b.status === "completed") &&
+                                          b.payment_status !== "paid" && (
+                                            <div className="flex flex-wrap gap-2">
+                                              {s.deposit_amount &&
+                                                b.payment_status === "unpaid" && (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-blue-600 hover:bg-blue-50"
+                                                    onClick={async () => {
+                                                      await db
+                                                        .from("store_bookings")
+                                                        .update({ payment_status: "deposit_paid" })
+                                                        .eq("id", b.id);
+                                                      setBookings((prev) =>
+                                                        prev.map((x) =>
+                                                          x.id === b.id
+                                                            ? {
+                                                                ...x,
+                                                                payment_status: "deposit_paid",
+                                                              }
+                                                            : x,
+                                                        ),
+                                                      );
+                                                      toast.success("Deposit confirmed");
+                                                    }}
+                                                  >
+                                                    💳 Deposit (£
+                                                    {Number(s.deposit_amount).toFixed(2)})
+                                                  </Button>
+                                                )}
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="text-green-600 hover:bg-green-50"
+                                                onClick={async () => {
+                                                  await db
+                                                    .from("store_bookings")
+                                                    .update({ payment_status: "paid" })
+                                                    .eq("id", b.id);
+                                                  setBookings((prev) =>
+                                                    prev.map((x) =>
+                                                      x.id === b.id
+                                                        ? { ...x, payment_status: "paid" }
+                                                        : x,
+                                                    ),
+                                                  );
+                                                  toast.success("Payment confirmed");
+                                                }}
+                                              >
+                                                <Check className="mr-1.5 h-3.5 w-3.5" />
+                                                Mark paid
                                               </Button>
-                                            )}
-                                            <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50" onClick={async () => {
-                                              await db.from("store_bookings").update({ payment_status: "paid" }).eq("id", b.id);
-                                              setBookings((prev) => prev.map((x) => x.id === b.id ? { ...x, payment_status: "paid" } : x));
-                                              toast.success("Payment confirmed");
-                                            }}>
-                                              <Check className="mr-1.5 h-3.5 w-3.5" />Mark paid
-                                            </Button>
-                                          </div>
-                                        )}
+                                            </div>
+                                          )}
                                         {b.status === "confirmed" && (
                                           <>
                                             {b.age_restricted && !b.merchant_age_verified && (
-                                              <Button size="sm" variant="outline" className="text-amber-700 hover:bg-amber-50" onClick={async () => {
-                                                const verifiedAt = new Date().toISOString();
-                                                const { error } = await db.from("store_bookings").update({
-                                                  merchant_age_verified: true,
-                                                  merchant_age_verified_at: verifiedAt,
-                                                  merchant_age_verified_by: user?.id ?? null,
-                                                }).eq("id", b.id);
-                                                if (error) { toast.error(error.message); return; }
-                                                setBookings((prev) => prev.map((x) => x.id === b.id ? {
-                                                  ...x,
-                                                  merchant_age_verified: true,
-                                                  merchant_age_verified_at: verifiedAt,
-                                                } : x));
-                                                toast.success("Arrival ID and age verified");
-                                              }}>
-                                                <Check className="mr-1.5 h-3.5 w-3.5" />Verify ID on arrival
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="text-amber-700 hover:bg-amber-50"
+                                                onClick={async () => {
+                                                  const verifiedAt = new Date().toISOString();
+                                                  const { error } = await db
+                                                    .from("store_bookings")
+                                                    .update({
+                                                      merchant_age_verified: true,
+                                                      merchant_age_verified_at: verifiedAt,
+                                                      merchant_age_verified_by: user?.id ?? null,
+                                                    })
+                                                    .eq("id", b.id);
+                                                  if (error) {
+                                                    toast.error(error.message);
+                                                    return;
+                                                  }
+                                                  setBookings((prev) =>
+                                                    prev.map((x) =>
+                                                      x.id === b.id
+                                                        ? {
+                                                            ...x,
+                                                            merchant_age_verified: true,
+                                                            merchant_age_verified_at: verifiedAt,
+                                                          }
+                                                        : x,
+                                                    ),
+                                                  );
+                                                  toast.success("Arrival ID and age verified");
+                                                }}
+                                              >
+                                                <Check className="mr-1.5 h-3.5 w-3.5" />
+                                                Verify ID on arrival
                                               </Button>
                                             )}
-                                          <Button size="sm" variant="outline" onClick={async () => {
-                                            if (b.age_restricted && !b.merchant_age_verified) {
-                                              toast.error("Verify customer ID and age on arrival before marking complete");
-                                              return;
-                                            }
-                                            const completedAt = new Date().toISOString();
-                                            const { error } = await db.from("store_bookings").update({
-                                              status: "completed",
-                                              completion_confirmed_by_merchant: true,
-                                              completed_at: completedAt,
-                                            }).eq("id", b.id);
-                                            if (error) { toast.error(error.message); return; }
-                                            setBookings((prev) => prev.map((x) => x.id === b.id ? {
-                                              ...x,
-                                              status: "completed",
-                                              completion_confirmed_by_merchant: true,
-                                              completed_at: completedAt,
-                                            } : x));
-                                            void supabase.functions.invoke("send-booking-complete", {
-                                              body: {
-                                                booking_id: b.id,
-                                                store_name: s.name,
-                                                customer_name: b.customer_name,
-                                                customer_email: b.customer_email,
-                                                customer_phone: b.customer_phone,
-                                                service: b.service,
-                                                staff_name: b.staff_name,
-                                                slot_start: b.slot_start,
-                                              },
-                                            });
-                                            toast.success("Booking marked complete");
-                                          }}>
-                                            <Check className="mr-1.5 h-3.5 w-3.5" />Mark done
-                                          </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={async () => {
+                                                if (b.age_restricted && !b.merchant_age_verified) {
+                                                  toast.error(
+                                                    "Verify customer ID and age on arrival before marking complete",
+                                                  );
+                                                  return;
+                                                }
+                                                const completedAt = new Date().toISOString();
+                                                const { error } = await db
+                                                  .from("store_bookings")
+                                                  .update({
+                                                    status: "completed",
+                                                    completion_confirmed_by_merchant: true,
+                                                    completed_at: completedAt,
+                                                  })
+                                                  .eq("id", b.id);
+                                                if (error) {
+                                                  toast.error(error.message);
+                                                  return;
+                                                }
+                                                setBookings((prev) =>
+                                                  prev.map((x) =>
+                                                    x.id === b.id
+                                                      ? {
+                                                          ...x,
+                                                          status: "completed",
+                                                          completion_confirmed_by_merchant: true,
+                                                          completed_at: completedAt,
+                                                        }
+                                                      : x,
+                                                  ),
+                                                );
+                                                void supabase.functions.invoke(
+                                                  "send-booking-complete",
+                                                  {
+                                                    body: {
+                                                      booking_id: b.id,
+                                                      store_name: s.name,
+                                                      customer_name: b.customer_name,
+                                                      customer_email: b.customer_email,
+                                                      customer_phone: b.customer_phone,
+                                                      service: b.service,
+                                                      staff_name: b.staff_name,
+                                                      slot_start: b.slot_start,
+                                                    },
+                                                  },
+                                                );
+                                                toast.success("Booking marked complete");
+                                              }}
+                                            >
+                                              <Check className="mr-1.5 h-3.5 w-3.5" />
+                                              Mark done
+                                            </Button>
                                           </>
                                         )}
                                       </div>
@@ -2203,7 +3886,7 @@ function MerchantPage() {
           </div>
         )}
 
-      {/* Posts tab */}
+        {/* Posts tab */}
         {tab === "posts" && (
           <div className="mt-8 space-y-6">
             {stores.length === 0 ? (
@@ -2212,20 +3895,35 @@ function MerchantPage() {
                   <Rss className="h-6 w-6" />
                 </div>
                 <h2 className="mt-4 font-display text-2xl font-bold">No stores yet</h2>
-                <p className="mt-1 text-muted-foreground">Add a store first to start posting updates.</p>
+                <p className="mt-1 text-muted-foreground">
+                  Add a store first to start posting updates.
+                </p>
               </div>
             ) : (
               <>
                 {/* New post form */}
                 <div className="rounded-2xl border border-border bg-card p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">New update</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    New update
+                  </p>
                   <div className="space-y-3">
                     {stores.length > 1 && (
                       <div>
                         <Label>Store</Label>
-                        <Select value={postDraftStoreId ?? stores[0].id} onValueChange={setPostDraftStoreId}>
-                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                          <SelectContent>{stores.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                        <Select
+                          value={postDraftStoreId ?? stores[0].id}
+                          onValueChange={setPostDraftStoreId}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stores.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
                       </div>
                     )}
@@ -2239,7 +3937,9 @@ function MerchantPage() {
                         value={postDraftBody}
                         onChange={(e) => setPostDraftBody(e.target.value)}
                       />
-                      <p className="mt-1 text-xs text-muted-foreground text-right">{postDraftBody.length}/1000</p>
+                      <p className="mt-1 text-xs text-muted-foreground text-right">
+                        {postDraftBody.length}/1000
+                      </p>
                     </div>
                     <div>
                       <Label>Photo or video (optional)</Label>
@@ -2252,12 +3952,32 @@ function MerchantPage() {
                             mediaClassName="h-full w-full"
                             alt="Post preview"
                           />
-                          <button onClick={() => { setPostDraftMediaUrl(""); setPostDraftMediaType(""); }} className="absolute right-3 top-3 rounded-full bg-background/80 p-0.5 text-xs hover:bg-background">✕</button>
+                          <button
+                            onClick={() => {
+                              setPostDraftMediaUrl("");
+                              setPostDraftMediaType("");
+                            }}
+                            className="absolute right-3 top-3 rounded-full bg-background/80 p-0.5 text-xs hover:bg-background"
+                          >
+                            ✕
+                          </button>
                         </div>
                       )}
                       <label className="mt-1 cursor-pointer block">
-                        <div className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${postDraftUploading ? " opacity-50" : ""}`}>
-                          {postDraftUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</> : <><ImageIcon className="mr-2 h-4 w-4" />Upload media</>}
+                        <div
+                          className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${postDraftUploading ? " opacity-50" : ""}`}
+                        >
+                          {postDraftUploading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Uploading…
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="mr-2 h-4 w-4" />
+                              Upload media
+                            </>
+                          )}
                         </div>
                         <input
                           type="file"
@@ -2272,7 +3992,9 @@ function MerchantPage() {
                               const storeId = postDraftStoreId ?? stores[0].id;
                               const ext = file.name.split(".").pop();
                               const path = `${user.id}/${storeId}/post-${Date.now()}.${ext}`;
-                              const { error } = await supabase.storage.from("store-images").upload(path, file, { upsert: false });
+                              const { error } = await supabase.storage
+                                .from("store-images")
+                                .upload(path, file, { upsert: false });
                               if (error) throw error;
                               const isVideo = file.type.startsWith("video/");
                               setPostDraftMediaUrl(path);
@@ -2295,12 +4017,18 @@ function MerchantPage() {
                         setPostDraftSaving(true);
                         const storeId = postDraftStoreId ?? stores[0].id;
                         try {
-                          const { data, error } = await db.from("store_posts").insert({
-                            store_id: storeId,
-                            body: postDraftBody.trim(),
-                            image_url: postDraftMediaType === "image" ? postDraftMediaUrl || null : null,
-                            video_url: postDraftMediaType === "video" ? postDraftMediaUrl || null : null,
-                          }).select("*").single();
+                          const { data, error } = await db
+                            .from("store_posts")
+                            .insert({
+                              store_id: storeId,
+                              body: postDraftBody.trim(),
+                              image_url:
+                                postDraftMediaType === "image" ? postDraftMediaUrl || null : null,
+                              video_url:
+                                postDraftMediaType === "video" ? postDraftMediaUrl || null : null,
+                            })
+                            .select("*")
+                            .single();
                           if (error) throw error;
                           setPosts((prev) => [data as PostRow, ...prev]);
                           setPostDraftBody("");
@@ -2314,7 +4042,14 @@ function MerchantPage() {
                         }
                       }}
                     >
-                      {postDraftSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Posting…</> : "Post update"}
+                      {postDraftSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Posting…
+                        </>
+                      ) : (
+                        "Post update"
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -2323,7 +4058,9 @@ function MerchantPage() {
                 {posts.length === 0 ? (
                   <div className="rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center">
                     <Rss className="mx-auto h-8 w-8 text-muted-foreground/50 mb-3" />
-                    <p className="text-muted-foreground text-sm">No updates yet. Post your first update above.</p>
+                    <p className="text-muted-foreground text-sm">
+                      No updates yet. Post your first update above.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -2334,22 +4071,49 @@ function MerchantPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2 mb-2">
-                                <span className="text-xs font-semibold text-primary">{storeName}</span>
-                                <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                                <span className="text-xs font-semibold text-primary">
+                                  {storeName}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(post.created_at).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
                               </div>
                               <p className="text-sm whitespace-pre-wrap">{post.body}</p>
                               {post.video_url ? (
-                                <PostMedia url={post.video_url} kind="video" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" />
+                                <PostMedia
+                                  url={post.video_url}
+                                  kind="video"
+                                  className="mt-3 aspect-[16/9]"
+                                  mediaClassName="h-full w-full"
+                                />
                               ) : post.image_url ? (
-                                <PostMedia url={post.image_url} kind="image" className="mt-3 aspect-[16/9]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                                <PostMedia
+                                  url={post.image_url}
+                                  kind="image"
+                                  className="mt-3 aspect-[16/9]"
+                                  mediaClassName="h-full w-full"
+                                  alt={post.body.slice(0, 120)}
+                                />
                               ) : null}
                               <PostReactions postId={post.id} />
                             </div>
                             <button
                               className="shrink-0 text-muted-foreground hover:text-destructive"
                               onClick={async () => {
-                                const { error } = await db.from("store_posts").delete().eq("id", post.id);
-                                if (error) { toast.error(error.message); return; }
+                                const { error } = await db
+                                  .from("store_posts")
+                                  .delete()
+                                  .eq("id", post.id);
+                                if (error) {
+                                  toast.error(error.message);
+                                  return;
+                                }
                                 setPosts((prev) => prev.filter((p) => p.id !== post.id));
                                 toast.success("Post deleted");
                               }}
@@ -2369,13 +4133,22 @@ function MerchantPage() {
 
         {/* Danger zone */}
         <div className="mt-16 border-t border-border pt-8">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Account</p>
-          <p className="text-sm text-muted-foreground mb-3">Deleting your account will permanently remove all your stores, services, and listings from Lokal.</p>
-          <Button variant="outline" size="sm" className="text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200" onClick={() => setConfirmDeleteAccount(true)}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Account
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Deleting your account will permanently remove all your stores, services, and listings
+            from Lokal.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200"
+            onClick={() => setConfirmDeleteAccount(true)}
+          >
             Delete my account
           </Button>
         </div>
-
       </main>
 
       {editingStore && (
@@ -2383,7 +4156,7 @@ function MerchantPage() {
           store={editingStore}
           onClose={() => setEditingStore(null)}
           onSaved={(updated) => {
-            setStores((prev) => prev.map((s) => s.id === updated.id ? updated : s));
+            setStores((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             setEditingStore(null);
           }}
         />
@@ -2391,19 +4164,41 @@ function MerchantPage() {
 
       {/* Confirm delete account dialog */}
       {confirmDeleteAccount && (
-        <Dialog open onOpenChange={(o) => { if (!o && !deleting) setConfirmDeleteAccount(false); }}>
+        <Dialog
+          open
+          onOpenChange={(o) => {
+            if (!o && !deleting) setConfirmDeleteAccount(false);
+          }}
+        >
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Delete your account?</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              This will permanently delete your Lokal account and all your stores, products, and listings. Existing order records are retained for 12 months as per our{" "}
-              <a href="/privacy" className="underline" target="_blank">Privacy Policy</a>. This cannot be undone.
+              This will permanently delete your Lokal account and all your stores, products, and
+              listings. Existing order records are retained for 12 months as per our{" "}
+              <a href="/privacy" className="underline" target="_blank">
+                Privacy Policy
+              </a>
+              . This cannot be undone.
             </p>
             <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setConfirmDeleteAccount(false)} disabled={deleting}>Cancel</Button>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDeleteAccount(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
               <Button variant="destructive" onClick={deleteAccount} disabled={deleting}>
-                {deleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</> : "Delete my account"}
+                {deleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Delete my account"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2416,10 +4211,16 @@ function MerchantPage() {
             id: verificationRequestingStoreId,
             name: stores.find((s) => s.id === verificationRequestingStoreId)?.name || "Store",
             category: stores.find((s) => s.id === verificationRequestingStoreId)?.category,
-            subcategory: stores.find((s) => s.id === verificationRequestingStoreId)?.subcategory ?? null,
-            minimum_age: stores.find((s) => s.id === verificationRequestingStoreId)?.minimum_age ?? null,
-            tattoo_portfolio_url: stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_portfolio_url ?? null,
-            tattoo_license_url: stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_license_url ?? null,
+            subcategory:
+              stores.find((s) => s.id === verificationRequestingStoreId)?.subcategory ?? null,
+            minimum_age:
+              stores.find((s) => s.id === verificationRequestingStoreId)?.minimum_age ?? null,
+            tattoo_portfolio_url:
+              stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_portfolio_url ??
+              null,
+            tattoo_license_url:
+              stores.find((s) => s.id === verificationRequestingStoreId)?.tattoo_license_url ??
+              null,
           }}
           open={verificationDialogOpen}
           onOpenChange={(open) => {
@@ -2428,7 +4229,10 @@ function MerchantPage() {
           }}
           onSuccess={() => {
             if (verificationRequestingStoreId) {
-              setVerificationStatusByStore((prev) => ({ ...prev, [verificationRequestingStoreId]: "pending" }));
+              setVerificationStatusByStore((prev) => ({
+                ...prev,
+                [verificationRequestingStoreId]: "pending",
+              }));
             }
             setVerificationRequestingStoreId(null);
           }}

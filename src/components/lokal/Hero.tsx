@@ -54,11 +54,14 @@ export function Hero({ onSearch }: HeroProps) {
     <section className="relative overflow-hidden bg-gradient-hero">
       <div className="container relative mx-auto px-4 py-12 md:py-16 lg:py-20">
         <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-
-          <div className={`mx-auto w-full max-w-4xl transition-opacity duration-300 ${messageVisible ? "opacity-100" : "opacity-0"}`}>
+          <div
+            className={`mx-auto w-full max-w-4xl transition-opacity duration-300 ${messageVisible ? "opacity-100" : "opacity-0"}`}
+          >
             <h1 className="text-center font-display text-4xl font-bold leading-[1.05] tracking-tight text-balance md:text-5xl lg:text-6xl">
               {currentMessage.headingMain}
-              <span className="block bg-gradient-primary bg-clip-text text-transparent">{currentMessage.headingAccent}</span>
+              <span className="block bg-gradient-primary bg-clip-text text-transparent">
+                {currentMessage.headingAccent}
+              </span>
             </h1>
 
             <p className="mx-auto mt-5 max-w-sm text-center text-base text-muted-foreground">
@@ -71,7 +74,9 @@ export function Hero({ onSearch }: HeroProps) {
               <Button
                 size="lg"
                 className="gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-                onClick={() => trackEvent("merchant_cta_click", { placement: "hero", target: "list-store" })}
+                onClick={() =>
+                  trackEvent("merchant_cta_click", { placement: "hero", target: "list-store" })
+                }
               >
                 List your store <ArrowRight className="h-4 w-4" />
               </Button>
@@ -88,10 +93,18 @@ export function Hero({ onSearch }: HeroProps) {
               <div className="flex flex-1 items-center gap-2 px-3">
                 <MapPin className="h-5 w-5 shrink-0 text-primary" />
                 <Input
-                  placeholder={loading ? "Detecting location…" : city ? `Stores near ${city}` : "Postcode or city"}
+                  placeholder={
+                    loading
+                      ? "Detecting location…"
+                      : city
+                        ? `Stores near ${city}`
+                        : "Postcode or city"
+                  }
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSearch();
+                  }}
                   className="h-12 border-0 px-0 text-base shadow-none focus-visible:ring-0"
                 />
               </div>
@@ -110,9 +123,15 @@ export function Hero({ onSearch }: HeroProps) {
           </div>
 
           <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-            <span><strong className="text-foreground">Direct</strong> messaging</span>
-            <span><strong className="text-foreground">Bank transfer</strong> — no card fees</span>
-            <span><strong className="text-foreground">Free</strong> to list your store</span>
+            <span>
+              <strong className="text-foreground">Direct</strong> messaging
+            </span>
+            <span>
+              <strong className="text-foreground">Bank transfer</strong> — no card fees
+            </span>
+            <span>
+              <strong className="text-foreground">Free</strong> to list your store
+            </span>
           </div>
         </div>
       </div>

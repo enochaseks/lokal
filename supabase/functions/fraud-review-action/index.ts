@@ -22,17 +22,17 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
     const body: ReviewActionRequest = await req.json();
     const { review_id, action, admin_id } = body;
 
     if (!review_id || !action || !admin_id) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: corsHeaders }
-      );
+      return new Response(JSON.stringify({ error: "Missing required fields" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
     }
 
     // Get the review
@@ -43,10 +43,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (reviewErr || !review) {
-      return new Response(
-        JSON.stringify({ error: "Review not found" }),
-        { status: 404, headers: corsHeaders }
-      );
+      return new Response(JSON.stringify({ error: "Review not found" }), {
+        status: 404,
+        headers: corsHeaders,
+      });
     }
 
     // Handle approve action
@@ -70,36 +70,24 @@ Deno.serve(async (req) => {
         })
         .eq("id", review.risk_score_id);
 
-      return new Response(
-        JSON.stringify({ success: true, message: "Store approved" }),
-        { status: 200, headers: corsHeaders }
-      );
+      return new Response(JSON.stringify({ success: true, message: "Store approved" }), {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
 
     // Handle reject action (delete store)
     if (action === "reject") {
       // Delete associated products and staff first (FK constraints)
       if (review.entity_type === "store") {
-        await supabase
-          .from("store_products")
-          .delete()
-          .eq("store_id", review.entity_id);
+        await supabase.from("store_products").delete().eq("store_id", review.entity_id);
 
-        await supabase
-          .from("store_staff")
-          .delete()
-          .eq("store_id", review.entity_id);
+        await supabase.from("store_staff").delete().eq("store_id", review.entity_id);
 
-        await supabase
-          .from("store_availability")
-          .delete()
-          .eq("store_id", review.entity_id);
+        await supabase.from("store_availability").delete().eq("store_id", review.entity_id);
 
         // Delete the store
-        await supabase
-          .from("stores")
-          .delete()
-          .eq("id", review.entity_id);
+        await supabase.from("stores").delete().eq("id", review.entity_id);
       }
 
       // Update review and risk score
@@ -122,7 +110,7 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, message: "Store rejected and deleted" }),
-        { status: 200, headers: corsHeaders }
+        { status: 200, headers: corsHeaders },
       );
     }
 
@@ -139,26 +127,14 @@ Deno.serve(async (req) => {
         const storeIds = userStores.map((s) => s.id);
 
         // Delete products, staff, availability for all stores
-        await supabase
-          .from("store_products")
-          .delete()
-          .in("store_id", storeIds);
+        await supabase.from("store_products").delete().in("store_id", storeIds);
 
-        await supabase
-          .from("store_staff")
-          .delete()
-          .in("store_id", storeIds);
+        await supabase.from("store_staff").delete().in("store_id", storeIds);
 
-        await supabase
-          .from("store_availability")
-          .delete()
-          .in("store_id", storeIds);
+        await supabase.from("store_availability").delete().in("store_id", storeIds);
 
         // Delete stores
-        await supabase
-          .from("stores")
-          .delete()
-          .in("id", storeIds);
+        await supabase.from("stores").delete().in("id", storeIds);
       }
 
       // Mark user as blocked in profile_risk_scores
@@ -196,19 +172,19 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, message: "User blocked and stores deleted" }),
-        { status: 200, headers: corsHeaders }
+        { status: 200, headers: corsHeaders },
       );
     }
 
-    return new Response(
-      JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ error: "Invalid action" }), {
+      status: 400,
+      headers: corsHeaders,
+    });
   } catch (error: any) {
     console.error("Error processing fraud review action:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
-      { status: 500, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ error: error.message || "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 });

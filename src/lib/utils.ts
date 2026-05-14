@@ -51,11 +51,10 @@ function normalizeSocialPath(value: string, domainPattern: RegExp) {
   if (!trimmed) return null;
 
   const withoutProtocol = trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
-  const normalizedSource = domainPattern.test(withoutProtocol) ? withoutProtocol.replace(domainPattern, "") : trimmed;
-  const handle = normalizedSource
-    .replace(/^@/, "")
-    .split(/[/?#]/)[0]
-    .trim();
+  const normalizedSource = domainPattern.test(withoutProtocol)
+    ? withoutProtocol.replace(domainPattern, "")
+    : trimmed;
+  const handle = normalizedSource.replace(/^@/, "").split(/[/?#]/)[0].trim();
 
   return handle || null;
 }
@@ -83,28 +82,31 @@ export function buildTikTokUrl(handle: string | null | undefined): string | null
  * Check if a category/subcategory combination requires body-contact verification
  * (portfolio, license, age verification).
  */
-export function isBodyContactService(category?: string | null, subcategory?: string | null): boolean {
+export function isBodyContactService(
+  category?: string | null,
+  subcategory?: string | null,
+): boolean {
   if (category === "Body Arts & Crafts") {
     return ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(subcategory ?? "");
   }
   return false;
 }
-export function formatCurrency(amount: number, currency: string = 'USD'): string {
+export function formatCurrency(amount: number, currency: string = "USD"): string {
   const currencyMap: Record<string, { symbol: string; locale: string }> = {
-    'USD': { symbol: '$', locale: 'en-US' },
-    'EUR': { symbol: '€', locale: 'en-DE' },
-    'GBP': { symbol: '£', locale: 'en-GB' },
-    'INR': { symbol: '₹', locale: 'en-IN' },
-    'JPY': { symbol: '¥', locale: 'ja-JP' },
-    'CNY': { symbol: '¥', locale: 'zh-CN' },
-    'KRW': { symbol: '₩', locale: 'ko-KR' },
+    USD: { symbol: "$", locale: "en-US" },
+    EUR: { symbol: "€", locale: "en-DE" },
+    GBP: { symbol: "£", locale: "en-GB" },
+    INR: { symbol: "₹", locale: "en-IN" },
+    JPY: { symbol: "¥", locale: "ja-JP" },
+    CNY: { symbol: "¥", locale: "zh-CN" },
+    KRW: { symbol: "₩", locale: "ko-KR" },
   };
 
-  const config = currencyMap[currency] || { symbol: currency, locale: 'en-US' };
-  
+  const config = currencyMap[currency] || { symbol: currency, locale: "en-US" };
+
   try {
     return new Intl.NumberFormat(config.locale, {
-      style: 'currency',
+      style: "currency",
       currency: currency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,

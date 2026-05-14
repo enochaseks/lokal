@@ -103,8 +103,12 @@ Deno.serve(async (req) => {
     }
 
     const slotStr = prettySlot(payload.slot_start);
-    const serviceText = payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : "";
-    const staffText = payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : "";
+    const serviceText = payload.service
+      ? `<p><strong>Service:</strong> ${payload.service}</p>`
+      : "";
+    const staffText = payload.staff_name
+      ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>`
+      : "";
 
     const html = `
       <h2>Booking cancelled</h2>
@@ -163,7 +167,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    let merchantResult: { ok: boolean; body: string } = { ok: false, body: "merchant notification not required" };
+    let merchantResult: { ok: boolean; body: string } = {
+      ok: false,
+      body: "merchant notification not required",
+    };
     if (cancelledBy === "customer") {
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -174,7 +181,7 @@ Deno.serve(async (req) => {
         if (!resolvedStoreId) {
           const bookingRes = await fetch(
             `${supabaseUrl}/rest/v1/store_bookings?id=eq.${payload.booking_id}&select=store_id`,
-            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
           );
           const bookingRows = await bookingRes.json();
           resolvedStoreId = bookingRows?.[0]?.store_id ?? null;
@@ -183,7 +190,7 @@ Deno.serve(async (req) => {
         if (resolvedStoreId) {
           const storeRes = await fetch(
             `${supabaseUrl}/rest/v1/stores?id=eq.${resolvedStoreId}&select=owner_id,phone,name`,
-            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+            { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
           );
           const stores = await storeRes.json();
           const ownerId = stores?.[0]?.owner_id;
@@ -192,10 +199,9 @@ Deno.serve(async (req) => {
 
           let merchantEmail: string | null = null;
           if (ownerId) {
-            const userRes = await fetch(
-              `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
-              { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
-            );
+            const userRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${ownerId}`, {
+              headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+            });
             const user = await userRes.json();
             merchantEmail = user?.email ?? user?.user?.email ?? null;
           }
@@ -257,10 +263,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult, merchant: merchantResult }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        sent: emailResult.ok || smsResult.ok,
+        email: emailResult,
+        sms: smsResult,
+        merchant: merchantResult,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (err: unknown) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,

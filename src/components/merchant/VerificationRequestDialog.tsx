@@ -1,9 +1,21 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,7 +71,9 @@ export function VerificationRequestDialog({
       formData.verificationMethod === "manual_review" && formData.manualReviewDetails.trim()
         ? `Manual review details:\n${formData.manualReviewDetails.trim()}`
         : null,
-      formData.supportingLinks.trim() ? `Supporting links: ${formData.supportingLinks.trim()}` : null,
+      formData.supportingLinks.trim()
+        ? `Supporting links: ${formData.supportingLinks.trim()}`
+        : null,
       isBodyArtsArtistStore
         ? `${bodyArtsLabel} verification details:\nMinimum age: ${formData.tattooMinimumAge}\nPortfolio: ${formData.tattooPortfolioUrl.trim() || "Not provided"}\nLicence/ID: ${formData.tattooLicenseUrl.trim() || "Not provided"}\nAge restriction acknowledged: ${formData.tattooAgeRestrictionAcknowledged ? "Yes" : "No"}`
         : null,
@@ -87,23 +101,38 @@ export function VerificationRequestDialog({
       return;
     }
 
-    if (formData.verificationMethod === "registration_number" && !formData.businessRegistrationNumber.trim()) {
-      toast.error("Please enter your business registration number or choose another verification route.");
+    if (
+      formData.verificationMethod === "registration_number" &&
+      !formData.businessRegistrationNumber.trim()
+    ) {
+      toast.error(
+        "Please enter your business registration number or choose another verification route.",
+      );
       return;
     }
 
     if (formData.verificationMethod === "online_presence" && !formData.onlinePresenceUrl.trim()) {
-      toast.error("Please add your website, Instagram, TikTok, Etsy, or other online storefront link.");
+      toast.error(
+        "Please add your website, Instagram, TikTok, Etsy, or other online storefront link.",
+      );
       return;
     }
 
-    if (formData.verificationMethod === "manual_review" && formData.submissionReason.trim().length < 30) {
+    if (
+      formData.verificationMethod === "manual_review" &&
+      formData.submissionReason.trim().length < 30
+    ) {
       toast.error("Tell us more about your business so we can manually review it safely.");
       return;
     }
 
-    if (formData.verificationMethod === "manual_review" && formData.manualReviewDetails.trim().length < 80) {
-      toast.error("Manual review needs a more detailed explanation, please add at least 80 characters.");
+    if (
+      formData.verificationMethod === "manual_review" &&
+      formData.manualReviewDetails.trim().length < 80
+    ) {
+      toast.error(
+        "Manual review needs a more detailed explanation, please add at least 80 characters.",
+      );
       return;
     }
 
@@ -121,7 +150,9 @@ export function VerificationRequestDialog({
         return;
       }
       if (!formData.tattooAgeRestrictionAcknowledged) {
-        toast.error("Please confirm your services enforce the age restriction and in-person ID checks.");
+        toast.error(
+          "Please confirm your services enforce the age restriction and in-person ID checks.",
+        );
         return;
       }
     }
@@ -133,32 +164,35 @@ export function VerificationRequestDialog({
       const ownerId = authData.user?.id;
       if (!ownerId) throw new Error("You must be signed in to submit verification.");
 
-      const { error } = await supabase
-        .from("store_verification_requests")
-        .insert({
-          store_id: store.id,
-          owner_id: ownerId,
-          business_name: formData.businessName,
-          verification_method: formData.verificationMethod,
-          business_registration_number: formData.businessRegistrationNumber,
-          online_presence_url: formData.onlinePresenceUrl || null,
-          manual_review_details: formData.manualReviewDetails || null,
-          supporting_links: formData.supportingLinks || null,
-          is_tattoo_verification: isBodyArtsArtistStore,
-          tattoo_minimum_age: isBodyArtsArtistStore ? formData.tattooMinimumAge : null,
-          tattoo_portfolio_url: isBodyArtsArtistStore ? formData.tattooPortfolioUrl || null : null,
-          tattoo_license_url: isBodyArtsArtistStore ? formData.tattooLicenseUrl || null : null,
-          tattoo_age_restriction_acknowledged: isBodyArtsArtistStore ? formData.tattooAgeRestrictionAcknowledged : null,
-          owner_name: formData.ownerName,
-          submission_reason: formatSubmitReason(),
-        });
+      const { error } = await supabase.from("store_verification_requests").insert({
+        store_id: store.id,
+        owner_id: ownerId,
+        business_name: formData.businessName,
+        verification_method: formData.verificationMethod,
+        business_registration_number: formData.businessRegistrationNumber,
+        online_presence_url: formData.onlinePresenceUrl || null,
+        manual_review_details: formData.manualReviewDetails || null,
+        supporting_links: formData.supportingLinks || null,
+        is_tattoo_verification: isBodyArtsArtistStore,
+        tattoo_minimum_age: isBodyArtsArtistStore ? formData.tattooMinimumAge : null,
+        tattoo_portfolio_url: isBodyArtsArtistStore ? formData.tattooPortfolioUrl || null : null,
+        tattoo_license_url: isBodyArtsArtistStore ? formData.tattooLicenseUrl || null : null,
+        tattoo_age_restriction_acknowledged: isBodyArtsArtistStore
+          ? formData.tattooAgeRestrictionAcknowledged
+          : null,
+        owner_name: formData.ownerName,
+        submission_reason: formatSubmitReason(),
+      });
 
       const submitReason = formatSubmitReason();
 
       if (error) {
         const message = String((error as { message?: string }).message ?? error);
         // Only fallback for legacy schema mismatch (missing columns), never for constraint/validation errors.
-        const fallbackNeeded = /column .* does not exist|could not find the .* column|schema cache|unknown column|pgrst/i.test(message);
+        const fallbackNeeded =
+          /column .* does not exist|could not find the .* column|schema cache|unknown column|pgrst/i.test(
+            message,
+          );
         if (fallbackNeeded) {
           const { error: fallbackError } = await supabase
             .from("store_verification_requests")
@@ -177,28 +211,36 @@ export function VerificationRequestDialog({
         }
       }
 
-      void supabase.functions.invoke("send-verification-alert", {
-        body: {
-          store_id: store.id,
-          store_name: store.name,
-          business_name: formData.businessName,
-          owner_name: formData.ownerName,
-          verification_method: formData.verificationMethod,
-          submission_reason: submitReason,
-          requester_email: authData.user?.email ?? null,
-          is_tattoo_verification: isBodyArtsArtistStore,
-          tattoo_minimum_age: isBodyArtsArtistStore ? formData.tattooMinimumAge : null,
-          tattoo_portfolio_url: isBodyArtsArtistStore ? formData.tattooPortfolioUrl || null : null,
-          tattoo_license_url: isBodyArtsArtistStore ? formData.tattooLicenseUrl || null : null,
-          tattoo_age_restriction_acknowledged: isBodyArtsArtistStore ? formData.tattooAgeRestrictionAcknowledged : null,
-        },
-      }).then(({ error: fnError }) => {
-        if (fnError) {
-          console.error("send-verification-alert failed", fnError.message);
-        }
-      });
+      void supabase.functions
+        .invoke("send-verification-alert", {
+          body: {
+            store_id: store.id,
+            store_name: store.name,
+            business_name: formData.businessName,
+            owner_name: formData.ownerName,
+            verification_method: formData.verificationMethod,
+            submission_reason: submitReason,
+            requester_email: authData.user?.email ?? null,
+            is_tattoo_verification: isBodyArtsArtistStore,
+            tattoo_minimum_age: isBodyArtsArtistStore ? formData.tattooMinimumAge : null,
+            tattoo_portfolio_url: isBodyArtsArtistStore
+              ? formData.tattooPortfolioUrl || null
+              : null,
+            tattoo_license_url: isBodyArtsArtistStore ? formData.tattooLicenseUrl || null : null,
+            tattoo_age_restriction_acknowledged: isBodyArtsArtistStore
+              ? formData.tattooAgeRestrictionAcknowledged
+              : null,
+          },
+        })
+        .then(({ error: fnError }) => {
+          if (fnError) {
+            console.error("send-verification-alert failed", fnError.message);
+          }
+        });
 
-      toast.success("✅ Verification request submitted! Our team will review it within 2-3 business days.");
+      toast.success(
+        "✅ Verification request submitted! Our team will review it within 2-3 business days.",
+      );
       setFormData({
         businessName: store.name,
         verificationMethod: "online_presence",
@@ -240,9 +282,7 @@ export function VerificationRequestDialog({
             <Input
               id="businessName"
               value={formData.businessName}
-              onChange={(e) =>
-                setFormData({ ...formData, businessName: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
               placeholder="Your business name"
             />
           </div>
@@ -252,16 +292,16 @@ export function VerificationRequestDialog({
             <Input
               id="ownerName"
               value={formData.ownerName}
-              onChange={(e) =>
-                setFormData({ ...formData, ownerName: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
               placeholder="Your full name"
             />
           </div>
 
           {isBodyArtsArtistStore && (
             <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm font-medium text-amber-900">{bodyArtsLabel} verification requirements</p>
+              <p className="text-sm font-medium text-amber-900">
+                {bodyArtsLabel} verification requirements
+              </p>
               <div className="space-y-2">
                 <Label htmlFor="tattooMinimumAge">Minimum age restriction *</Label>
                 <Input
@@ -270,7 +310,9 @@ export function VerificationRequestDialog({
                   min={18}
                   max={99}
                   value={formData.tattooMinimumAge}
-                  onChange={(e) => setFormData({ ...formData, tattooMinimumAge: Number(e.target.value || 18) })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tattooMinimumAge: Number(e.target.value || 18) })
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -296,16 +338,23 @@ export function VerificationRequestDialog({
                   type="checkbox"
                   className="mt-0.5"
                   checked={formData.tattooAgeRestrictionAcknowledged}
-                  onChange={(e) => setFormData({ ...formData, tattooAgeRestrictionAcknowledged: e.target.checked })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tattooAgeRestrictionAcknowledged: e.target.checked })
+                  }
                 />
-                <span>I confirm these services are restricted to eligible adults and in-person ID checks are enforced.</span>
+                <span>
+                  I confirm these services are restricted to eligible adults and in-person ID checks
+                  are enforced.
+                </span>
               </label>
             </div>
           )}
 
           <div className="space-y-2">
             <Label htmlFor="verificationMethod">
-              {isBodyArtsArtistStore ? "Body Arts Artist Verification Route *" : "Business Type / Verification Route *"}
+              {isBodyArtsArtistStore
+                ? "Body Arts Artist Verification Route *"
+                : "Business Type / Verification Route *"}
             </Label>
             <Select
               value={formData.verificationMethod}
@@ -343,9 +392,7 @@ export function VerificationRequestDialog({
                 }
                 placeholder="e.g., Company registration number"
               />
-              <p className="text-xs text-muted-foreground">
-                Required for registered businesses.
-              </p>
+              <p className="text-xs text-muted-foreground">Required for registered businesses.</p>
             </div>
           )}
 
@@ -364,7 +411,8 @@ export function VerificationRequestDialog({
                 placeholder="e.g., Instagram profile, TikTok page, website, Etsy store"
               />
               <p className="text-xs text-muted-foreground">
-                Required for online verification. Add a website, Instagram, TikTok, Etsy, or similar storefront.
+                Required for online verification. Add a website, Instagram, TikTok, Etsy, or similar
+                storefront.
               </p>
             </div>
           )}
@@ -415,9 +463,7 @@ export function VerificationRequestDialog({
             <Textarea
               id="reason"
               value={formData.submissionReason}
-              onChange={(e) =>
-                setFormData({ ...formData, submissionReason: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, submissionReason: e.target.value })}
               placeholder="Tell us about your business, years in operation, customer reviews, social proof, shipping history, etc."
               className="h-24"
             />
@@ -427,7 +473,8 @@ export function VerificationRequestDialog({
           </div>
 
           <div className="rounded-lg bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-900/30 dark:text-blue-300">
-            💡 Verified stores display a trust badge on their profile. Our team reviews applications within 2-3 business days.
+            💡 Verified stores display a trust badge on their profile. Our team reviews applications
+            within 2-3 business days.
           </div>
 
           <DialogFooter>

@@ -33,7 +33,12 @@ function prettySlot(iso: string): string {
   const [datePart, timePart] = iso.split("T");
   const [y, mo, d] = datePart.split("-").map(Number);
   const date = new Date(y, mo - 1, d);
-  const dateStr = date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateStr = date.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   const time = timePart.slice(0, 5);
   return `${dateStr} at ${time}`;
 }
@@ -62,7 +67,7 @@ Deno.serve(async (req) => {
     // Look up merchant email and phone via service role
     const storeRes = await fetch(
       `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
@@ -75,10 +80,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
-    );
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${ownerId}`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
     const user = await userRes.json();
     const merchantEmail = user?.email ?? user?.user?.email ?? null;
 
@@ -107,7 +111,9 @@ Deno.serve(async (req) => {
       payload.age_restricted ? `ID check required (${payload.minimum_age_required ?? 18}+).` : null,
       `Phone: ${payload.customer_phone}`,
       `Manage: lokalshops.co.uk`,
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     // Try SMS first; fall back to email if SMS is unavailable or fails.
     let smsResult: { ok: boolean; body: string } = { ok: false, body: "merchant phone not found" };
@@ -147,7 +153,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";

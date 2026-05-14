@@ -62,8 +62,12 @@ Deno.serve(async (req) => {
     }
 
     const slotStr = prettySlot(payload.slot_start);
-    const serviceText = payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : "";
-    const staffText = payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : "";
+    const serviceText = payload.service
+      ? `<p><strong>Service:</strong> ${payload.service}</p>`
+      : "";
+    const staffText = payload.staff_name
+      ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>`
+      : "";
 
     const html = `
       <h2>Thank you for visiting ${payload.store_name}!</h2>
@@ -120,14 +124,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ email: emailResult, sms: smsResult }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ email: emailResult, sms: smsResult }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

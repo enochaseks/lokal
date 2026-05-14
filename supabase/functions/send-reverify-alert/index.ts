@@ -106,23 +106,26 @@ Deno.serve(async (req) => {
       users?: Array<{ email?: string | null }>;
     };
     const ownerEmail =
-      userPayload?.user?.email
-      ?? userPayload?.email
-      ?? userPayload?.data?.user?.email
-      ?? userPayload?.data?.email
-      ?? userPayload?.users?.[0]?.email
-      ?? null;
+      userPayload?.user?.email ??
+      userPayload?.email ??
+      userPayload?.data?.user?.email ??
+      userPayload?.data?.email ??
+      userPayload?.users?.[0]?.email ??
+      null;
     if (!ownerEmail) {
       throw new Error("Owner email not found");
     }
 
     const parsedEvidence = parseSubmissionEvidence(payload.submission_reason);
-    const displayMinimumAge = payload.tattoo_minimum_age ?? parsedEvidence.minimumAge ?? "Not provided";
+    const displayMinimumAge =
+      payload.tattoo_minimum_age ?? parsedEvidence.minimumAge ?? "Not provided";
     const displayPortfolio = payload.tattoo_portfolio_url ?? parsedEvidence.portfolio ?? null;
     const displayLicence = payload.tattoo_license_url ?? parsedEvidence.licence ?? null;
     const displayAgeAck =
       payload.tattoo_age_restriction_acknowledged != null
-        ? (payload.tattoo_age_restriction_acknowledged ? "Yes" : "No")
+        ? payload.tattoo_age_restriction_acknowledged
+          ? "Yes"
+          : "No"
         : (parsedEvidence.ageAck ?? "Not provided");
 
     const html = `
@@ -145,7 +148,9 @@ Deno.serve(async (req) => {
         }</p>
       </div>
       
-      ${payload.is_body_arts_verification ? `
+      ${
+        payload.is_body_arts_verification
+          ? `
       <h3>Body Arts & Crafts Verification Requirements:</h3>
       <div style="background-color: #fff3e0; padding: 12px; border-radius: 4px; margin: 12px 0;">
         <p><strong>Minimum Age Policy:</strong> ${displayMinimumAge}</p>
@@ -153,35 +158,54 @@ Deno.serve(async (req) => {
         <p><strong>License/ID URL:</strong> ${displayLicence ? `<a href="${displayLicence}" target="_blank">${displayLicence}</a>` : "Not provided"}</p>
         <p><strong>Age restriction acknowledged:</strong> ${displayAgeAck}</p>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
       
-      ${payload.verification_method === "registration_number" && payload.business_registration_number ? `
+      ${
+        payload.verification_method === "registration_number" &&
+        payload.business_registration_number
+          ? `
       <h3>Business Registration:</h3>
       <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; margin: 12px 0;">
         <p><strong>Registration Number:</strong> ${payload.business_registration_number}</p>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
       
-      ${payload.verification_method === "online_presence" && payload.online_presence_url ? `
+      ${
+        payload.verification_method === "online_presence" && payload.online_presence_url
+          ? `
       <h3>Online Presence:</h3>
       <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; margin: 12px 0;">
         <p><a href="${payload.online_presence_url}" target="_blank">${payload.online_presence_url}</a></p>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
 
-      ${payload.verification_method === "manual_review" && payload.manual_review_details ? `
+      ${
+        payload.verification_method === "manual_review" && payload.manual_review_details
+          ? `
       <h3>Manual Review Details:</h3>
       <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; margin: 12px 0;">
         <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${payload.manual_review_details}</pre>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
 
-      ${payload.supporting_links ? `
+      ${
+        payload.supporting_links
+          ? `
       <h3>Supporting Links:</h3>
       <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; margin: 12px 0;">
         <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${payload.supporting_links}</pre>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
       
       <h3>Reason for re-verification:</h3>
       <div style="background-color: #f5f5f5; padding: 12px; border-radius: 4px; margin: 12px 0; border-left: 3px solid #ff9800;">

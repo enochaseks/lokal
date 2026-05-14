@@ -52,13 +52,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (existing) {
-      return new Response(
-        JSON.stringify({ message: "Already on the waitlist" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return new Response(JSON.stringify({ message: "Already on the waitlist" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Insert into waitlist

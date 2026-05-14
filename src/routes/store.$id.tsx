@@ -11,11 +11,23 @@ import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
-import { buildInstagramUrl, buildTikTokUrl, getImageUrl, isBodyContactService, normalizeWebsiteUrl } from "@/lib/utils";
+import {
+  buildInstagramUrl,
+  buildTikTokUrl,
+  getImageUrl,
+  isBodyContactService,
+  normalizeWebsiteUrl,
+} from "@/lib/utils";
 import { toast } from "sonner";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -40,7 +52,12 @@ function normalizePhoneForAlerts(raw: string, country: CountryCode): string | nu
   const countryCode = getCountryCallingCode(country);
   if (trimmed.startsWith("+")) return `+${digits}`;
   if (trimmed.startsWith("00")) return `+${digits.slice(2)}`;
-  if (digits.startsWith(countryCode) && digits.length >= countryCode.length + 6 && digits.length <= 15) return `+${digits}`;
+  if (
+    digits.startsWith(countryCode) &&
+    digits.length >= countryCode.length + 6 &&
+    digits.length <= 15
+  )
+    return `+${digits}`;
   const localDigits = digits.replace(/^0+/, "");
   if (!localDigits) return null;
   if (localDigits.length < 6 || localDigits.length > 14) return null;
@@ -130,7 +147,8 @@ type StoreDetails = {
   timezone?: string | null;
 };
 
-const isBookable = (category: string, sellingMode?: string | null) => isStoreBookable(category, sellingMode);
+const isBookable = (category: string, sellingMode?: string | null) =>
+  isStoreBookable(category, sellingMode);
 
 function getDayOfWeekInTimezone(dateStr: string, timezone?: string | null): number {
   try {
@@ -142,7 +160,15 @@ function getDayOfWeekInTimezone(dateStr: string, timezone?: string | null): numb
       weekday: "short",
     }).formatToParts(date);
     const weekday = parts.find((p) => p.type === "weekday")?.value;
-    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const dayMap: Record<string, number> = {
+      Sun: 0,
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+    };
     return dayMap[weekday ?? ""] ?? date.getDay();
   } catch {
     const [y, mo, d] = dateStr.split("-").map(Number);
@@ -174,7 +200,14 @@ function getTodayDateInTimezone(timezone?: string | null): string {
 function makeRef() {
   const buf = new Uint8Array(4);
   crypto.getRandomValues(buf);
-  return "LKL-" + Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase().slice(0, 6);
+  return (
+    "LKL-" +
+    Array.from(buf)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()
+      .slice(0, 6)
+  );
 }
 
 function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
@@ -197,29 +230,42 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const Route = createFileRoute("/store/$id")({
   component: StoreDetail,
   head: (props) => {
-    const store = (props.loaderData as StoreDetails | undefined);
-    const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+    const store = props.loaderData as StoreDetails | undefined;
+    const domain =
+      typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
     const shareUrl = `${domain}/store/${props.params.id}`;
-    
+
     return {
-      meta: store ? [
-        { title: `${store.name} · Lokal` },
-        { name: "description", content: store.description || `Visit ${store.name} on Lokal` },
-        { property: "og:title", content: store.name },
-        { property: "og:description", content: store.description || `${store.category} on Lokal` },
-        { property: "og:type", content: "business.business" },
-        { property: "og:url", content: shareUrl },
-        ...(store.image_url ? [{ property: "og:image", content: getImageUrl(store.image_url) || "" }] : []),
-        { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: store.name },
-        { name: "twitter:description", content: store.description || `${store.category} on Lokal` },
-      ] : [],
+      meta: store
+        ? [
+            { title: `${store.name} · Lokal` },
+            { name: "description", content: store.description || `Visit ${store.name} on Lokal` },
+            { property: "og:title", content: store.name },
+            {
+              property: "og:description",
+              content: store.description || `${store.category} on Lokal`,
+            },
+            { property: "og:type", content: "business.business" },
+            { property: "og:url", content: shareUrl },
+            ...(store.image_url
+              ? [{ property: "og:image", content: getImageUrl(store.image_url) || "" }]
+              : []),
+            { name: "twitter:card", content: "summary_large_image" },
+            { name: "twitter:title", content: store.name },
+            {
+              name: "twitter:description",
+              content: store.description || `${store.category} on Lokal`,
+            },
+          ]
+        : [],
     };
   },
   loader: async ({ params }) => {
     const { data, error } = await (supabase as any)
       .from("stores")
-      .select("*, store_products(name,price,unit,position,deposit,image_url), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)")
+      .select(
+        "*, store_products(name,price,unit,position,deposit,image_url), store_availability(day_of_week,start_time,end_time,slot_duration_mins,max_bookings_per_slot), store_staff(id,name,phone,active,position,daily_capacity,available_days)",
+      )
       .eq("id", params.id)
       .limit(1);
 
@@ -273,8 +319,13 @@ export const Route = createFileRoute("/store/$id")({
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold">Store not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">This store is either not available or has been removed.</p>
-          <a href="/" className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          <p className="mt-2 text-sm text-muted-foreground">
+            This store is either not available or has been removed.
+          </p>
+          <a
+            href="/"
+            className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
             Browse stores
           </a>
         </div>
@@ -327,13 +378,17 @@ function StoreDetail() {
   const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
-  const [bookingDepositDue, setBookingDepositDue] = useState<{ amount: number; service: string | null } | null>(null);
+  const [bookingDepositDue, setBookingDepositDue] = useState<{
+    amount: number;
+    service: string | null;
+  } | null>(null);
 
   // Email for post-appointment rating link
   const [bookEmail, setBookEmail] = useState("");
   const [staffBookingCounts, setStaffBookingCounts] = useState<Record<string, number>>({});
 
-  const domain = typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+  const domain =
+    typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
   const shareUrl = `${domain}/store/${store.id}`;
   const shareText = `Check out ${store.name} on Lokal!`;
   const websiteHref = normalizeWebsiteUrl(store.website_url);
@@ -342,20 +397,24 @@ function StoreDetail() {
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
   const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
-  const availableDays = [...(store.store_availability ?? [])].sort((a, b) => a.day_of_week - b.day_of_week);
+  const availableDays = [...(store.store_availability ?? [])].sort(
+    (a, b) => a.day_of_week - b.day_of_week,
+  );
   const staffMembers = [...(store.store_staff ?? [])]
     .filter((m) => m.active)
     .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
   const selectedStaff = staffMembers.find((m) => m.id === bookStaffId) ?? null;
-    const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
+  const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
   const ageRestrictedMinimum = (() => {
     if (typeof store.minimum_age === "number" && store.minimum_age >= 18) return store.minimum_age;
     if (["Barbers", "Hair & Beauty", "Body Arts & Crafts"].includes(store.category)) return 18;
     return null;
   })();
-  const requiresAgeVerification = isBookable(store.category, store.selling_mode) && ageRestrictedMinimum != null;
-  const isTravelServiceStore = isBookable(store.category, store.selling_mode)
-    && (store.location_type === "travel" || store.location_type === "remote_and_travel");
+  const requiresAgeVerification =
+    isBookable(store.category, store.selling_mode) && ageRestrictedMinimum != null;
+  const isTravelServiceStore =
+    isBookable(store.category, store.selling_mode) &&
+    (store.location_type === "travel" || store.location_type === "remote_and_travel");
 
   const staffRatingMap = (() => {
     const sums: Record<string, { total: number; count: number }> = {};
@@ -365,13 +424,13 @@ function StoreDetail() {
       sums[r.staff_id].count += 1;
     });
     const map: Record<string, { avg: number; count: number }> = {};
-    Object.keys(sums).forEach((k) => { map[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count }; });
+    Object.keys(sums).forEach((k) => {
+      map[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count };
+    });
     return map;
   })();
 
-  const cartItems = products
-    .map((p) => ({ ...p, qty: qty[p.name] ?? 0 }))
-    .filter((p) => p.qty > 0);
+  const cartItems = products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 })).filter((p) => p.qty > 0);
   const orderTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const selectedDayAvailability = (() => {
@@ -380,12 +439,13 @@ function StoreDetail() {
     return availableDays.find((a) => a.day_of_week === day) ?? null;
   })();
   const selectedDayOfWeek = selectedDayAvailability?.day_of_week ?? null;
-  const availableStaffMembers = selectedDayOfWeek == null
-    ? staffMembers
-    : staffMembers.filter((m) => {
-        if (!Array.isArray(m.available_days) || m.available_days.length === 0) return true;
-        return m.available_days.includes(selectedDayOfWeek);
-      });
+  const availableStaffMembers =
+    selectedDayOfWeek == null
+      ? staffMembers
+      : staffMembers.filter((m) => {
+          if (!Array.isArray(m.available_days) || m.available_days.length === 0) return true;
+          return m.available_days.includes(selectedDayOfWeek);
+        });
 
   const freeSlots = selectedDayAvailability
     ? generateTimeSlots(
@@ -423,12 +483,15 @@ function StoreDetail() {
   // Mark slots as disabled if full or in the past
   const slotStatus = freeSlots.reduce(
     (acc, slot) => {
-      const isFull = (slotCounts[slot] ?? 0) >= (selectedDayAvailability?.max_bookings_per_slot ?? 1);
-      const isPast = isToday && slot < `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
+      const isFull =
+        (slotCounts[slot] ?? 0) >= (selectedDayAvailability?.max_bookings_per_slot ?? 1);
+      const isPast =
+        isToday &&
+        slot < `${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}`;
       acc[slot] = { disabled: isFull || isPast, reason: isFull ? "full" : isPast ? "past" : "" };
       return acc;
     },
-    {} as Record<string, { disabled: boolean; reason: string }>
+    {} as Record<string, { disabled: boolean; reason: string }>,
   );
 
   useEffect(() => {
@@ -494,7 +557,7 @@ function StoreDetail() {
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
       "_blank",
-      "width=600,height=400"
+      "width=600,height=400",
     );
   };
 
@@ -502,7 +565,7 @@ function StoreDetail() {
     window.open(
       `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`,
       "_blank",
-      "width=550,height=420"
+      "width=550,height=420",
     );
   };
 
@@ -519,16 +582,23 @@ function StoreDetail() {
     // Rate limit: max 5 orders per phone per hour
     const rateCheck = checkRateLimit(customerPhone.trim());
     if (!rateCheck.allowed) {
-      toast.error(`Too many orders. Please wait ${rateCheck.waitMins} min${rateCheck.waitMins !== 1 ? "s" : ""} before trying again.`);
+      toast.error(
+        `Too many orders. Please wait ${rateCheck.waitMins} min${rateCheck.waitMins !== 1 ? "s" : ""} before trying again.`,
+      );
       return;
     }
 
-    const normalizedOrderPhone = normalizePhoneForAlerts(customerPhone, orderPhoneCountry) ?? customerPhone.trim();
+    const normalizedOrderPhone =
+      normalizePhoneForAlerts(customerPhone, orderPhoneCountry) ?? customerPhone.trim();
 
     // Re-check store is still published before submitting
     setPlacingOrder(true);
     try {
-      const { data: publishedCheck } = await (supabase as any).from("stores").select("published").eq("id", store.id).single();
+      const { data: publishedCheck } = await (supabase as any)
+        .from("stores")
+        .select("published")
+        .eq("id", store.id)
+        .single();
       if (!publishedCheck?.published) {
         setStorePublished(false);
         toast.error("This store is currently unavailable. Your order was not placed.");
@@ -543,7 +613,12 @@ function StoreDetail() {
         customer_phone: normalizedOrderPhone,
         customer_email: null,
         note: orderNote.trim() || null,
-        items: cartItems.map((item) => ({ name: item.name, price: item.price, qty: item.qty, unit: item.unit ?? undefined })),
+        items: cartItems.map((item) => ({
+          name: item.name,
+          price: item.price,
+          qty: item.qty,
+          unit: item.unit ?? undefined,
+        })),
         total_gbp: orderTotal,
         status: "pending_transfer",
       });
@@ -570,7 +645,9 @@ function StoreDetail() {
   const handleBook = async () => {
     const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
     if (!normalizedBookPhone) {
-      toast.error("Enter phone in international format", { description: "Choose a country and enter your local mobile number." });
+      toast.error("Enter phone in international format", {
+        description: "Choose a country and enter your local mobile number.",
+      });
       return;
     }
     if (!bookDate || !bookTime || !bookName.trim()) {
@@ -676,7 +753,9 @@ function StoreDetail() {
         duration: 8000,
       });
 
-      const serviceDeposit = bookService ? store.store_products?.find((p) => p.name === bookService)?.deposit : undefined;
+      const serviceDeposit = bookService
+        ? store.store_products?.find((p) => p.name === bookService)?.deposit
+        : undefined;
       const depositAmount = serviceDeposit ?? store.deposit_amount ?? null;
       if (depositAmount) {
         setBookingDepositDue({ amount: Number(depositAmount), service: bookService || null });
@@ -703,17 +782,18 @@ function StoreDetail() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      
+
       <main className="flex-1 py-8">
         <div className="container mx-auto max-w-3xl px-4">
-
           {/* Store closed banner */}
           {!storePublished && (
             <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
               <span className="text-lg">🔒</span>
               <div>
                 <p className="font-semibold text-destructive">This store is currently closed</p>
-                <p className="text-xs text-muted-foreground mt-0.5">The merchant has temporarily hidden this store. Ordering and booking are disabled.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  The merchant has temporarily hidden this store. Ordering and booking are disabled.
+                </p>
               </div>
             </div>
           )}
@@ -730,24 +810,52 @@ function StoreDetail() {
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="font-display text-4xl font-bold">{store.name}</h1>
-              {store.description && <p className="mt-2 text-lg text-muted-foreground">{store.description}</p>}
+              {store.description && (
+                <p className="mt-2 text-lg text-muted-foreground">{store.description}</p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">{store.category}</span>
-                {store.origin && <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">{store.origin}</span>}
-                <VerificationBadge 
+                <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">
+                  {store.category}
+                </span>
+                {store.origin && (
+                  <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">
+                    {store.origin}
+                  </span>
+                )}
+                <VerificationBadge
                   verificationTier={store.verification_tier}
-                  verificationReason={store.verification_reason ?? "Unverified store. Buy at your own risk."}
+                  verificationReason={
+                    store.verification_reason ?? "Unverified store. Buy at your own risk."
+                  }
                   showUnverified
-                  isTattooArtistVerified={Boolean(store.is_verified_tattoo_artist && isBodyContactStore)}
+                  isTattooArtistVerified={Boolean(
+                    store.is_verified_tattoo_artist && isBodyContactStore,
+                  )}
                 />
                 {isBodyContactStore && (store.minimum_age ?? 0) >= 18 && (
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🔞 18+ policy</span>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    🔞 18+ policy
+                  </span>
                 )}
                 {isBodyContactStore && store.tattoo_license_url && (
-                  <a href={store.tattoo_license_url} target="_blank" rel="noreferrer" className="rounded-full bg-teal-100 px-3 py-1 text-sm font-medium text-teal-800 hover:opacity-90 dark:bg-teal-900/40 dark:text-teal-300">📜 Artist licence / ID</a>
+                  <a
+                    href={store.tattoo_license_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-teal-100 px-3 py-1 text-sm font-medium text-teal-800 hover:opacity-90 dark:bg-teal-900/40 dark:text-teal-300"
+                  >
+                    📜 Artist licence / ID
+                  </a>
                 )}
                 {isBodyContactStore && store.tattoo_portfolio_url && (
-                  <a href={store.tattoo_portfolio_url} target="_blank" rel="noreferrer" className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 hover:opacity-90 dark:bg-indigo-900/40 dark:text-indigo-300">🖼️ Portfolio</a>
+                  <a
+                    href={store.tattoo_portfolio_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 hover:opacity-90 dark:bg-indigo-900/40 dark:text-indigo-300"
+                  >
+                    🖼️ Portfolio
+                  </a>
                 )}
               </div>
             </div>
@@ -798,21 +906,71 @@ function StoreDetail() {
                 {bookingDepositDue && (
                   <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
                     <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
-                    <p className="mt-1 text-sm text-amber-800">
-                      To confirm your appointment, send a deposit of <strong>{currencySymbol}{bookingDepositDue.amount.toFixed(2)}</strong>
-                      {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""} to:
-                    </p>
+                    {(() => {
+                      const isTravelService =
+                        isBookable(store.category, store.selling_mode) &&
+                        (store.location_type === "travel" ||
+                          store.location_type === "remote_and_travel");
+                      const isPayAtStoreService =
+                        isBookable(store.category, store.selling_mode) &&
+                        store.location_type === "salon" &&
+                        store.fulfillment === "pay_at_store";
+
+                      return (
+                        <p className="mt-1 text-sm text-amber-800">
+                          To confirm your appointment, send a deposit of{" "}
+                          <strong>
+                            {currencySymbol}
+                            {bookingDepositDue.amount.toFixed(2)}
+                          </strong>
+                          {bookingDepositDue.service ? ` for ${bookingDepositDue.service}` : ""}
+                          {isPayAtStoreService
+                            ? " by bank transfer. Remaining payment is made at the store/premises."
+                            : isTravelService
+                              ? " by bank transfer."
+                              : " to:"}
+                        </p>
+                      );
+                    })()}
                     <div className="mt-3 space-y-1 text-sm font-mono text-amber-900">
-                      <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
-                      <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
+                      <div>
+                        <span className="text-amber-600">Bank: </span>
+                        {store.bank_name ?? "—"}
+                      </div>
+                      <div>
+                        <span className="text-amber-600">Name: </span>
+                        {store.bank_account_name ?? "—"}
+                      </div>
                       <div className="flex items-center gap-2">
                         <span className="text-amber-600">Account: </span>
-                        <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
-                        {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-xs text-amber-700 underline">Reveal</button>}
+                        <span>
+                          {revealBankDetails
+                            ? (store.bank_account_number ?? "—")
+                            : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}
+                        </span>
+                        {!revealBankDetails && (
+                          <button
+                            onClick={() => setRevealBankDetails(true)}
+                            className="text-xs text-amber-700 underline"
+                          >
+                            Reveal
+                          </button>
+                        )}
                       </div>
-                      {store.bank_sort_code && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
+                      {store.bank_sort_code && (
+                        <div>
+                          <span className="text-amber-600">
+                            {(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}
+                            :{" "}
+                          </span>
+                          {store.bank_sort_code}
+                        </div>
+                      )}
                     </div>
-                    <button className="mt-3 text-sm text-amber-800 underline" onClick={() => setBookingDepositDue(null)}>
+                    <button
+                      className="mt-3 text-sm text-amber-800 underline"
+                      onClick={() => setBookingDepositDue(null)}
+                    >
                       Book another appointment
                     </button>
                   </div>
@@ -824,10 +982,20 @@ function StoreDetail() {
                       {products.map((p) => (
                         <div key={p.name} className="flex items-center justify-between text-sm">
                           <span className="flex items-center gap-2">
-                            {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-9 w-9 rounded-md object-cover shrink-0" />}
+                            {p.image_url && (
+                              <img
+                                src={getImageUrl(p.image_url) || undefined}
+                                alt={p.name}
+                                className="h-9 w-9 rounded-md object-cover shrink-0"
+                              />
+                            )}
                             {p.name}
                           </span>
-                          <span className="font-semibold">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</span>
+                          <span className="font-semibold">
+                            {currencySymbol}
+                            {p.price.toFixed(2)}
+                            {p.unit ? ` / ${p.unit}` : ""}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -835,17 +1003,24 @@ function StoreDetail() {
                 )}
 
                 {availableDays.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Online booking is not enabled yet. Use phone or social links above.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Online booking is not enabled yet. Use phone or social links above.
+                  </p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {products.length > 0 && (
                       <div className="sm:col-span-2">
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Service</p>
                         <Select value={bookService} onValueChange={setBookService}>
-                          <SelectTrigger><SelectValue placeholder="Choose a service" /></SelectTrigger>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a service" />
+                          </SelectTrigger>
                           <SelectContent>
                             {products.map((p) => (
-                              <SelectItem key={p.name} value={p.name}>{p.name} — {currencySymbol}{p.price.toFixed(2)}</SelectItem>
+                              <SelectItem key={p.name} value={p.name}>
+                                {p.name} — {currencySymbol}
+                                {p.price.toFixed(2)}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -853,7 +1028,9 @@ function StoreDetail() {
                     )}
                     {staffMembers.length > 0 && (
                       <div className="sm:col-span-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Team member *</p>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Team member *
+                        </p>
                         <select
                           value={bookStaffId}
                           onChange={(e) => setBookStaffId(e.target.value)}
@@ -862,19 +1039,34 @@ function StoreDetail() {
                           <option value="">Choose who you want to book with</option>
                           {availableStaffMembers.map((m) => {
                             const r = staffRatingMap[m.id];
-                            const atCapacity = !!bookDate && m.daily_capacity != null && (staffBookingCounts[m.id] ?? 0) >= m.daily_capacity;
-                            const dayLabel = Array.isArray(m.available_days) && m.available_days.length > 0
-                              ? m.available_days.slice().sort((a, b) => a - b).map((d) => DAY_LABELS[d]).join(",")
-                              : "All days";
+                            const atCapacity =
+                              !!bookDate &&
+                              m.daily_capacity != null &&
+                              (staffBookingCounts[m.id] ?? 0) >= m.daily_capacity;
+                            const dayLabel =
+                              Array.isArray(m.available_days) && m.available_days.length > 0
+                                ? m.available_days
+                                    .slice()
+                                    .sort((a, b) => a - b)
+                                    .map((d) => DAY_LABELS[d])
+                                    .join(",")
+                                : "All days";
                             return (
                               <option key={m.id} value={m.id} disabled={atCapacity}>
-                                {m.name}{r ? ` · ★ ${r.avg.toFixed(1)} (${r.count} review${r.count !== 1 ? "s" : ""})` : ""}{` · ${dayLabel}`}{atCapacity ? " · Full on selected day" : ""}
+                                {m.name}
+                                {r
+                                  ? ` · ★ ${r.avg.toFixed(1)} (${r.count} review${r.count !== 1 ? "s" : ""})`
+                                  : ""}
+                                {` · ${dayLabel}`}
+                                {atCapacity ? " · Full on selected day" : ""}
                               </option>
                             );
                           })}
                         </select>
                         {bookDate && availableStaffMembers.length === 0 && (
-                          <p className="mt-1 text-xs text-amber-600">No team members are available on this day. Pick another date.</p>
+                          <p className="mt-1 text-xs text-amber-600">
+                            No team members are available on this day. Pick another date.
+                          </p>
                         )}
                       </div>
                     )}
@@ -910,64 +1102,124 @@ function StoreDetail() {
                         }}
                       />
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Booking days: {availableDays
-                          .map((a) => `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`)
+                        Booking days:{" "}
+                        {availableDays
+                          .map(
+                            (a) =>
+                              `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`,
+                          )
                           .join(", ")}
                       </p>
                     </div>
                     {bookDate && (
                       <div>
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Time slot *</p>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Time slot *
+                        </p>
                         {loadingSlots ? (
                           <div className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" /> Loading slots…
                           </div>
-                        ) : (() => {
-                          const availableSlots = freeSlots.filter((s) => !slotStatus[s]?.disabled);
-                          if (availableSlots.length === 0) return <p className="mt-1 text-sm text-amber-600">No available slots on this day — try another date.</p>;
-                          return (
-                            <Select value={bookTime} onValueChange={setBookTime}>
-                              <SelectTrigger><SelectValue placeholder="Pick a time" /></SelectTrigger>
-                              <SelectContent>
-                                {freeSlots.map((slot) => {
-                                  const status = slotStatus[slot];
-                                  return (
-                                    <SelectItem key={slot} value={slot} disabled={status.disabled}>
-                                      {slot}{status.disabled && status.reason === "full" ? " (Full)" : ""}{status.disabled && status.reason === "past" ? " (Passed)" : ""}
-                                    </SelectItem>
-                                  );
-                                })}
-                              </SelectContent>
-                            </Select>
-                          );
-                        })()}
+                        ) : (
+                          (() => {
+                            const availableSlots = freeSlots.filter(
+                              (s) => !slotStatus[s]?.disabled,
+                            );
+                            if (availableSlots.length === 0)
+                              return (
+                                <p className="mt-1 text-sm text-amber-600">
+                                  No available slots on this day — try another date.
+                                </p>
+                              );
+                            return (
+                              <Select value={bookTime} onValueChange={setBookTime}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Pick a time" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {freeSlots.map((slot) => {
+                                    const status = slotStatus[slot];
+                                    return (
+                                      <SelectItem
+                                        key={slot}
+                                        value={slot}
+                                        disabled={status.disabled}
+                                      >
+                                        {slot}
+                                        {status.disabled && status.reason === "full"
+                                          ? " (Full)"
+                                          : ""}
+                                        {status.disabled && status.reason === "past"
+                                          ? " (Passed)"
+                                          : ""}
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            );
+                          })()
+                        )}
                       </div>
                     )}
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Your name *</p>
-                      <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="Your full name" />
+                      <Input
+                        value={bookName}
+                        onChange={(e) => setBookName(e.target.value)}
+                        placeholder="Your full name"
+                      />
                     </div>
                     <div>
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
                       <div className="mt-1 grid grid-cols-12 gap-2">
                         <div className="col-span-5 sm:col-span-4">
-                          <Select value={bookPhoneCountry} onValueChange={(v) => setBookPhoneCountry(v as CountryCode)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                          <Select
+                            value={bookPhoneCountry}
+                            onValueChange={(v) => setBookPhoneCountry(v as CountryCode)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {COUNTRY_OPTIONS.map((c) => (
+                                <SelectItem key={c.value} value={c.value}>
+                                  {c.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
                           </Select>
                         </div>
                         <div className="col-span-7 sm:col-span-8">
-                          <Input value={bookPhone} onChange={(e) => setBookPhone(e.target.value)} placeholder="Local number" />
+                          <Input
+                            value={bookPhone}
+                            onChange={(e) => setBookPhone(e.target.value)}
+                            placeholder="Local number"
+                          />
                         </div>
                       </div>
                     </div>
                     <div className="sm:col-span-2">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">Email (optional — for rating reminder)</p>
-                      <Input value={bookEmail} onChange={(e) => setBookEmail(e.target.value)} placeholder="you@example.com" type="email" />
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">
+                        Email (optional — for rating reminder)
+                      </p>
+                      <Input
+                        value={bookEmail}
+                        onChange={(e) => setBookEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        type="email"
+                      />
                     </div>
                     <div className="sm:col-span-2">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">Note (optional)</p>
-                      <Textarea value={bookNote} onChange={(e) => setBookNote(e.target.value)} rows={2} placeholder="Anything the merchant should know?" />
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">
+                        Note (optional)
+                      </p>
+                      <Textarea
+                        value={bookNote}
+                        onChange={(e) => setBookNote(e.target.value)}
+                        rows={2}
+                        placeholder="Anything the merchant should know?"
+                      />
                     </div>
                     {requiresAgeVerification && (
                       <div className="sm:col-span-2 space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
@@ -979,7 +1231,9 @@ function StoreDetail() {
                             checked={bookAgeConfirmed}
                             onChange={(e) => setBookAgeConfirmed(e.target.checked)}
                           />
-                          <span>I confirm I meet the minimum age requirement ({ageRestrictedMinimum}+).</span>
+                          <span>
+                            I confirm I meet the minimum age requirement ({ageRestrictedMinimum}+).
+                          </span>
                         </label>
                         <label className="flex items-start gap-2">
                           <input
@@ -988,50 +1242,104 @@ function StoreDetail() {
                             checked={bookIdCommitment}
                             onChange={(e) => setBookIdCommitment(e.target.checked)}
                           />
-                          <span>I will present a valid government-issued ID before service starts.</span>
+                          <span>
+                            I will present a valid government-issued ID before service starts.
+                          </span>
                         </label>
                       </div>
                     )}
                     {(() => {
-                        const serviceDeposit = bookService
-                          ? store.store_products?.find((p) => p.name === bookService)?.deposit
-                          : undefined;
-                        const depositAmount = serviceDeposit ?? store.deposit_amount;
-                        return depositAmount ? (
-                          <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                            💳 A deposit of <strong>{currencySymbol}{Number(depositAmount).toFixed(2)}</strong> is required to confirm this appointment. Please send it to:
-                            <div className="mt-2 space-y-1 text-xs font-mono">
-                              <div><span className="text-amber-600">Bank: </span>{store.bank_name ?? "—"}</div>
-                              <div><span className="text-amber-600">Name: </span>{store.bank_account_name ?? "—"}</div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-amber-600">Account: </span>
-                                <span>{revealBankDetails ? (store.bank_account_number ?? "—") : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}</span>
-                                {!revealBankDetails && <button onClick={() => setRevealBankDetails(true)} className="text-amber-700 underline">Reveal</button>}
-                              </div>
-                              {store.bank_sort_code && <div><span className="text-amber-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
+                      const serviceDeposit = bookService
+                        ? store.store_products?.find((p) => p.name === bookService)?.deposit
+                        : undefined;
+                      const depositAmount = serviceDeposit ?? store.deposit_amount;
+                      return depositAmount ? (
+                        <div className="sm:col-span-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                          💳 A deposit of{" "}
+                          <strong>
+                            {currencySymbol}
+                            {Number(depositAmount).toFixed(2)}
+                          </strong>{" "}
+                          is required to confirm this appointment. Please send it to:
+                          <div className="mt-2 space-y-1 text-xs font-mono">
+                            <div>
+                              <span className="text-amber-600">Bank: </span>
+                              {store.bank_name ?? "—"}
                             </div>
+                            <div>
+                              <span className="text-amber-600">Name: </span>
+                              {store.bank_account_name ?? "—"}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-amber-600">Account: </span>
+                              <span>
+                                {revealBankDetails
+                                  ? (store.bank_account_number ?? "—")
+                                  : `****${(store.bank_account_number ?? "").slice(-4) || "——"}`}
+                              </span>
+                              {!revealBankDetails && (
+                                <button
+                                  onClick={() => setRevealBankDetails(true)}
+                                  className="text-amber-700 underline"
+                                >
+                                  Reveal
+                                </button>
+                              )}
+                            </div>
+                            {store.bank_sort_code && (
+                              <div>
+                                <span className="text-amber-600">
+                                  {
+                                    (REGION_BANK[store.region as Region] ?? DEFAULT_BANK)
+                                      .routingLabel
+                                  }
+                                  :{" "}
+                                </span>
+                                {store.bank_sort_code}
+                              </div>
+                            )}
                           </div>
-                        ) : null;
-                      })()}
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="sm:col-span-2">
                       <Button
                         onClick={handleBook}
-                        disabled={submittingBooking || !bookDate || !bookTime || !bookName.trim() || !bookPhone.trim() || (staffMembers.length > 0 && (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) || (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment)) || !storePublished}
+                        disabled={
+                          submittingBooking ||
+                          !bookDate ||
+                          !bookTime ||
+                          !bookName.trim() ||
+                          !bookPhone.trim() ||
+                          (staffMembers.length > 0 &&
+                            (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) ||
+                          (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment)) ||
+                          !storePublished
+                        }
                         className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                       >
-                        {submittingBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Request booking"}
+                        {submittingBooking ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Request booking"
+                        )}
                       </Button>
-                      {!storePublished && <p className="mt-2 text-xs text-center text-destructive">This store is currently closed.</p>}
+                      {!storePublished && (
+                        <p className="mt-2 text-xs text-center text-destructive">
+                          This store is currently closed.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
-
               </div>
             ) : (
               <div className="space-y-4">
                 <h2 className="font-display text-2xl font-bold">Buy from this store</h2>
                 {products.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No products listed yet. Use phone or social links above to enquire.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No products listed yet. Use phone or social links above to enquire.
+                  </p>
                 ) : (
                   <>
                     <div className="divide-y divide-border rounded-lg border border-border">
@@ -1040,16 +1348,40 @@ function StoreDetail() {
                         return (
                           <div key={p.name} className="flex items-center justify-between gap-4 p-3">
                             <div className="flex items-center gap-3">
-                              {p.image_url && <img src={getImageUrl(p.image_url) || undefined} alt={p.name} className="h-12 w-12 rounded-md object-cover shrink-0" />}
+                              {p.image_url && (
+                                <img
+                                  src={getImageUrl(p.image_url) || undefined}
+                                  alt={p.name}
+                                  className="h-12 w-12 rounded-md object-cover shrink-0"
+                                />
+                              )}
                               <div>
                                 <p className="text-sm font-medium">{p.name}</p>
-                                <p className="text-sm text-muted-foreground">{currencySymbol}{p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {currencySymbol}
+                                  {p.price.toFixed(2)}
+                                  {p.unit ? ` / ${p.unit}` : ""}
+                                </p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setQty((prev) => ({ ...prev, [p.name]: Math.max(0, count - 1) }))}>-</Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setQty((prev) => ({ ...prev, [p.name]: Math.max(0, count - 1) }))
+                                }
+                              >
+                                -
+                              </Button>
                               <span className="w-6 text-center text-sm font-semibold">{count}</span>
-                              <Button variant="outline" size="sm" onClick={() => setQty((prev) => ({ ...prev, [p.name]: count + 1 }))}>+</Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setQty((prev) => ({ ...prev, [p.name]: count + 1 }))}
+                              >
+                                +
+                              </Button>
                             </div>
                           </div>
                         );
@@ -1058,51 +1390,122 @@ function StoreDetail() {
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Your name *</p>
-                        <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Your full name" />
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Your name *
+                        </p>
+                        <Input
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          placeholder="Your full name"
+                        />
                       </div>
                       <div>
                         <p className="mb-1 text-xs font-medium text-muted-foreground">Phone *</p>
                         <div className="grid grid-cols-12 gap-2">
                           <div className="col-span-5 sm:col-span-4">
-                            <Select value={orderPhoneCountry} onValueChange={(v) => setOrderPhoneCountry(v as CountryCode)}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>{COUNTRY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                            <Select
+                              value={orderPhoneCountry}
+                              onValueChange={(v) => setOrderPhoneCountry(v as CountryCode)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {COUNTRY_OPTIONS.map((c) => (
+                                  <SelectItem key={c.value} value={c.value}>
+                                    {c.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
                             </Select>
                           </div>
                           <div className="col-span-7 sm:col-span-8">
-                            <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Local number" />
+                            <Input
+                              value={customerPhone}
+                              onChange={(e) => setCustomerPhone(e.target.value)}
+                              placeholder="Local number"
+                            />
                           </div>
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Order note (optional)</p>
-                        <Textarea value={orderNote} onChange={(e) => setOrderNote(e.target.value)} rows={2} placeholder="Any substitutions or notes?" />
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Order note (optional)
+                        </p>
+                        <Textarea
+                          value={orderNote}
+                          onChange={(e) => setOrderNote(e.target.value)}
+                          rows={2}
+                          placeholder="Any substitutions or notes?"
+                        />
                       </div>
                       <div className="sm:col-span-2 rounded-md bg-secondary px-3 py-2 text-sm">
-                        Total: <span className="font-semibold">{currencySymbol}{orderTotal.toFixed(2)}</span>
+                        Total:{" "}
+                        <span className="font-semibold">
+                          {currencySymbol}
+                          {orderTotal.toFixed(2)}
+                        </span>
                       </div>
                       {revealBankDetails && store.bank_account_name && (
                         <div className="sm:col-span-2 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm">
-                          <p className="font-semibold text-green-800 mb-2">✅ Order placed — please send your transfer to:</p>
+                          <p className="font-semibold text-green-800 mb-2">
+                            ✅ Order placed — please send your transfer to:
+                          </p>
                           <div className="space-y-1 font-mono text-green-900">
-                            <div><span className="text-green-600">Bank: </span>{store.bank_name ?? "—"}</div>
-                            <div><span className="text-green-600">Name: </span>{store.bank_account_name}</div>
-                            <div><span className="text-green-600">Account: </span>{store.bank_account_number}</div>
-                            {store.bank_sort_code && <div><span className="text-green-600">{(REGION_BANK[store.region as Region] ?? DEFAULT_BANK).routingLabel}: </span>{store.bank_sort_code}</div>}
+                            <div>
+                              <span className="text-green-600">Bank: </span>
+                              {store.bank_name ?? "—"}
+                            </div>
+                            <div>
+                              <span className="text-green-600">Name: </span>
+                              {store.bank_account_name}
+                            </div>
+                            <div>
+                              <span className="text-green-600">Account: </span>
+                              {store.bank_account_number}
+                            </div>
+                            {store.bank_sort_code && (
+                              <div>
+                                <span className="text-green-600">
+                                  {
+                                    (REGION_BANK[store.region as Region] ?? DEFAULT_BANK)
+                                      .routingLabel
+                                  }
+                                  :{" "}
+                                </span>
+                                {store.bank_sort_code}
+                              </div>
+                            )}
                           </div>
-                          <p className="mt-2 text-xs text-green-700">Use reference <span className="font-mono font-bold">{reference}</span> as the payment reference.</p>
+                          <p className="mt-2 text-xs text-green-700">
+                            Use reference <span className="font-mono font-bold">{reference}</span>{" "}
+                            as the payment reference.
+                          </p>
                         </div>
                       )}
                       <div className="sm:col-span-2">
                         <Button
                           onClick={handlePlaceOrder}
-                          disabled={placingOrder || cartItems.length === 0 || !customerName.trim() || !customerPhone.trim() || !storePublished}
+                          disabled={
+                            placingOrder ||
+                            cartItems.length === 0 ||
+                            !customerName.trim() ||
+                            !customerPhone.trim() ||
+                            !storePublished
+                          }
                           className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
                         >
-                          {placingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : `Place order (${reference})`}
+                          {placingOrder ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            `Place order (${reference})`
+                          )}
                         </Button>
-                        {!storePublished && <p className="mt-2 text-xs text-center text-destructive">This store is currently closed.</p>}
+                        {!storePublished && (
+                          <p className="mt-2 text-xs text-center text-destructive">
+                            This store is currently closed.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </>
@@ -1115,24 +1518,35 @@ function StoreDetail() {
           <div className="grid gap-6 md:grid-cols-2">
             {/* Contact & Location */}
             <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
-              <h2 className="font-display text-xl font-bold">{isTravelServiceStore ? "Service details" : "Visit us"}</h2>
-              
+              <h2 className="font-display text-xl font-bold">
+                {isTravelServiceStore ? "Service details" : "Visit us"}
+              </h2>
+
               {isTravelServiceStore ? (
                 <div className="flex gap-3">
                   <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">We travel to you</p>
-                    <p className="text-sm text-muted-foreground">No fixed customer-facing address is shown.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No fixed customer-facing address is shown.
+                    </p>
                   </div>
                 </div>
-              ) : store.address && (
-                <div className="flex gap-3">
-                  <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{store.address}</p>
-                    {store.city && <p className="text-sm text-muted-foreground">{store.city}{store.postcode ? `, ${store.postcode}` : ""}</p>}
+              ) : (
+                store.address && (
+                  <div className="flex gap-3">
+                    <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">{store.address}</p>
+                      {store.city && (
+                        <p className="text-sm text-muted-foreground">
+                          {store.city}
+                          {store.postcode ? `, ${store.postcode}` : ""}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )
               )}
 
               {store.hours && (
@@ -1159,7 +1573,9 @@ function StoreDetail() {
 
               {store.fulfillment && !isBookable(store.category, store.selling_mode) && (
                 <div className="pt-3 border-t border-border">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fulfilment</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Fulfilment
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {(store.fulfillment === "collection" || store.fulfillment === "both") && (
                       <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
@@ -1171,32 +1587,73 @@ function StoreDetail() {
                         🚚 Delivery
                       </span>
                     )}
+                    {store.fulfillment === "pay_at_store" && (
+                      <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">
+                        💰 Pay at store
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
-              {isBookable(store.category, store.selling_mode) && (store as any).location_type && (store as any).location_type !== "salon" && (
+              {isBookable(store.category, store.selling_mode) && (store as any).location_type && (
                 <div className="pt-3 border-t border-border">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Service location</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Service location
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
-                      <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">🚗 We travel to you</span>
+                    {store.location_type === "salon" && (
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        🏠 At store / premises
+                      </span>
                     )}
-                    {(store.location_type === "remote" || store.location_type === "remote_and_travel") && (
-                      <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">💻 Remote / online</span>
+                    {(store.location_type === "travel" ||
+                      store.location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                        🚗 We travel to you
+                      </span>
                     )}
-                    {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">🏦 Bank transfer only</span>
+                    {(store.location_type === "remote" ||
+                      store.location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        💻 Remote / online
+                      </span>
+                    )}
+                    {store.location_type === "salon" && store.fulfillment === "pay_at_store" && (
+                      <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">
+                        💰 Pay at store
+                      </span>
+                    )}
+                    {(store.location_type === "travel" ||
+                      store.location_type === "remote_and_travel") && (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        🏦 Bank transfer only
+                      </span>
                     )}
                   </div>
                 </div>
               )}
 
-              {(store.refund_policy || store.cancellation_policy || typeof store.accepts_refunds === "boolean") && (
+              {(store.refund_policy ||
+                store.cancellation_policy ||
+                typeof store.accepts_refunds === "boolean") && (
                 <div className="pt-3 border-t border-border">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Refunds & cancellation</p>
-                  <p className="text-sm font-medium">Refunds: {store.accepts_refunds ? "Accepted (subject to merchant policy)" : "Not accepted"}</p>
-                  {store.refund_policy && <p className="mt-1 text-sm text-muted-foreground">{store.refund_policy}</p>}
-                  {store.cancellation_policy && <p className="mt-1 text-sm text-muted-foreground">{store.cancellation_policy}</p>}
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Refunds & cancellation
+                  </p>
+                  <p className="text-sm font-medium">
+                    Refunds:{" "}
+                    {store.accepts_refunds
+                      ? "Accepted (subject to merchant policy)"
+                      : "Not accepted"}
+                  </p>
+                  {store.refund_policy && (
+                    <p className="mt-1 text-sm text-muted-foreground">{store.refund_policy}</p>
+                  )}
+                  {store.cancellation_policy && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {store.cancellation_policy}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1267,7 +1724,6 @@ function StoreDetail() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }

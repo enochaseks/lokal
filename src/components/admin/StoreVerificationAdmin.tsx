@@ -29,18 +29,12 @@ type VerificationRequest = {
   admin_notes?: string | null;
 };
 
-export function StoreVerificationAdmin({
-  requests,
-}: {
-  requests: VerificationRequest[];
-}) {
+export function StoreVerificationAdmin({ requests }: { requests: VerificationRequest[] }) {
   const [localRequests, setLocalRequests] = useState<VerificationRequest[]>(requests);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [updating, setUpdating] = useState(false);
-  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">(
-    "all"
-  );
+  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("all");
   const [reverifyModalOpen, setReverifyModalOpen] = useState(false);
   const [reverifyReason, setReverifyReason] = useState("");
   const [reverifyRequest, setReverifyRequest] = useState<VerificationRequest | null>(null);
@@ -49,9 +43,7 @@ export function StoreVerificationAdmin({
     setLocalRequests(requests);
   }, [requests]);
 
-  const filtered = localRequests.filter(
-    (r) => filter === "all" || r.status === filter
-  );
+  const filtered = localRequests.filter((r) => filter === "all" || r.status === filter);
 
   const handleApprove = async (request: VerificationRequest) => {
     setUpdating(true);
@@ -66,11 +58,13 @@ export function StoreVerificationAdmin({
 
       if (error) throw error;
 
-      setLocalRequests((prev) => prev.map((item) =>
-        item.id === request.id
-          ? { ...item, status: "approved", admin_notes: adminNotes || null }
-          : item
-      ));
+      setLocalRequests((prev) =>
+        prev.map((item) =>
+          item.id === request.id
+            ? { ...item, status: "approved", admin_notes: adminNotes || null }
+            : item,
+        ),
+      );
 
       toast.success(`✅ ${request.store_name} verified and approved!`);
       setSelectedId(null);
@@ -95,11 +89,11 @@ export function StoreVerificationAdmin({
 
       if (error) throw error;
 
-      setLocalRequests((prev) => prev.map((item) =>
-        item.id === request.id
-          ? { ...item, status: "rejected", admin_notes: adminNotes }
-          : item
-      ));
+      setLocalRequests((prev) =>
+        prev.map((item) =>
+          item.id === request.id ? { ...item, status: "rejected", admin_notes: adminNotes } : item,
+        ),
+      );
 
       toast.success(`❌ Application rejected and notes saved`);
       setSelectedId(null);
@@ -126,8 +120,11 @@ export function StoreVerificationAdmin({
     setUpdating(true);
     try {
       // Determine if this is body arts verification
-      const isBodyArtsVerification = reverifyRequest.store_category === "Body Arts & Crafts" && 
-        ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(reverifyRequest.store_subcategory ?? "");
+      const isBodyArtsVerification =
+        reverifyRequest.store_category === "Body Arts & Crafts" &&
+        ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(
+          reverifyRequest.store_subcategory ?? "",
+        );
 
       // Send reverify email with data from verification request
       const { error: emailError } = await supabase.functions.invoke("send-reverify-alert", {
@@ -215,9 +212,7 @@ export function StoreVerificationAdmin({
           >
             {f}
             {f !== "all" && (
-              <span className="ml-2 text-xs">
-                {requests.filter((r) => r.status === f).length}
-              </span>
+              <span className="ml-2 text-xs">{requests.filter((r) => r.status === f).length}</span>
             )}
           </Button>
         ))}
@@ -246,9 +241,7 @@ export function StoreVerificationAdmin({
                 filtered.map((request) => (
                   <tr key={request.id} className="hover:bg-secondary/30">
                     <td className="px-4 py-3 font-medium">{request.store_name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {request.owner_name}
-                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{request.owner_name}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
@@ -259,15 +252,9 @@ export function StoreVerificationAdmin({
                               : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
                         }`}
                       >
-                        {request.status === "approved" && (
-                          <Check className="h-3 w-3" />
-                        )}
-                        {request.status === "rejected" && (
-                          <X className="h-3 w-3" />
-                        )}
-                        {request.status === "pending" && (
-                          <Eye className="h-3 w-3" />
-                        )}
+                        {request.status === "approved" && <Check className="h-3 w-3" />}
+                        {request.status === "rejected" && <X className="h-3 w-3" />}
+                        {request.status === "pending" && <Eye className="h-3 w-3" />}
                         <span className="capitalize">{request.status}</span>
                       </span>
                     </td>
@@ -283,7 +270,11 @@ export function StoreVerificationAdmin({
                           size="sm"
                           className="h-8 gap-1 text-xs"
                         >
-                          {updating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                          {updating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3" />
+                          )}
                           Reverify
                         </Button>
                         <Button
@@ -315,22 +306,39 @@ export function StoreVerificationAdmin({
               const request = localRequests.find((r) => r.id === selectedId);
               if (!request) return null;
               const isBodyArtsArtistRequest = Boolean(
-                request.is_tattoo_verification || (
-                  request.store_category === "Body Arts & Crafts" &&
-                  ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(request.store_subcategory ?? "")
-                ),
+                request.is_tattoo_verification ||
+                (request.store_category === "Body Arts & Crafts" &&
+                  ["Tattooing", "Piercing", "Henna", "Body Painting"].includes(
+                    request.store_subcategory ?? "",
+                  )),
               );
               const reasonText = request.submission_reason ?? "";
-              const parsedMinimumAge = reasonText.match(/Minimum age:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
-              const parsedPortfolio = reasonText.match(/Portfolio:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
-              const parsedLicence = reasonText.match(/Licence(?:\/ID)?:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
-              const parsedAck = reasonText.match(/Age restriction acknowledged:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
-              const displayMinimumAge = request.tattoo_minimum_age ?? (parsedMinimumAge && !/^not provided$/i.test(parsedMinimumAge) ? parsedMinimumAge : null);
-              const displayPortfolio = request.tattoo_portfolio_url ?? (parsedPortfolio && !/^not provided$/i.test(parsedPortfolio) ? parsedPortfolio : null);
-              const displayLicence = request.tattoo_license_url ?? (parsedLicence && !/^not provided$/i.test(parsedLicence) ? parsedLicence : null);
+              const parsedMinimumAge =
+                reasonText.match(/Minimum age:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
+              const parsedPortfolio =
+                reasonText.match(/Portfolio:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
+              const parsedLicence =
+                reasonText.match(/Licence(?:\/ID)?:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
+              const parsedAck =
+                reasonText.match(/Age restriction acknowledged:\s*([^\n]+)/i)?.[1]?.trim() ?? null;
+              const displayMinimumAge =
+                request.tattoo_minimum_age ??
+                (parsedMinimumAge && !/^not provided$/i.test(parsedMinimumAge)
+                  ? parsedMinimumAge
+                  : null);
+              const displayPortfolio =
+                request.tattoo_portfolio_url ??
+                (parsedPortfolio && !/^not provided$/i.test(parsedPortfolio)
+                  ? parsedPortfolio
+                  : null);
+              const displayLicence =
+                request.tattoo_license_url ??
+                (parsedLicence && !/^not provided$/i.test(parsedLicence) ? parsedLicence : null);
               const displayAck =
                 request.tattoo_age_restriction_acknowledged != null
-                  ? (request.tattoo_age_restriction_acknowledged ? "Yes" : "No")
+                  ? request.tattoo_age_restriction_acknowledged
+                    ? "Yes"
+                    : "No"
                   : (parsedAck ?? "No");
 
               return (
@@ -342,12 +350,10 @@ export function StoreVerificationAdmin({
                       <span className="font-medium">Store:</span> {request.store_name}
                     </p>
                     <p>
-                      <span className="font-medium">Owner:</span>{" "}
-                      {request.owner_name}
+                      <span className="font-medium">Owner:</span> {request.owner_name}
                     </p>
                     <p>
-                      <span className="font-medium">Business Name:</span>{" "}
-                      {request.business_name}
+                      <span className="font-medium">Business Name:</span> {request.business_name}
                     </p>
                     {(request.store_category || request.store_subcategory) && (
                       <p>
@@ -370,7 +376,9 @@ export function StoreVerificationAdmin({
                     )}
                     {request.verification_method === "manual_review" && (
                       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
-                        Manual review is the highest-risk route. Check more carefully for identity proof, consistent contact details, reviews, and external presence before approving.
+                        Manual review is the highest-risk route. Check more carefully for identity
+                        proof, consistent contact details, reviews, and external presence before
+                        approving.
                       </div>
                     )}
                     {request.business_registration_number && (
@@ -382,7 +390,12 @@ export function StoreVerificationAdmin({
                     {request.online_presence_url && (
                       <p>
                         <span className="font-medium">Online Presence:</span>{" "}
-                        <a href={request.online_presence_url} target="_blank" rel="noreferrer" className="underline">
+                        <a
+                          href={request.online_presence_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline"
+                        >
                           {request.online_presence_url}
                         </a>
                       </p>
@@ -407,23 +420,41 @@ export function StoreVerificationAdmin({
                         <p>Minimum age: {displayMinimumAge ?? "Not provided"}</p>
                         <p>Age restriction acknowledged: {displayAck}</p>
                         <p>
-                          Portfolio: {displayPortfolio ? (
-                            <a href={displayPortfolio} target="_blank" rel="noreferrer" className="underline">View portfolio</a>
-                          ) : "Not provided"}
+                          Portfolio:{" "}
+                          {displayPortfolio ? (
+                            <a
+                              href={displayPortfolio}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              View portfolio
+                            </a>
+                          ) : (
+                            "Not provided"
+                          )}
                         </p>
                         <p>
-                          Licence: {displayLicence ? (
-                            <a href={displayLicence} target="_blank" rel="noreferrer" className="underline">View licence</a>
-                          ) : "Not provided"}
+                          Licence:{" "}
+                          {displayLicence ? (
+                            <a
+                              href={displayLicence}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              View licence
+                            </a>
+                          ) : (
+                            "Not provided"
+                          )}
                         </p>
                       </div>
                     )}
                     {request.submission_reason && (
                       <div>
                         <p className="font-medium mb-1">Reason:</p>
-                        <p className="text-sm text-muted-foreground">
-                          {request.submission_reason}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{request.submission_reason}</p>
                       </div>
                     )}
                   </div>
@@ -445,9 +476,7 @@ export function StoreVerificationAdmin({
                         disabled={updating}
                         className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
                       >
-                        {updating && (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        )}
+                        {updating && <Loader2 className="h-4 w-4 animate-spin" />}
                         Approve
                       </Button>
                       <Button
@@ -456,9 +485,7 @@ export function StoreVerificationAdmin({
                         variant="destructive"
                         className="flex-1 gap-2"
                       >
-                        {updating && (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        )}
+                        {updating && <Loader2 className="h-4 w-4 animate-spin" />}
                         Reject
                       </Button>
                     </div>
@@ -544,7 +571,8 @@ export function StoreVerificationAdmin({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                The merchant will receive an email with your reason and instructions to update their submission.
+                The merchant will receive an email with your reason and instructions to update their
+                submission.
               </p>
             </div>
           </div>

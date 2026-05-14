@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/lokal/Navbar";
 
-
 export const Route = createFileRoute("/privacy")({
   component: PrivacyPage,
   head: () => ({ meta: [{ title: "Privacy Policy · Lokal" }] }),
@@ -29,21 +28,34 @@ function PrivacyPage() {
         <div className="space-y-10">
           <Section title="1. Who we are">
             <p>
-              Lokal ("we", "us", "our") operates the marketplace at <strong className="text-foreground">lokalshops.co.uk</strong>.
-              We connect customers with African and Caribbean independent stores. We are the data controller for
+              Lokal ("we", "us", "our") operates the marketplace at{" "}
+              <strong className="text-foreground">lokalshops.co.uk</strong>. We connect customers
+              with African and Caribbean independent stores. We are the data controller for
               information collected through this platform.
             </p>
             <p>
-              For any privacy queries contact us at: <strong className="text-foreground">helplokal@gmail.com</strong>
+              For any privacy queries contact us at:{" "}
+              <strong className="text-foreground">helplokal@gmail.com</strong>
             </p>
           </Section>
 
           <Section title="2. What data we collect">
             <p>We collect the following personal data when you use Lokal:</p>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong className="text-foreground">Customers:</strong> name, phone number, email address, and order details when you place an order.</li>
-              <li><strong className="text-foreground">Merchants:</strong> name, email address, store information, and bank account details (for display to customers) when you register a store.</li>
-              <li><strong className="text-foreground">All visitors:</strong> approximate location (city-level, derived from your browser's geolocation API — only if you grant permission), and standard web logs (IP address, browser type).</li>
+              <li>
+                <strong className="text-foreground">Customers:</strong> name, phone number, email
+                address, and order details when you place an order.
+              </li>
+              <li>
+                <strong className="text-foreground">Merchants:</strong> name, email address, store
+                information, and bank account details (for display to customers) when you register a
+                store.
+              </li>
+              <li>
+                <strong className="text-foreground">All visitors:</strong> approximate location
+                (city-level, derived from your browser's geolocation API — only if you grant
+                permission), and standard web logs (IP address, browser type).
+              </li>
             </ul>
           </Section>
 
@@ -51,59 +63,82 @@ function PrivacyPage() {
             <p>We use your data to:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Process and communicate about orders you place or receive.</li>
-              <li>Send order status notifications (email and/or SMS) where you have provided contact details.</li>
+              <li>
+                Send order status notifications (email and/or SMS) where you have provided contact
+                details.
+              </li>
               <li>Display relevant stores near your location.</li>
               <li>Allow merchants to manage their store listings and orders.</li>
-              <li>Review and verify merchant claims for store verification badges (business registration, online presence, etc).</li>
+              <li>
+                Review and verify merchant claims for store verification badges (business
+                registration, online presence, etc).
+              </li>
               <li>Maintain the security and operation of the platform.</li>
             </ul>
             <p>
-              Our lawful basis is <strong className="text-foreground">contract performance</strong> (processing orders) and
-              <strong className="text-foreground"> legitimate interests</strong> (operating the platform securely and fairly).
+              Our lawful basis is <strong className="text-foreground">contract performance</strong>{" "}
+              (processing orders) and
+              <strong className="text-foreground"> legitimate interests</strong> (operating the
+              platform securely and fairly).
             </p>
           </Section>
 
           <Section title="4. Who we share data with">
             <p>We do not sell your personal data. We share data only with:</p>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong className="text-foreground">Merchants</strong> — when you place an order, your name, phone, and order details are shared with the relevant store owner so they can fulfil your order.</li>
-              <li><strong className="text-foreground">Supabase</strong> — our database and authentication provider (data stored in EU region).</li>
-              <li><strong className="text-foreground">Brevo</strong> — used to send transactional emails and SMS notifications.</li>
-              <li><strong className="text-foreground">Cloudflare</strong> — our hosting and CDN provider.</li>
+              <li>
+                <strong className="text-foreground">Merchants</strong> — when you place an order,
+                your name, phone, and order details are shared with the relevant store owner so they
+                can fulfil your order.
+              </li>
+              <li>
+                <strong className="text-foreground">Supabase</strong> — our database and
+                authentication provider (data stored in EU region).
+              </li>
+              <li>
+                <strong className="text-foreground">Brevo</strong> — used to send transactional
+                emails and SMS notifications.
+              </li>
+              <li>
+                <strong className="text-foreground">Cloudflare</strong> — our hosting and CDN
+                provider.
+              </li>
             </ul>
           </Section>
 
           <Section title="5. Payment data">
             <p>
-              Lokal does not process payments. All payments are made directly between customers and merchants
-              via bank transfer. We display merchant bank details (sort code and account number) solely to
-              facilitate this direct transfer. We do not store customer payment information.
+              Lokal does not process payments. All payments are made directly between customers and
+              merchants via bank transfer. We display merchant bank details (sort code and account
+              number) solely to facilitate this direct transfer. We do not store customer payment
+              information.
             </p>
           </Section>
 
           <Section title="6. Verification and trust data">
             <p>
-              When merchants submit store verification requests, we collect and review supporting documents
-              (business registration, website/social media screenshots, or manual submission details). We
-              retain these submissions for 2 years to maintain verification audit trails. If a request is
-              rejected or withdrawn, supporting documents are deleted. Verification approvals/rejections
-              are recorded in our platform logs indefinitely.
+              When merchants submit store verification requests, we collect and review supporting
+              documents (business registration, website/social media screenshots, or manual
+              submission details). We retain these submissions for 2 years to maintain verification
+              audit trails. If a request is rejected or withdrawn, supporting documents are deleted.
+              Verification approvals/rejections are recorded in our platform logs indefinitely.
             </p>
           </Section>
 
           <Section title="7. Data retention">
             <p>
-              Order data is retained for 2 years to support order disputes and records. Merchant account data
-              is retained for as long as the account remains active, and up to 1 year after deletion upon
-              request. Verification submission data is retained for 2 years as noted above. You may request
-              deletion of your data at any time (see Section 8).
+              Order data is retained for 2 years to support order disputes and records. Merchant
+              account data is retained for as long as the account remains active, and up to 1 year
+              after deletion upon request. Verification submission data is retained for 2 years as
+              noted above. You may request deletion of your data at any time (see Section 8).
             </p>
           </Section>
 
           <Section title="8. Cookies and tracking">
             <p>
-              We use only essential session cookies required for authentication. We do not use advertising
-              cookies or cross-site tracking. No consent banner is required for essential cookies under UK GDPR.
+              We use only essential session cookies required for authentication. We do not use
+              advertising cookies or cross-site tracking. No consent banner is required for
+              essential cookies under UK GDPR.
             </p>
           </Section>
 
@@ -118,14 +153,19 @@ function PrivacyPage() {
             </ul>
             <p>
               Merchants can permanently delete their account and all associated store data directly
-              from the <strong className="text-foreground">merchant dashboard</strong> at any time using
-              the <em>Delete my account</em> option. Order records are retained for 12 months after
-              deletion to support dispute resolution.
+              from the <strong className="text-foreground">merchant dashboard</strong> at any time
+              using the <em>Delete my account</em> option. Order records are retained for 12 months
+              after deletion to support dispute resolution.
             </p>
             <p>
-              To exercise any other rights, email <strong className="text-foreground">helplokal@gmail.com</strong>.
-              We will respond within 30 days. You also have the right to lodge a complaint with the
-              <strong className="text-foreground"> Information Commissioner's Office (ICO)</strong> at ico.org.uk.
+              To exercise any other rights, email{" "}
+              <strong className="text-foreground">helplokal@gmail.com</strong>. We will respond
+              within 30 days. You also have the right to lodge a complaint with the
+              <strong className="text-foreground">
+                {" "}
+                Information Commissioner's Office (ICO)
+              </strong>{" "}
+              at ico.org.uk.
             </p>
           </Section>
 
@@ -138,7 +178,11 @@ function PrivacyPage() {
         </div>
 
         <div className="mt-12 text-sm text-muted-foreground">
-          See also our <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>.
+          See also our{" "}
+          <Link to="/terms" className="text-primary hover:underline">
+            Terms of Service
+          </Link>
+          .
         </div>
       </main>
     </div>

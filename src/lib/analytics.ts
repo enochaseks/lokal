@@ -19,7 +19,9 @@ export function trackEvent(eventName: string, props?: AnalyticsProps) {
   const safeProps = toSerializableProps(props);
 
   try {
-    window.dispatchEvent(new CustomEvent("lokal:analytics", { detail: { eventName, props: safeProps } }));
+    window.dispatchEvent(
+      new CustomEvent("lokal:analytics", { detail: { eventName, props: safeProps } }),
+    );
   } catch {
     // Ignore CustomEvent errors in older browsers.
   }

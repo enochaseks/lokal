@@ -54,20 +54,25 @@ Deno.serve(async (req) => {
       <p><strong>Owner:</strong> ${payload.owner_name}</p>
       <p><strong>Route:</strong> ${methodLabel}</p>
       <p><strong>Tattoo verification:</strong> ${payload.is_tattoo_verification ? "Yes" : "No"}</p>
-      ${payload.is_tattoo_verification ? `
+      ${
+        payload.is_tattoo_verification
+          ? `
       <p><strong>Minimum age:</strong> ${payload.tattoo_minimum_age ?? "Not provided"}</p>
       <p><strong>Portfolio:</strong> ${payload.tattoo_portfolio_url ?? "Not provided"}</p>
       <p><strong>Licence:</strong> ${payload.tattoo_license_url ?? "Not provided"}</p>
       <p><strong>Age restriction acknowledged:</strong> ${payload.tattoo_age_restriction_acknowledged ? "Yes" : "No"}</p>
-      ` : ""}
+      `
+          : ""
+      }
       <p><strong>Requester email:</strong> ${payload.requester_email ?? "Not provided"}</p>
       <p><strong>Reason:</strong></p>
       <pre style="white-space:pre-wrap;font-family:inherit">${payload.submission_reason}</pre>
       <p><a href="https://lokalshops.co.uk/">Open Lokal</a></p>
     `;
 
-    const recipients = [...ADMIN_EMAILS, payload.requester_email]
-      .filter((email, index, list) => Boolean(email) && list.indexOf(email) === index);
+    const recipients = [...ADMIN_EMAILS, payload.requester_email].filter(
+      (email, index, list) => Boolean(email) && list.indexOf(email) === index,
+    );
 
     const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
@@ -85,10 +90,13 @@ Deno.serve(async (req) => {
 
     const emailBody = await emailRes.text();
 
-    return new Response(JSON.stringify({ sent: emailRes.ok, email: { ok: emailRes.ok, body: emailBody } }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ sent: emailRes.ok, email: { ok: emailRes.ok, body: emailBody } }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return new Response(JSON.stringify({ sent: false, error: message }), {

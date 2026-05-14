@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     const storeRes = await fetch(
       `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
@@ -47,10 +47,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
-    );
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${ownerId}`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
     const user = await userRes.json();
     const merchantEmail = user?.email ?? user?.user?.email ?? null;
 
@@ -62,7 +61,9 @@ Deno.serve(async (req) => {
     }
 
     const stars = Math.max(1, Math.min(5, Math.round(payload.rating)));
-    const reviewLine = payload.body?.trim() ? `<p><strong>Review:</strong> ${payload.body.trim()}</p>` : "";
+    const reviewLine = payload.body?.trim()
+      ? `<p><strong>Review:</strong> ${payload.body.trim()}</p>`
+      : "";
 
     const html = `
       <h2>New store review received</h2>
@@ -93,10 +94,13 @@ Deno.serve(async (req) => {
 
     const emailBody = await emailRes.text();
 
-    return new Response(JSON.stringify({ sent: emailRes.ok, email: { ok: emailRes.ok, body: emailBody } }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ sent: emailRes.ok, email: { ok: emailRes.ok, body: emailBody } }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return new Response(JSON.stringify({ sent: false, error: message }), {

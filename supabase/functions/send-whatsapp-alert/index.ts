@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     // Look up merchant email via service role
     const storeRes = await fetch(
       `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
+      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
@@ -63,10 +63,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${ownerId}`,
-      { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } }
-    );
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${ownerId}`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+    });
     const user = await userRes.json();
     const merchantEmail = user?.email ?? user?.user?.email ?? null;
 
@@ -125,10 +124,13 @@ Deno.serve(async (req) => {
         : Promise.resolve({ ok: false, body: "merchant phone not found" }),
     ]);
 
-    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return new Response(JSON.stringify({ sent: false, error: message }), {

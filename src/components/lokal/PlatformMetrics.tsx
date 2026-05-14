@@ -7,8 +7,8 @@ interface PlatformMetricsProps {
 
 export function PlatformMetrics({ stores }: PlatformMetricsProps) {
   // Calculate real metrics from store data
-  const uniqueCities = new Set(stores.map(s => s.city).filter(Boolean)).size;
-  const uniqueCategories = new Set(stores.map(s => s.category)).size;
+  const uniqueCities = new Set(stores.map((s) => s.city).filter(Boolean)).size;
+  const uniqueCategories = new Set(stores.map((s) => s.category)).size;
   const totalStores = stores.length;
 
   return (
@@ -22,9 +22,11 @@ export function PlatformMetrics({ stores }: PlatformMetricsProps) {
               </div>
             </div>
             <div className="font-display text-2xl md:text-3xl font-bold">{uniqueCities}+</div>
-            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">Cities launching</div>
+            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
+              Cities launching
+            </div>
           </div>
-          
+
           <div className="text-center">
             <div className="flex justify-center mb-3">
               <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -32,9 +34,11 @@ export function PlatformMetrics({ stores }: PlatformMetricsProps) {
               </div>
             </div>
             <div className="font-display text-2xl md:text-3xl font-bold">{totalStores}+</div>
-            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">Businesses onboarding</div>
+            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
+              Businesses onboarding
+            </div>
           </div>
-          
+
           <div className="text-center">
             <div className="flex justify-center mb-3">
               <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -42,7 +46,9 @@ export function PlatformMetrics({ stores }: PlatformMetricsProps) {
               </div>
             </div>
             <div className="font-display text-2xl md:text-3xl font-bold">{uniqueCategories}+</div>
-            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">Categories supported</div>
+            <div className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
+              Categories supported
+            </div>
           </div>
         </div>
       </div>

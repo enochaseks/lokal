@@ -120,23 +120,37 @@ Deno.serve(async (req) => {
         adminHeaders,
       );
       if (!requestsFallback.ok) {
-        return new Response(JSON.stringify({ error: "Could not load verification requests", details: requestsFallback.data }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            error: "Could not load verification requests",
+            details: requestsFallback.data,
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
       requests = (requestsFallback.data ?? []) as VerificationRequestRow[];
     }
 
     const storeIds = Array.from(new Set(requests.map((r) => r.store_id).filter(Boolean)));
-    const storeMetaById: Record<string, { name: string; category: string | null; subcategory: string | null }> = {};
+    const storeMetaById: Record<
+      string,
+      { name: string; category: string | null; subcategory: string | null }
+    > = {};
     if (storeIds.length > 0) {
       const storesRes = await fetchJson(
         `${supabaseUrl}/rest/v1/stores?select=id,name,category,subcategory&id=in.(${storeIds.join(",")})`,
         adminHeaders,
       );
       if (storesRes.ok) {
-        for (const row of (storesRes.data ?? []) as Array<{ id: string; name: string; category: string | null; subcategory: string | null }>) {
+        for (const row of (storesRes.data ?? []) as Array<{
+          id: string;
+          name: string;
+          category: string | null;
+          subcategory: string | null;
+        }>) {
           storeMetaById[row.id] = {
             name: row.name,
             category: row.category ?? null,
@@ -162,10 +176,13 @@ Deno.serve(async (req) => {
     if (notificationsRes.ok) {
       notifications = (notificationsRes.data ?? []) as ReviewNotificationRow[];
     } else if (notificationsRes.status !== 404) {
-      return new Response(JSON.stringify({ error: "Could not load notifications", details: notificationsRes.data }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Could not load notifications", details: notificationsRes.data }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const mappedNotifications = notifications.map((row) => ({
@@ -173,10 +190,13 @@ Deno.serve(async (req) => {
       stores: { name: storeMetaById[row.store_id]?.name ?? "Unknown store" },
     }));
 
-    return new Response(JSON.stringify({ requests: mappedRequests, notifications: mappedNotifications }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ requests: mappedRequests, notifications: mappedNotifications }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return new Response(JSON.stringify({ error: message }), {

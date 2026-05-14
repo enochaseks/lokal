@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     const { data: incompleteStores, error: storesError } = await supabase
       .from("stores")
       .select(
-        "id, name, created_at, published, owner_id, store_products(id), store_verification_requests(id,status)"
+        "id, name, created_at, published, owner_id, store_products(id), store_verification_requests(id,status)",
       )
       .eq("published", false)
       .lt("created_at", cutoffIso);
@@ -55,10 +55,10 @@ Deno.serve(async (req) => {
     }
 
     if (!incompleteStores || incompleteStores.length === 0) {
-      return new Response(
-        JSON.stringify({ message: "No incomplete stores found", count: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ message: "No incomplete stores found", count: 0 }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Get owner emails for each store
@@ -68,41 +68,36 @@ Deno.serve(async (req) => {
     for (const store of incompleteStores) {
       try {
         // Get owner email
-        const ownerRes = await fetchJson(
-          `${supabaseUrl}/auth/v1/admin/users/${store.owner_id}`,
-          {
-            headers: {
-              apikey: serviceRoleKey,
-              Authorization: `Bearer ${serviceRoleKey}`,
-            },
-          }
-        );
+        const ownerRes = await fetchJson(`${supabaseUrl}/auth/v1/admin/users/${store.owner_id}`, {
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+        });
 
         if (!ownerRes.ok) continue;
         const ownerEmail = ownerRes.data?.email ?? null;
         if (!ownerEmail) continue;
 
         // Determine what's missing
-        const hasProducts =
-          Array.isArray(store.store_products) && store.store_products.length > 0;
+        const hasProducts = Array.isArray(store.store_products) && store.store_products.length > 0;
         const hasVerificationRequest =
           Array.isArray(store.store_verification_requests) &&
           store.store_verification_requests.length > 0;
-        const isVerified = hasVerificationRequest &&
+        const isVerified =
+          hasVerificationRequest &&
           store.store_verification_requests.some((v: any) => v.status === "approved");
 
         const missingItems: string[] = [];
         if (!hasProducts) missingItems.push("products or services");
         if (!hasVerificationRequest) missingItems.push("verification submission");
-        if (hasVerificationRequest && !isVerified)
-          missingItems.push("verification approval");
+        if (hasVerificationRequest && !isVerified) missingItems.push("verification approval");
 
         const missingText = missingItems.join(" and ");
 
         // Send email
         if (brevoKey) {
-          const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ??
-            "noreply@lokalshops.co.uk";
+          const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
 
           const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
@@ -119,9 +114,7 @@ Deno.serve(async (req) => {
                 <p>Hi there,</p>
                 <p>Your store <strong>${store.name}</strong> has been created on Lokal, but it's not yet published. To go live and start receiving orders, you need to complete:</p>
                 <ul>
-                  ${missingItems
-                    .map((item) => `<li>${item}</li>`)
-                    .join("")}
+                  ${missingItems.map((item) => `<li>${item}</li>`).join("")}
                 </ul>
                 <p style="margin-top: 20px;">
                   <a href="https://lokalshops.co.uk/merchant" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">
@@ -158,12 +151,15 @@ Deno.serve(async (req) => {
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });

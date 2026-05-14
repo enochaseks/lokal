@@ -112,10 +112,13 @@ Deno.serve(async (req) => {
     );
 
     if (!reqRes.ok || !Array.isArray(reqRes.data) || reqRes.data.length === 0) {
-      return new Response(JSON.stringify({ error: "Verification request not found", details: reqRes.data }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Verification request not found", details: reqRes.data }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const requestRow = reqRes.data[0] as VerificationRequestRow;
@@ -136,17 +139,19 @@ Deno.serve(async (req) => {
     );
 
     if (!updateReqRes.ok) {
-      return new Response(JSON.stringify({ error: "Failed to update request", details: updateReqRes.data }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Failed to update request", details: updateReqRes.data }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     if (payload.action === "approve") {
-      const verificationReason =
-        requestRow.is_tattoo_verification
-          ? "Verified artist"
-          : requestRow.verification_method === "registration_number"
+      const verificationReason = requestRow.is_tattoo_verification
+        ? "Verified artist"
+        : requestRow.verification_method === "registration_number"
           ? "Registered business verified"
           : requestRow.verification_method === "online_presence"
             ? "Online business verified"
@@ -173,20 +178,26 @@ Deno.serve(async (req) => {
       );
 
       if (!updateStoreRes.ok) {
-        return new Response(JSON.stringify({ error: "Failed to update store", details: updateStoreRes.data }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ error: "Failed to update store", details: updateStoreRes.data }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
     }
 
     let requesterEmail: string | null = null;
-    const ownerUserRes = await fetchJson(`${supabaseUrl}/auth/v1/admin/users/${requestRow.owner_id}`, {
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
+    const ownerUserRes = await fetchJson(
+      `${supabaseUrl}/auth/v1/admin/users/${requestRow.owner_id}`,
+      {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
       },
-    });
+    );
     if (ownerUserRes.ok) {
       requesterEmail = ownerUserRes.data?.email ?? ownerUserRes.data?.user?.email ?? null;
     }
@@ -194,7 +205,9 @@ Deno.serve(async (req) => {
     if (brevoKey && requesterEmail) {
       const decision = payload.action === "approve" ? "approved" : "rejected";
       const decisionTitle = payload.action === "approve" ? "approved" : "rejected";
-      const notes = payload.admin_notes?.trim() ? `<p><strong>Admin notes:</strong> ${payload.admin_notes.trim()}</p>` : "";
+      const notes = payload.admin_notes?.trim()
+        ? `<p><strong>Admin notes:</strong> ${payload.admin_notes.trim()}</p>`
+        : "";
 
       let html = "";
       let subject = "";
@@ -253,7 +266,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, request_id: payload.request_id, action: payload.action, requester_email: requesterEmail }),
+      JSON.stringify({
+        ok: true,
+        request_id: payload.request_id,
+        action: payload.action,
+        requester_email: requesterEmail,
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

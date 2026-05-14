@@ -10,7 +10,7 @@ export function WaitlistSignup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !email.includes("@")) {
       setStatus("error");
       setMessage("Please enter a valid email");
@@ -18,7 +18,7 @@ export function WaitlistSignup() {
     }
 
     setStatus("loading");
-    
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/waitlist-signup`,
@@ -28,7 +28,7 @@ export function WaitlistSignup() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ email }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -38,7 +38,7 @@ export function WaitlistSignup() {
       setStatus("success");
       setMessage("You're on the list! We'll keep you updated.");
       setEmail("");
-      
+
       setTimeout(() => setStatus("idle"), 5000);
     } catch (error) {
       console.error("Waitlist signup error:", error);
@@ -55,7 +55,9 @@ export function WaitlistSignup() {
         </div>
         <div className="flex-1">
           <h3 className="font-display text-lg font-bold">Stay updated</h3>
-          <p className="text-sm text-muted-foreground">Get notified about launches, new merchants, and early access perks.</p>
+          <p className="text-sm text-muted-foreground">
+            Get notified about launches, new merchants, and early access perks.
+          </p>
         </div>
       </div>
 
@@ -68,7 +70,7 @@ export function WaitlistSignup() {
           disabled={status === "loading"}
           className="flex-1"
         />
-        <Button 
+        <Button
           type="submit"
           disabled={status === "loading" || status === "success"}
           className="gap-2 whitespace-nowrap"
@@ -76,7 +78,9 @@ export function WaitlistSignup() {
           {status === "loading" ? (
             <>Loading...</>
           ) : status === "success" ? (
-            <><Check className="h-4 w-4" /> Joined</>
+            <>
+              <Check className="h-4 w-4" /> Joined
+            </>
           ) : (
             <>Join</>
           )}
@@ -89,7 +93,7 @@ export function WaitlistSignup() {
           {message}
         </div>
       )}
-      
+
       {status === "success" && (
         <div className="mt-3 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
           <Check className="h-4 w-4" />

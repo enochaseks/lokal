@@ -20,7 +20,12 @@ function prettySlot(iso: string): string {
   const [datePart, timePart] = iso.split("T");
   const [y, mo, d] = datePart.split("-").map(Number);
   const date = new Date(y, mo - 1, d);
-  const dateStr = date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateStr = date.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   const time = timePart.slice(0, 5);
   return `${dateStr} at ${time}`;
 }

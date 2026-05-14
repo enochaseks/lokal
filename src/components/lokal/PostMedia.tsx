@@ -66,11 +66,7 @@ export function PostMedia({
                 className="max-h-[80vh] w-full object-contain"
               />
             ) : (
-              <img
-                src={resolvedUrl}
-                alt={alt}
-                className="max-h-[80vh] w-full object-contain"
-              />
+              <img src={resolvedUrl} alt={alt} className="max-h-[80vh] w-full object-contain" />
             )}
           </div>
         </DialogContent>

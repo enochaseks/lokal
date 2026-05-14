@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Lock, Sprout, Globe2 } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 
-
 export const Route = createFileRoute("/farmers-market")({
   component: FarmersMarketPage,
   head: () => ({ meta: [{ title: "Farmers Market · Coming soon · Lokal" }] }),
@@ -25,7 +24,8 @@ function FarmersMarketPage() {
 
           <p className="mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground md:text-lg">
             A global marketplace for African and Caribbean farmers, producers, and manufacturers.
-            Customers will be able to browse by country, request made-to-order products, and buy with seller-managed shipping lanes.
+            Customers will be able to browse by country, request made-to-order products, and buy
+            with seller-managed shipping lanes.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -34,7 +34,9 @@ function FarmersMarketPage() {
                 <Globe2 className="h-4 w-4" />
               </div>
               <p className="font-semibold">Cross-country discovery</p>
-              <p className="mt-1 text-sm text-muted-foreground">Browse manufacturers and farmers across Africa and the Caribbean.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Browse manufacturers and farmers across Africa and the Caribbean.
+              </p>
             </div>
 
             <div className="rounded-2xl border border-border bg-secondary/40 p-4">
@@ -42,7 +44,9 @@ function FarmersMarketPage() {
                 <Sprout className="h-4 w-4" />
               </div>
               <p className="font-semibold">Made-to-order and products</p>
-              <p className="mt-1 text-sm text-muted-foreground">Sellers can offer ready products or custom manufacturing/farming requests.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Sellers can offer ready products or custom manufacturing/farming requests.
+              </p>
             </div>
 
             <div className="rounded-2xl border border-border bg-secondary/40 p-4">
@@ -50,7 +54,9 @@ function FarmersMarketPage() {
                 <Lock className="h-4 w-4" />
               </div>
               <p className="font-semibold">Seller-managed shipping</p>
-              <p className="mt-1 text-sm text-muted-foreground">Each seller configures carriers, delivery countries, and rates.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Each seller configures carriers, delivery countries, and rates.
+              </p>
             </div>
           </div>
         </div>

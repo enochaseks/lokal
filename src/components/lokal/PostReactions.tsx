@@ -22,14 +22,19 @@ const reactionOptions: ReactionOption[] = [
 export function PostReactions({ postId }: { postId: string }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [counts, setCounts] = useState<Record<ReactionType, number>>({ helpful: 0, interested: 0, love_it: 0 });
+  const [counts, setCounts] = useState<Record<ReactionType, number>>({
+    helpful: 0,
+    interested: 0,
+    love_it: 0,
+  });
   const [myReaction, setMyReaction] = useState<ReactionType | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingReaction, setSavingReaction] = useState<ReactionType | null>(null);
 
   const loadReactions = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const supabaseAny: any = supabase;
+    const { data, error } = await supabaseAny
       .from("store_post_reactions")
       .select("reaction_type, user_id")
       .eq("post_id", postId)
@@ -43,7 +48,8 @@ export function PostReactions({ postId }: { postId: string }) {
     const nextCounts: Record<ReactionType, number> = { helpful: 0, interested: 0, love_it: 0 };
     let nextMyReaction: ReactionType | null = null;
 
-    for (const row of data ?? []) {
+    const rows: any[] = data ?? [];
+    for (const row of rows) {
       const reaction = row.reaction_type as ReactionType;
       if (reaction in nextCounts) {
         nextCounts[reaction] += 1;
@@ -60,20 +66,23 @@ export function PostReactions({ postId }: { postId: string }) {
 
   useEffect(() => {
     void loadReactions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, user?.id]);
 
   const handleReact = async (reaction: ReactionType) => {
     if (!user) {
-      const redirectTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}${window.location.hash}` : "/";
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+          : "/";
       navigate({ to: "/auth", search: { redirect: redirectTo } });
       return;
     }
 
     setSavingReaction(reaction);
     try {
+      const supabaseAny: any = supabase;
       if (myReaction === reaction) {
-        const { error } = await supabase
+        const { error } = await supabaseAny
           .from("store_post_reactions")
           .delete()
           .eq("post_id", postId)
@@ -81,7 +90,7 @@ export function PostReactions({ postId }: { postId: string }) {
         if (error) throw error;
         setMyReaction(null);
       } else {
-        const { error } = await supabase.from("store_post_reactions").upsert(
+        const { error } = await supabaseAny.from("store_post_reactions").upsert(
           {
             post_id: postId,
             user_id: user.id,

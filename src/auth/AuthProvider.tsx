@@ -25,7 +25,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadRoles = async (uid: string | undefined) => {
-    if (!uid) { setRoles([]); return; }
+    if (!uid) {
+      setRoles([]);
+      return;
+    }
     const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", uid);
     if (error) {
       // Some environments lock role reads via RLS; app should still function without this query.
@@ -41,7 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(sess);
       setUser(sess?.user ?? null);
       // Defer DB calls to avoid deadlock
-      setTimeout(() => { loadRoles(sess?.user?.id); }, 0);
+      setTimeout(() => {
+        loadRoles(sess?.user?.id);
+      }, 0);
     });
 
     // Then fetch existing session
@@ -54,11 +59,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const signOut = async () => { await supabase.auth.signOut(); };
-  const refreshRoles = async () => { await loadRoles(user?.id); };
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+  const refreshRoles = async () => {
+    await loadRoles(user?.id);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, session, roles, loading, isMerchant: roles.includes("merchant"), signOut, refreshRoles }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        roles,
+        loading,
+        isMerchant: roles.includes("merchant"),
+        signOut,
+        refreshRoles,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

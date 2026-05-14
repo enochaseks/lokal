@@ -68,38 +68,43 @@ function CustomerProfilePage() {
   const loadMostVisitedStore = async (customer: CustomerProfile) => {
     try {
       const customerPhone = customer.phone?.trim();
-      const [ordersByIdRes, ordersByPhoneRes, bookingsByIdRes, bookingsByPhoneRes] = await Promise.all([
-        customer.id
-          ? (supabase as any)
-              .from("orders")
-              .select("store_id, stores(id,name,category)")
-              .eq("customer_id", customer.id)
-              .limit(300)
-          : Promise.resolve({ data: [], error: null }),
-        customerPhone
-          ? (supabase as any)
-              .from("orders")
-              .select("store_id, stores(id,name,category)")
-              .eq("customer_phone", customerPhone)
-              .limit(300)
-          : Promise.resolve({ data: [], error: null }),
-        customer.id
-          ? (supabase as any)
-              .from("store_bookings")
-              .select("store_id, stores(id,name,category)")
-              .eq("customer_id", customer.id)
-              .limit(300)
-          : Promise.resolve({ data: [], error: null }),
-        customerPhone
-          ? (supabase as any)
-              .from("store_bookings")
-              .select("store_id, stores(id,name,category)")
-              .eq("customer_phone", customerPhone)
-              .limit(300)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+      const [ordersByIdRes, ordersByPhoneRes, bookingsByIdRes, bookingsByPhoneRes] =
+        await Promise.all([
+          customer.id
+            ? (supabase as any)
+                .from("orders")
+                .select("store_id, stores(id,name,category)")
+                .eq("customer_id", customer.id)
+                .limit(300)
+            : Promise.resolve({ data: [], error: null }),
+          customerPhone
+            ? (supabase as any)
+                .from("orders")
+                .select("store_id, stores(id,name,category)")
+                .eq("customer_phone", customerPhone)
+                .limit(300)
+            : Promise.resolve({ data: [], error: null }),
+          customer.id
+            ? (supabase as any)
+                .from("store_bookings")
+                .select("store_id, stores(id,name,category)")
+                .eq("customer_id", customer.id)
+                .limit(300)
+            : Promise.resolve({ data: [], error: null }),
+          customerPhone
+            ? (supabase as any)
+                .from("store_bookings")
+                .select("store_id, stores(id,name,category)")
+                .eq("customer_phone", customerPhone)
+                .limit(300)
+            : Promise.resolve({ data: [], error: null }),
+        ]);
 
-      const queryErr = ordersByIdRes.error ?? ordersByPhoneRes.error ?? bookingsByIdRes.error ?? bookingsByPhoneRes.error;
+      const queryErr =
+        ordersByIdRes.error ??
+        ordersByPhoneRes.error ??
+        bookingsByIdRes.error ??
+        bookingsByPhoneRes.error;
       if (queryErr) throw queryErr;
 
       const allRows = [
@@ -213,11 +218,12 @@ function CustomerProfilePage() {
     setLoading(true);
     try {
       // Try to find or create customer
-      let { data: customer, error: fetchErr } = await (supabase as any)
+      const { data: existingCustomer, error: fetchErr } = await (supabase as any)
         .from("customers")
         .select("*")
         .eq("phone", cleanPhone)
         .maybeSingle();
+      let customer = existingCustomer;
 
       if (fetchErr && fetchErr.code !== "PGRST116") throw fetchErr;
 
@@ -273,7 +279,13 @@ function CustomerProfilePage() {
   };
 
   const addAddress = async () => {
-    if (!profile || !newAddress.label || !newAddress.street || !newAddress.city || !newAddress.postcode) {
+    if (
+      !profile ||
+      !newAddress.label ||
+      !newAddress.street ||
+      !newAddress.city ||
+      !newAddress.postcode
+    ) {
       toast.error("Please fill all address fields");
       return;
     }
@@ -350,7 +362,9 @@ function CustomerProfilePage() {
       if (err) throw err;
       localStorage.setItem("lokal_customer_profile", JSON.stringify(updated));
       setProfile(updated);
-      toast.success(`${key === "email_alerts" ? "Email" : "SMS"} alerts ${updated_prefs[key] ? "enabled" : "disabled"}`);
+      toast.success(
+        `${key === "email_alerts" ? "Email" : "SMS"} alerts ${updated_prefs[key] ? "enabled" : "disabled"}`,
+      );
     } catch (e: any) {
       toast.error(e.message ?? "Failed to update preferences");
     } finally {
@@ -376,7 +390,9 @@ function CustomerProfilePage() {
         <main className="container mx-auto max-w-sm px-4 py-20">
           <div className="text-center mb-8">
             <h1 className="font-display text-3xl font-bold">Create your profile</h1>
-            <p className="mt-2 text-muted-foreground">Save addresses, view your most visited store, and manage preferences.</p>
+            <p className="mt-2 text-muted-foreground">
+              Save addresses, view your most visited store, and manage preferences.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -391,18 +407,34 @@ function CustomerProfilePage() {
             </div>
             <div>
               <label className="text-sm font-semibold">Email</label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" type="email" />
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                type="email"
+              />
             </div>
             <div>
               <label className="text-sm font-semibold">Full name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="First & last name" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="First & last name"
+              />
             </div>
             <Button
               onClick={loginOrSignup}
               disabled={!phone.trim() || loading}
               className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
             >
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</> : "Create or sign in"}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                "Create or sign in"
+              )}
             </Button>
           </div>
         </main>
@@ -423,15 +455,27 @@ function CustomerProfilePage() {
           </div>
           <div className="flex flex-col gap-2">
             {user && ownedStoreId ? (
-              <Button variant="outline" onClick={() => navigate({ to: `/store/${ownedStoreId}` })} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: `/store/${ownedStoreId}` })}
+                className="gap-2"
+              >
                 <Store className="h-4 w-4" /> Show store
               </Button>
             ) : (
-              <Button variant="outline" onClick={() => navigate({ to: "/list-store" })} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigate({ to: "/list-store" })}
+                className="gap-2"
+              >
                 <Store className="h-4 w-4" /> List your store
               </Button>
             )}
-            <Button variant="outline" onClick={logout} className="text-red-600 hover:bg-red-50 gap-2">
+            <Button
+              variant="outline"
+              onClick={logout}
+              className="text-red-600 hover:bg-red-50 gap-2"
+            >
               <LogOut className="h-4 w-4" /> Sign out
             </Button>
           </div>
@@ -450,8 +494,16 @@ function CustomerProfilePage() {
               <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
             </div>
           </div>
-          <Button onClick={updateProfile} disabled={loading} className="w-full bg-gradient-primary hover:opacity-95">
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+          <Button
+            onClick={updateProfile}
+            disabled={loading}
+            className="w-full bg-gradient-primary hover:opacity-95"
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            )}
             Save changes
           </Button>
         </div>
@@ -460,13 +512,18 @@ function CustomerProfilePage() {
         <div className="mb-8 rounded-xl border border-border bg-card p-6 space-y-4">
           <h2 className="font-display text-lg font-bold">Saved addresses</h2>
           {profile?.addresses.map((addr) => (
-            <div key={addr.id} className="rounded-lg border border-secondary bg-secondary/50 p-4 flex items-start justify-between gap-4">
+            <div
+              key={addr.id}
+              className="rounded-lg border border-secondary bg-secondary/50 p-4 flex items-start justify-between gap-4"
+            >
               <div className="text-sm">
                 <p className="font-semibold">{addr.label}</p>
                 <p className="text-muted-foreground">
                   {addr.street}, {addr.city} {addr.postcode}
                 </p>
-                {addr.notes && <p className="text-xs text-muted-foreground italic mt-1">{addr.notes}</p>}
+                {addr.notes && (
+                  <p className="text-xs text-muted-foreground italic mt-1">{addr.notes}</p>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -524,13 +581,18 @@ function CustomerProfilePage() {
               className="w-full rounded-lg border-2 border-primary bg-primary/5 p-4 text-left transition-all hover:bg-primary/10"
             >
               <p className="font-semibold text-lg">{mostVisitedStore.name}</p>
-              <p className="text-sm text-muted-foreground">{mostVisitedStore.category ?? "Store"}</p>
+              <p className="text-sm text-muted-foreground">
+                {mostVisitedStore.category ?? "Store"}
+              </p>
               <p className="mt-2 text-xs font-medium text-primary">
-                {mostVisitedStore.visits} visit{mostVisitedStore.visits === 1 ? "" : "s"} across your bookings/orders
+                {mostVisitedStore.visits} visit{mostVisitedStore.visits === 1 ? "" : "s"} across
+                your bookings/orders
               </p>
             </button>
           ) : (
-            <p className="text-sm text-muted-foreground">No visits yet. Once you place orders or bookings, your top store will appear here.</p>
+            <p className="text-sm text-muted-foreground">
+              No visits yet. Once you place orders or bookings, your top store will appear here.
+            </p>
           )}
         </div>
 
@@ -548,7 +610,9 @@ function CustomerProfilePage() {
               />
               <span className="text-sm">
                 <p className="font-semibold">Email alerts</p>
-                <p className="text-xs text-muted-foreground">Order updates, booking confirmations</p>
+                <p className="text-xs text-muted-foreground">
+                  Order updates, booking confirmations
+                </p>
               </span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
@@ -561,7 +625,9 @@ function CustomerProfilePage() {
               />
               <span className="text-sm">
                 <p className="font-semibold">SMS alerts</p>
-                <p className="text-xs text-muted-foreground">Time-sensitive updates (booking in 1 hour, order ready)</p>
+                <p className="text-xs text-muted-foreground">
+                  Time-sensitive updates (booking in 1 hour, order ready)
+                </p>
               </span>
             </label>
           </div>

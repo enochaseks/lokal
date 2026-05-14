@@ -30,10 +30,22 @@ type BookingResult = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; colour: string; icon: string }> = {
-  pending: { label: "Pending confirmation", colour: "bg-amber-100 text-amber-800 border-amber-200", icon: "⏳" },
-  confirmed: { label: "Confirmed", colour: "bg-green-100 text-green-800 border-green-200", icon: "✅" },
+  pending: {
+    label: "Pending confirmation",
+    colour: "bg-amber-100 text-amber-800 border-amber-200",
+    icon: "⏳",
+  },
+  confirmed: {
+    label: "Confirmed",
+    colour: "bg-green-100 text-green-800 border-green-200",
+    icon: "✅",
+  },
   cancelled: { label: "Cancelled", colour: "bg-red-100 text-red-800 border-red-200", icon: "❌" },
-  completed: { label: "Completed", colour: "bg-blue-100 text-blue-800 border-blue-200", icon: "🎉" },
+  completed: {
+    label: "Completed",
+    colour: "bg-blue-100 text-blue-800 border-blue-200",
+    icon: "🎉",
+  },
 };
 
 function prettySlot(iso: string): string {
@@ -98,7 +110,9 @@ function BookingLookupPage() {
       if (isUuid(cleanRef)) {
         const res = await (supabase as any)
           .from("store_bookings")
-          .select("id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)")
+          .select(
+            "id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)",
+          )
           .eq("id", cleanRef)
           .maybeSingle();
         data = res.data;
@@ -107,14 +121,20 @@ function BookingLookupPage() {
         const phoneSuffix = cleanPhone.replace(/\D/g, "").slice(-9);
         const res = await (supabase as any)
           .from("store_bookings")
-          .select("id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)")
+          .select(
+            "id, store_id, customer_name, customer_phone, customer_email, service, staff_name, slot_start, slot_end, status, note, stores(name)",
+          )
           .ilike("customer_phone", `%${phoneSuffix}%`)
           .order("created_at", { ascending: false })
           .limit(20);
         err = res.error;
-        data = (res.data ?? []).find((b: any) => String(b.id).toLowerCase().startsWith(cleanRef)) ?? null;
+        data =
+          (res.data ?? []).find((b: any) => String(b.id).toLowerCase().startsWith(cleanRef)) ??
+          null;
       } else {
-        setError("Invalid booking reference format. Use the full UUID or BK- reference from your email.");
+        setError(
+          "Invalid booking reference format. Use the full UUID or BK- reference from your email.",
+        );
         return;
       }
 
@@ -182,7 +202,7 @@ function BookingLookupPage() {
         });
       }
 
-      setResult((prev) => prev ? { ...prev, status: "cancelled" } : null);
+      setResult((prev) => (prev ? { ...prev, status: "cancelled" } : null));
       toast.success("Booking cancelled. We've sent a confirmation to your email if provided.");
     } catch (e: any) {
       toast.error(e.message ?? "Could not cancel booking");
@@ -203,7 +223,9 @@ function BookingLookupPage() {
             <CalendarSearch className="h-7 w-7" />
           </div>
           <h1 className="mt-4 font-display text-3xl font-bold">My booking</h1>
-          <p className="mt-2 text-muted-foreground">Enter your booking ID (from your confirmation email) and phone number to view or cancel.</p>
+          <p className="mt-2 text-muted-foreground">
+            Enter your booking ID (from your confirmation email) and phone number to view or cancel.
+          </p>
         </div>
 
         <div className="mt-8 space-y-3">
@@ -229,13 +251,19 @@ function BookingLookupPage() {
           </Button>
           {!isLoggedIn && (
             <p className="text-center text-xs text-muted-foreground pt-2">
-              💡 <a href="/customer/profile" className="font-semibold text-primary hover:underline">Create a profile</a> to save addresses and get order alerts
+              💡{" "}
+              <a href="/customer/profile" className="font-semibold text-primary hover:underline">
+                Create a profile
+              </a>{" "}
+              to save addresses and get order alerts
             </p>
           )}
         </div>
 
         {error && (
-          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </p>
         )}
 
         {result && statusCfg && (
@@ -246,7 +274,9 @@ function BookingLookupPage() {
                   <p className="font-display text-xl font-bold">{result.store_name}</p>
                   <p className="text-sm text-muted-foreground">{result.customer_name}</p>
                 </div>
-                <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${statusCfg.colour}`}>
+                <span
+                  className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${statusCfg.colour}`}
+                >
                   {statusCfg.icon} {statusCfg.label}
                 </span>
               </div>
@@ -263,12 +293,11 @@ function BookingLookupPage() {
                 )}
                 {result.staff_name && (
                   <div className="text-muted-foreground">
-                    <span className="font-medium text-foreground">Team member:</span> {result.staff_name}
+                    <span className="font-medium text-foreground">Team member:</span>{" "}
+                    {result.staff_name}
                   </div>
                 )}
-                {result.note && (
-                  <div className="text-muted-foreground italic">"{result.note}"</div>
-                )}
+                {result.note && <div className="text-muted-foreground italic">"{result.note}"</div>}
               </div>
 
               {canCancel && (
@@ -279,7 +308,14 @@ function BookingLookupPage() {
                     onClick={cancelBooking}
                     disabled={cancelling}
                   >
-                    {cancelling ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Cancelling…</> : "Cancel this booking"}
+                    {cancelling ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Cancelling…
+                      </>
+                    ) : (
+                      "Cancel this booking"
+                    )}
                   </Button>
                   <p className="mt-2 text-center text-xs text-muted-foreground">
                     This will notify the merchant and send a confirmation to your email if provided.

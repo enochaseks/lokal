@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Mail, Instagram, MessageCircleHeart, BadgeCheck } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 
-
 export const Route = createFileRoute("/help")({
   component: HelpPage,
   head: () => ({ meta: [{ title: "Help Center · Lokal" }] }),
@@ -41,9 +40,12 @@ function HelpPage() {
             <MessageCircleHeart className="h-3.5 w-3.5" />
             Help Center
           </div>
-          <h1 className="mt-4 font-display text-4xl font-bold md:text-5xl">Need help reaching us?</h1>
+          <h1 className="mt-4 font-display text-4xl font-bold md:text-5xl">
+            Need help reaching us?
+          </h1>
           <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-            If you need support with an order, your store listing, or anything on Lokal, contact us directly by email or Instagram.
+            If you need support with an order, your store listing, or anything on Lokal, contact us
+            directly by email or Instagram.
           </p>
         </div>
 
@@ -85,15 +87,27 @@ function HelpPage() {
             <h3 className="font-display text-lg font-bold">What each verification badge means</h3>
             <div className="mt-2 space-y-2 text-sm text-muted-foreground">
               <p>
-                We use different verification badges based on the type of evidence reviewed by our admin team:
+                We use different verification badges based on the type of evidence reviewed by our
+                admin team:
               </p>
               <ul className="list-disc space-y-1 pl-5">
-                <li><strong className="text-foreground">Verified</strong> - business registration documents were reviewed and approved.</li>
-                <li><strong className="text-foreground">Online verified</strong> - store identity was verified through established online presence (website/social pages).</li>
-                <li><strong className="text-foreground">Unsecured verified</strong> - manual evidence was accepted, but with fewer formal supporting documents.</li>
+                <li>
+                  <strong className="text-foreground">Verified</strong> - business registration
+                  documents were reviewed and approved.
+                </li>
+                <li>
+                  <strong className="text-foreground">Online verified</strong> - store identity was
+                  verified through established online presence (website/social pages).
+                </li>
+                <li>
+                  <strong className="text-foreground">Unsecured verified</strong> - manual evidence
+                  was accepted, but with fewer formal supporting documents.
+                </li>
               </ul>
               <p>
-                All live stores must pass one of these verification paths. Badges show which path was used, but do not guarantee product quality, delivery speed, or merchant reliability.
+                All live stores must pass one of these verification paths. Badges show which path
+                was used, but do not guarantee product quality, delivery speed, or merchant
+                reliability.
               </p>
             </div>
           </div>
@@ -103,15 +117,32 @@ function HelpPage() {
             </div>
             <h3 className="font-display text-lg font-bold">How do I verify my store?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              If you're a merchant, you can submit a verification request from your dashboard. Provide business registration documents, proof of online presence, or manual details. Our admin team reviews submissions within a few days and approves or rejects based on available evidence.
+              If you're a merchant, you can submit a verification request from your dashboard.
+              Provide business registration documents, proof of online presence, or manual details.
+              Our admin team reviews submissions within a few days and approves or rejects based on
+              available evidence.
             </p>
           </div>
         </div>
 
         <div className="mt-10 rounded-2xl border border-border/60 bg-secondary/40 p-6 text-sm leading-relaxed text-muted-foreground">
-          For privacy or legal questions, you can also review our <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>, <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>, and <Link to="/refunds-cancellations" className="text-primary hover:underline">Refund &amp; Cancellation</Link> page.
+          For privacy or legal questions, you can also review our{" "}
+          <Link to="/privacy" className="text-primary hover:underline">
+            Privacy Policy
+          </Link>
+          ,{" "}
+          <Link to="/terms" className="text-primary hover:underline">
+            Terms of Service
+          </Link>
+          , and{" "}
+          <Link to="/refunds-cancellations" className="text-primary hover:underline">
+            Refund &amp; Cancellation
+          </Link>{" "}
+          page.
           <p className="mt-3">
-            Reminder: Lokal does not hold customer funds and does not process refunds directly. Refund and cancellation disputes are resolved between customer and merchant under the merchant's policy.
+            Reminder: Lokal does not hold customer funds and does not process refunds directly.
+            Refund and cancellation disputes are resolved between customer and merchant under the
+            merchant's policy.
           </p>
         </div>
       </main>

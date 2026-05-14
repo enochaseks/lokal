@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  Ban,
-  Clock,
-  ChevronDown,
-  Filter,
-} from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle, Ban, Clock, ChevronDown, Filter } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -83,7 +75,7 @@ function FraudReviewDashboard() {
           assigned_at,
           reviewed_at,
           created_at
-        `
+        `,
         )
         .order("created_at", { ascending: false });
 
@@ -96,35 +88,27 @@ function FraudReviewDashboard() {
 
       // Enrich with user email and store name
       if (data && data.length > 0) {
-        const userIds = Array.from(
-          new Set((data as any[]).map((r) => r.user_id).filter(Boolean))
-        );
+        const userIds = Array.from(new Set((data as any[]).map((r) => r.user_id).filter(Boolean)));
         const storeIds = Array.from(
-          new Set((data as any[]).map((r) => r.entity_id).filter(Boolean))
+          new Set((data as any[]).map((r) => r.entity_id).filter(Boolean)),
         );
 
         const [usersResult, storesResult] = await Promise.all([
           userIds.length > 0
-            ? (supabase as any)
-                .from("auth.users")
-                .select("id, email")
-                .in("id", userIds)
+            ? (supabase as any).from("auth.users").select("id, email").in("id", userIds)
             : Promise.resolve({ data: [] }),
           storeIds.length > 0
-            ? (supabase as any)
-                .from("stores")
-                .select("id, name")
-                .in("id", storeIds)
+            ? (supabase as any).from("stores").select("id, name").in("id", storeIds)
             : Promise.resolve({ data: [] }),
         ]);
 
         const userEmailById = (usersResult.data || []).reduce(
           (acc: any, u: any) => ({ ...acc, [u.id]: u.email }),
-          {}
+          {},
         );
         const storeNameById = (storesResult.data || []).reduce(
           (acc: any, s: any) => ({ ...acc, [s.id]: s.name }),
-          {}
+          {},
         );
 
         const enrichedReviews: FraudReview[] = (data as any[]).map((r) => ({
@@ -145,10 +129,7 @@ function FraudReviewDashboard() {
     }
   };
 
-  const handleReviewAction = async (
-    reviewId: string,
-    action: "approve" | "reject" | "block"
-  ) => {
+  const handleReviewAction = async (reviewId: string, action: "approve" | "reject" | "block") => {
     setActionLoading(reviewId);
     try {
       const response = await fetch(
@@ -164,7 +145,7 @@ function FraudReviewDashboard() {
             action,
             admin_id: user?.id,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -176,7 +157,7 @@ function FraudReviewDashboard() {
           ? "Store approved"
           : action === "reject"
             ? "Store rejected"
-            : "User blocked"
+            : "User blocked",
       );
       loadReviews();
     } catch (err: any) {
@@ -199,9 +180,7 @@ function FraudReviewDashboard() {
   };
 
   const formatFlagName = (flag: string) => {
-    return flag
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (l) => l.toUpperCase());
+    return flag.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   if (loading || reviewsLoading) {
@@ -217,9 +196,7 @@ function FraudReviewDashboard() {
       <Navbar />
       <main className="container mx-auto max-w-5xl px-4 py-12">
         <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold mb-2">
-            Fraud Review Queue
-          </h1>
+          <h1 className="font-display text-3xl font-bold mb-2">Fraud Review Queue</h1>
           <p className="text-muted-foreground">
             Review flagged stores and accounts for suspicious activity
           </p>
@@ -259,26 +236,18 @@ function FraudReviewDashboard() {
               >
                 <div
                   className="flex items-start justify-between cursor-pointer"
-                  onClick={() =>
-                    setExpandedId(expandedId === review.id ? null : review.id)
-                  }
+                  onClick={() => setExpandedId(expandedId === review.id ? null : review.id)}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      {review.status === "pending" && (
-                        <Clock className="h-5 w-5 text-amber-600" />
-                      )}
+                      {review.status === "pending" && <Clock className="h-5 w-5 text-amber-600" />}
                       {review.status === "approved" && (
                         <CheckCircle className="h-5 w-5 text-green-600" />
                       )}
-                      {review.status === "rejected" && (
-                        <XCircle className="h-5 w-5 text-red-600" />
-                      )}
+                      {review.status === "rejected" && <XCircle className="h-5 w-5 text-red-600" />}
                       <div>
                         <h3 className="font-semibold">{review.store_name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {review.user_email}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{review.user_email}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
@@ -324,28 +293,18 @@ function FraudReviewDashboard() {
                     {/* Risk Breakdown */}
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div className="rounded bg-background/40 p-2">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Risk Score
-                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">Risk Score</p>
                         <p className={`font-semibold ${getRiskColor(review.risk_score)}`}>
                           {review.risk_score}/100
                         </p>
                       </div>
                       <div className="rounded bg-background/40 p-2">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Entity Type
-                        </p>
-                        <p className="font-semibold capitalize">
-                          {review.entity_type}
-                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">Entity Type</p>
+                        <p className="font-semibold capitalize">{review.entity_type}</p>
                       </div>
                       <div className="rounded bg-background/40 p-2">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Status
-                        </p>
-                        <p className="font-semibold capitalize">
-                          {review.status}
-                        </p>
+                        <p className="text-xs text-muted-foreground mb-1">Status</p>
+                        <p className="font-semibold capitalize">{review.status}</p>
                       </div>
                     </div>
 

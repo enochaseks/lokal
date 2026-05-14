@@ -64,8 +64,12 @@ Deno.serve(async (req) => {
     }
 
     const slotStr = prettySlot(payload.slot_start);
-    const serviceText = payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : "";
-    const staffText = payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : "";
+    const serviceText = payload.service
+      ? `<p><strong>Service:</strong> ${payload.service}</p>`
+      : "";
+    const staffText = payload.staff_name
+      ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>`
+      : "";
     const ageText = payload.age_restricted
       ? `<p><strong>Important:</strong> This is an age-restricted service (${payload.minimum_age_required ?? 18}+). Please bring valid government-issued ID to your appointment.</p>`
       : "";
@@ -87,7 +91,9 @@ Deno.serve(async (req) => {
       `${payload.store_name} - ${slotStr}`,
       payload.service ? `Service: ${payload.service}` : null,
       payload.staff_name ? `With: ${payload.staff_name}` : null,
-      payload.age_restricted ? `Bring valid ID (${payload.minimum_age_required ?? 18}+ service).` : null,
+      payload.age_restricted
+        ? `Bring valid ID (${payload.minimum_age_required ?? 18}+ service).`
+        : null,
       `Need changes? Contact the store.`,
       `https://lokalshops.co.uk`,
     ]
@@ -130,10 +136,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ sent: emailResult.ok || smsResult.ok, email: emailResult, sms: smsResult }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return new Response(JSON.stringify({ sent: false, error: message }), {

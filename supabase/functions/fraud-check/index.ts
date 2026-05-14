@@ -26,8 +26,14 @@ interface FraudCheckRequest {
 
 // Known bot email domains
 const BOT_EMAIL_DOMAINS = [
-  "tempmail.com", "throwaway.email", "guerrillamail.com", "mailinator.com",
-  "10minutemail.com", "testing.com", "test.com", "example.com"
+  "tempmail.com",
+  "throwaway.email",
+  "guerrillamail.com",
+  "mailinator.com",
+  "10minutemail.com",
+  "testing.com",
+  "test.com",
+  "example.com",
 ];
 
 // Suspicious name patterns
@@ -46,7 +52,7 @@ function scoreEmail(email: string): { score: number; flags: string[] } {
   let score = 0;
 
   const domain = email.split("@")[1] || "";
-  
+
   // Check for bot domains
   if (BOT_EMAIL_DOMAINS.includes(domain)) {
     flags.push("disposable_email_domain");
@@ -179,7 +185,10 @@ function scoreStoreName(storeName: string | undefined): { score: number; flags: 
   return { score, flags };
 }
 
-function scoreMetadata(metadata: Record<string, unknown> | undefined): { score: number; flags: string[] } {
+function scoreMetadata(metadata: Record<string, unknown> | undefined): {
+  score: number;
+  flags: string[];
+} {
   const flags: string[] = [];
   let score = 0;
 
@@ -188,7 +197,7 @@ function scoreMetadata(metadata: Record<string, unknown> | undefined): { score: 
   // Check for missing common metadata fields
   const hasAddress = !!metadata.address;
   const hasDescription = !!metadata.description;
-  
+
   if (!hasAddress) {
     flags.push("missing_address");
     score += 10;
@@ -271,7 +280,16 @@ Deno.serve(async (req) => {
 
   try {
     const body: FraudCheckRequest = await req.json();
-    const { user_id, email, phone, display_name, store_name, store_category, metadata, entity_type } = body;
+    const {
+      user_id,
+      email,
+      phone,
+      display_name,
+      store_name,
+      store_category,
+      metadata,
+      entity_type,
+    } = body;
 
     if (!user_id || !email || !entity_type) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -316,32 +334,28 @@ Deno.serve(async (req) => {
     // If high risk, add to review queue
     if (fraudScore.risk_level === "high" && riskRecord) {
       const storeId = entity_type === "store" ? user_id : null; // Simplification; in real app, track actual store_id
-      
-      await supabase
-        .from("fraud_review_queue")
-        .insert({
-          risk_score_id: riskRecord.id,
-          entity_type,
-          entity_id: user_id,
-          user_id,
-          risk_score: fraudScore.risk_score,
-          fraud_flags: fraudScore.fraud_flags,
-          reason: `High fraud risk detected: ${fraudScore.fraud_flags.join(", ")}`,
-          status: "pending",
-        });
+
+      await supabase.from("fraud_review_queue").insert({
+        risk_score_id: riskRecord.id,
+        entity_type,
+        entity_id: user_id,
+        user_id,
+        risk_score: fraudScore.risk_score,
+        fraud_flags: fraudScore.fraud_flags,
+        reason: `High fraud risk detected: ${fraudScore.fraud_flags.join(", ")}`,
+        status: "pending",
+      });
     }
 
     // Log activity
-    await supabase
-      .from("fraud_activity_log")
-      .insert({
-        user_id,
-        activity_type: `${entity_type}_created`,
-        entity_type,
-        entity_id: user_id,
-        risk_flags: fraudScore.fraud_flags,
-        metadata: { risk_score: fraudScore.risk_score, risk_level: fraudScore.risk_level },
-      });
+    await supabase.from("fraud_activity_log").insert({
+      user_id,
+      activity_type: `${entity_type}_created`,
+      entity_type,
+      entity_id: user_id,
+      risk_flags: fraudScore.fraud_flags,
+      metadata: { risk_score: fraudScore.risk_score, risk_level: fraudScore.risk_level },
+    });
 
     return new Response(
       JSON.stringify({
@@ -353,7 +367,7 @@ Deno.serve(async (req) => {
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     console.error("Fraud check error:", error);

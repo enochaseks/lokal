@@ -85,8 +85,16 @@ function AdminDashboard() {
         .select("id,name,category,subcategory")
         .in("id", storeIds);
 
-      const storeMetaById: Record<string, { name: string; category: string | null; subcategory: string | null }> = {};
-      for (const row of (storesData ?? []) as Array<{ id: string; name: string; category: string | null; subcategory: string | null }>) {
+      const storeMetaById: Record<
+        string,
+        { name: string; category: string | null; subcategory: string | null }
+      > = {};
+      for (const row of (storesData ?? []) as Array<{
+        id: string;
+        name: string;
+        category: string | null;
+        subcategory: string | null;
+      }>) {
         storeMetaById[row.id] = {
           name: row.name,
           category: row.category ?? null,
@@ -98,7 +106,8 @@ function AdminDashboard() {
         ...req,
         store_name: req.store_name || storeMetaById[req.store_id]?.name || "Unknown Store",
         store_category: req.store_category ?? storeMetaById[req.store_id]?.category ?? null,
-        store_subcategory: req.store_subcategory ?? storeMetaById[req.store_id]?.subcategory ?? null,
+        store_subcategory:
+          req.store_subcategory ?? storeMetaById[req.store_id]?.subcategory ?? null,
       }));
     }
 
@@ -120,10 +129,16 @@ function AdminDashboard() {
           return;
         }
 
-        const [{ data: reqData, error: reqError }, { data: notifData, error: notifError }, { data: fraudData, error: fraudErr }] = await Promise.all([
+        const [
+          { data: reqData, error: reqError },
+          { data: notifData, error: notifError },
+          { data: fraudData, error: fraudErr },
+        ] = await Promise.all([
           (supabase as any)
             .from("store_verification_requests")
-            .select("id, store_id, status, business_name, owner_name, verification_method, online_presence_url, business_registration_number, manual_review_details, supporting_links, is_tattoo_verification, tattoo_minimum_age, tattoo_portfolio_url, tattoo_license_url, tattoo_age_restriction_acknowledged, submission_reason, submitted_at, admin_notes")
+            .select(
+              "id, store_id, status, business_name, owner_name, verification_method, online_presence_url, business_registration_number, manual_review_details, supporting_links, is_tattoo_verification, tattoo_minimum_age, tattoo_portfolio_url, tattoo_license_url, tattoo_age_restriction_acknowledged, submission_reason, submitted_at, admin_notes",
+            )
             .order("submitted_at", { ascending: false }),
           (supabase as any)
             .from("review_notifications")
@@ -141,14 +156,24 @@ function AdminDashboard() {
 
         if (reqError) throw reqError;
 
-        const storeIds = Array.from(new Set((reqData ?? []).map((r: any) => r.store_id).filter(Boolean)));
-        let storeMetaById: Record<string, { name: string; category: string | null; subcategory: string | null }> = {};
+        const storeIds = Array.from(
+          new Set((reqData ?? []).map((r: any) => r.store_id).filter(Boolean)),
+        );
+        const storeMetaById: Record<
+          string,
+          { name: string; category: string | null; subcategory: string | null }
+        > = {};
         if (storeIds.length > 0) {
           const { data: storesData } = await (supabase as any)
             .from("stores")
             .select("id,name,category,subcategory")
             .in("id", storeIds);
-          for (const row of (storesData ?? []) as Array<{ id: string; name: string; category: string | null; subcategory: string | null }>) {
+          for (const row of (storesData ?? []) as Array<{
+            id: string;
+            name: string;
+            category: string | null;
+            subcategory: string | null;
+          }>) {
             storeMetaById[row.id] = {
               name: row.name,
               category: row.category ?? null,
@@ -157,50 +182,56 @@ function AdminDashboard() {
           }
         }
 
-        setRequests(((reqData ?? []) as any[]).map((req) => ({
-          id: req.id,
-          store_id: req.store_id,
-          store_name: storeMetaById[req.store_id]?.name ?? "Unknown Store",
-          store_category: storeMetaById[req.store_id]?.category ?? null,
-          store_subcategory: storeMetaById[req.store_id]?.subcategory ?? null,
-          owner_name: req.owner_name,
-          business_name: req.business_name,
-          verification_method: req.verification_method,
-          online_presence_url: req.online_presence_url,
-          business_registration_number: req.business_registration_number,
-          manual_review_details: req.manual_review_details,
-          supporting_links: req.supporting_links,
-          is_tattoo_verification: req.is_tattoo_verification,
-          tattoo_minimum_age: req.tattoo_minimum_age,
-          tattoo_portfolio_url: req.tattoo_portfolio_url,
-          tattoo_license_url: req.tattoo_license_url,
-          tattoo_age_restriction_acknowledged: req.tattoo_age_restriction_acknowledged,
-          submission_reason: req.submission_reason,
-          submitted_at: req.submitted_at,
-          status: req.status,
-          admin_notes: req.admin_notes,
-        })));
+        setRequests(
+          ((reqData ?? []) as any[]).map((req) => ({
+            id: req.id,
+            store_id: req.store_id,
+            store_name: storeMetaById[req.store_id]?.name ?? "Unknown Store",
+            store_category: storeMetaById[req.store_id]?.category ?? null,
+            store_subcategory: storeMetaById[req.store_id]?.subcategory ?? null,
+            owner_name: req.owner_name,
+            business_name: req.business_name,
+            verification_method: req.verification_method,
+            online_presence_url: req.online_presence_url,
+            business_registration_number: req.business_registration_number,
+            manual_review_details: req.manual_review_details,
+            supporting_links: req.supporting_links,
+            is_tattoo_verification: req.is_tattoo_verification,
+            tattoo_minimum_age: req.tattoo_minimum_age,
+            tattoo_portfolio_url: req.tattoo_portfolio_url,
+            tattoo_license_url: req.tattoo_license_url,
+            tattoo_age_restriction_acknowledged: req.tattoo_age_restriction_acknowledged,
+            submission_reason: req.submission_reason,
+            submitted_at: req.submitted_at,
+            status: req.status,
+            admin_notes: req.admin_notes,
+          })),
+        );
 
         if (notifError) {
           setNotifications([]);
         } else {
-          setNotifications(((notifData ?? []) as any[]).map((row) => ({
-            id: row.id,
-            title: row.title,
-            body: row.body,
-            store_id: row.store_id,
-            recipient_role: row.recipient_role,
-            is_read: row.is_read,
-            created_at: row.created_at,
-            stores: { name: storeMetaById[row.store_id]?.name ?? "Unknown store" },
-          })));
+          setNotifications(
+            ((notifData ?? []) as any[]).map((row) => ({
+              id: row.id,
+              title: row.title,
+              body: row.body,
+              store_id: row.store_id,
+              recipient_role: row.recipient_role,
+              is_read: row.is_read,
+              created_at: row.created_at,
+              stores: { name: storeMetaById[row.store_id]?.name ?? "Unknown store" },
+            })),
+          );
         }
 
         if (fraudErr) {
           setFraudQueue([]);
         } else {
-          const fraudStoreIds = Array.from(new Set(((fraudData ?? []) as any[]).map((row) => row.entity_id).filter(Boolean)));
-          let fraudStoreNameById: Record<string, string> = {};
+          const fraudStoreIds = Array.from(
+            new Set(((fraudData ?? []) as any[]).map((row) => row.entity_id).filter(Boolean)),
+          );
+          const fraudStoreNameById: Record<string, string> = {};
 
           if (fraudStoreIds.length > 0) {
             const { data: fraudStores } = await (supabase as any)
@@ -213,15 +244,17 @@ function AdminDashboard() {
             }
           }
 
-          setFraudQueue(((fraudData ?? []) as any[]).map((row) => ({
-            id: row.id,
-            entity_id: row.entity_id,
-            risk_score: row.risk_score,
-            fraud_flags: row.fraud_flags ?? [],
-            status: row.status,
-            created_at: row.created_at,
-            stores: { name: fraudStoreNameById[row.entity_id] ?? "Unknown store" },
-          })));
+          setFraudQueue(
+            ((fraudData ?? []) as any[]).map((row) => ({
+              id: row.id,
+              entity_id: row.entity_id,
+              risk_score: row.risk_score,
+              fraud_flags: row.fraud_flags ?? [],
+              status: row.status,
+              created_at: row.created_at,
+              stores: { name: fraudStoreNameById[row.entity_id] ?? "Unknown store" },
+            })),
+          );
         }
       } catch (err) {
         console.error("Failed to load admin feed:", err);
@@ -285,7 +318,9 @@ function AdminDashboard() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-                <p className="text-sm text-muted-foreground">Review fraud queue and store verification requests</p>
+                <p className="text-sm text-muted-foreground">
+                  Review fraud queue and store verification requests
+                </p>
               </div>
             </div>
             <Button
@@ -320,13 +355,17 @@ function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {fraudQueue.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/20">
+                  <div
+                    key={item.id}
+                    className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/20"
+                  >
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700 dark:text-amber-300" />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold">{item.stores?.name ?? "Unknown store"}</p>
                         <p className="text-sm text-muted-foreground">
-                          Risk score: {item.risk_score} · {new Date(item.created_at).toLocaleString()}
+                          Risk score: {item.risk_score} ·{" "}
+                          {new Date(item.created_at).toLocaleString()}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Flags: {item.fraud_flags.join(", ") || "none"}
@@ -349,19 +388,23 @@ function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {notifications.map((notification) => (
-                  <div key={notification.id} className={`rounded-lg border p-4 ${notification.is_read ? "border-border bg-background" : "border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20"}`}>
+                  <div
+                    key={notification.id}
+                    className={`rounded-lg border p-4 ${notification.is_read ? "border-border bg-background" : "border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20"}`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold">{notification.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          {notification.stores?.name ?? "Unknown store"} · {new Date(notification.created_at).toLocaleString()}
+                          {notification.stores?.name ?? "Unknown store"} ·{" "}
+                          {new Date(notification.created_at).toLocaleString()}
                         </p>
-                        {notification.body && (
-                          <p className="mt-2 text-sm">{notification.body}</p>
-                        )}
+                        {notification.body && <p className="mt-2 text-sm">{notification.body}</p>}
                       </div>
                       {!notification.is_read && (
-                        <span className="rounded-full bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">New</span>
+                        <span className="rounded-full bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">
+                          New
+                        </span>
                       )}
                     </div>
                   </div>
@@ -383,7 +426,6 @@ function AdminDashboard() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }
@@ -391,9 +433,6 @@ function AdminDashboard() {
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
   head: () => ({
-    meta: [
-      { title: "Admin Dashboard · Lokal" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Admin Dashboard · Lokal" }, { name: "robots", content: "noindex" }],
   }),
 });

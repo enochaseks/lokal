@@ -24,9 +24,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Lokal — African & Caribbean stores near you" },
-      { name: "description", content: "Discover African and Caribbean grocers, beauty stores and barbers nearby. Reserve with the merchant, pay by bank transfer." },
+      {
+        name: "description",
+        content:
+          "Discover African and Caribbean grocers, beauty stores and barbers nearby. Reserve with the merchant, pay by bank transfer.",
+      },
       { property: "og:title", content: "Lokal — African & Caribbean stores near you" },
-      { property: "og:description", content: "A marketplace for the diaspora. Find local stores and pay merchants directly by bank transfer." },
+      {
+        property: "og:description",
+        content:
+          "A marketplace for the diaspora. Find local stores and pay merchants directly by bank transfer.",
+      },
     ],
   }),
 });
@@ -48,7 +56,7 @@ function Index() {
 
   const timeToMinutes = (time: string) => {
     const [h, m] = time.slice(0, 5).split(":").map(Number);
-    return (h * 60) + m;
+    return h * 60 + m;
   };
 
   const DAY_TO_INDEX: Record<string, number> = {
@@ -83,7 +91,9 @@ function Index() {
     return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
   };
 
-  const parseHoursText = (hours: string | null | undefined): Array<{ day_of_week: number; start_time: string; end_time: string }> => {
+  const parseHoursText = (
+    hours: string | null | undefined,
+  ): Array<{ day_of_week: number; start_time: string; end_time: string }> => {
     if (!hours) return [];
     const normalized = hours.toLowerCase().trim();
     if (!normalized || normalized.includes("request")) return [];
@@ -97,7 +107,11 @@ function Index() {
     const allDays = [0, 1, 2, 3, 4, 5, 6];
     const daySegmentRaw = hours.split("·")[0]?.trim() ?? hours.trim();
     const daySegment = daySegmentRaw.toLowerCase();
-    if (daySegment.includes("daily") || daySegment.includes("every day") || daySegment.includes("everyday")) {
+    if (
+      daySegment.includes("daily") ||
+      daySegment.includes("every day") ||
+      daySegment.includes("everyday")
+    ) {
       return allDays.map((day) => ({ day_of_week: day, start_time: startTime, end_time: endTime }));
     }
 
@@ -132,15 +146,19 @@ function Index() {
   };
 
   const isStoreOpenNow = (
-    availability: Array<{ day_of_week: number; start_time: string; end_time: string }> | null | undefined,
+    availability:
+      | Array<{ day_of_week: number; start_time: string; end_time: string }>
+      | null
+      | undefined,
     hoursText?: string | null,
     timezone?: string | null,
   ): boolean => {
-    const windows = availability && availability.length > 0 ? availability : parseHoursText(hoursText);
+    const windows =
+      availability && availability.length > 0 ? availability : parseHoursText(hoursText);
     if (!windows || windows.length === 0) return false;
     const now = new Date();
     let today = now.getDay();
-    let nowMins = (now.getHours() * 60) + now.getMinutes();
+    let nowMins = now.getHours() * 60 + now.getMinutes();
     if (timezone?.trim()) {
       try {
         const parts = new Intl.DateTimeFormat("en-US", {
@@ -154,7 +172,7 @@ function Index() {
         const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
         const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
         today = WEEKDAY_TO_INDEX[weekday ?? ""] ?? today;
-        nowMins = (hour * 60) + minute;
+        nowMins = hour * 60 + minute;
       } catch {
         // Fall back to viewer local time if timezone is invalid.
       }
@@ -181,7 +199,14 @@ function Index() {
   };
 
   // Following feed
-  type PostRow = { id: string; store_id: string; body: string; image_url: string | null; video_url: string | null; created_at: string };
+  type PostRow = {
+    id: string;
+    store_id: string;
+    body: string;
+    image_url: string | null;
+    video_url: string | null;
+    created_at: string;
+  };
   const [followedPosts, setFollowedPosts] = useState<PostRow[]>([]);
   const [followedStoreIds, setFollowedStoreIds] = useState<string[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
@@ -189,10 +214,15 @@ function Index() {
 
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.user) return;
       const uid = session.user.id;
-      const { data: follows } = await (supabase as any).from("store_follows").select("store_id").eq("user_id", uid);
+      const { data: follows } = await (supabase as any)
+        .from("store_follows")
+        .select("store_id")
+        .eq("user_id", uid);
       const ids: string[] = (follows ?? []).map((f: any) => f.store_id);
       setFollowedStoreIds(ids);
       if (ids.length === 0) return;
@@ -220,7 +250,9 @@ function Index() {
     (async () => {
       const { data: rows } = await supabase
         .from("stores")
-        .select("id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)")
+        .select(
+          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
+        )
         .eq("published", true)
         .order("created_at", { ascending: false });
 
@@ -229,10 +261,16 @@ function Index() {
         .from("store_verification_requests")
         .select("store_id, verification_method, status")
         .eq("status", "approved")
-        .in("store_id", rows.map((row: any) => row.id));
+        .in(
+          "store_id",
+          rows.map((row: any) => row.id),
+        );
 
       const tierByStore: Record<string, "verified" | "online_verified" | "unsecured_verified"> = {};
-      for (const item of (verifications ?? []) as Array<{ store_id: string; verification_method: string }>) {
+      for (const item of (verifications ?? []) as Array<{
+        store_id: string;
+        verification_method: string;
+      }>) {
         if (tierByStore[item.store_id]) continue;
         tierByStore[item.store_id] =
           item.verification_method === "registration_number"
@@ -244,54 +282,64 @@ function Index() {
 
       const mapped: Store[] = rows.flatMap((r: any) => {
         if (!LIVE_CATEGORIES.includes(r.category)) return [];
-        return [{
-        id: r.id,
-        name: r.name,
-        category: r.category as Store["category"],
-        subcategory: r.subcategory ?? null,
-        minimum_age: r.minimum_age ?? null,
-        tattoo_portfolio_url: r.tattoo_portfolio_url ?? null,
-        tattoo_license_url: r.tattoo_license_url ?? null,
-        is_verified_tattoo_artist: r.is_verified_tattoo_artist ?? false,
-        health_safety_certificate_status: r.health_safety_certificate_status ?? null,
-        is_open_now: isStoreOpenNow(r.store_availability ?? [], r.hours, r.timezone),
-        origin: r.origin || "🌍 Local",
-        rating: 0,
-        reviews: 0,
-        distance: "—",
-        city: r.city || undefined,
-        postcode: r.postcode || undefined,
-        timezone: r.timezone || undefined,
-        address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
-        hours: r.hours || "Hours on request",
-        phone: r.phone || "—",
-        fulfillment: (r.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") || "collection",
-        location_type: (r.location_type as Store["location_type"]) ?? null,
-        accepts_refunds: !!r.accepts_refunds,
-        refund_policy: r.refund_policy || undefined,
-        cancellation_policy: r.cancellation_policy || undefined,
-        selling_mode: r.selling_mode ?? null,
-        image: getImageUrl(r.image_url) || storePlaceholder,
-        description: r.description || "A new Lokal merchant.",
-        instagramHandle: r.instagram_handle || undefined,
-        tiktokHandle: r.tiktok_handle || undefined,
-        websiteUrl: r.website_url || undefined,
-        region: r.region || undefined,
-        bank: {
-          name: r.bank_name || "—",
-          accountName: r.bank_account_name || "—",
-          accountNumber: r.bank_account_number || "—",
-          sortCode: r.bank_sort_code || undefined,
-        },
-        products: (r.store_products ?? [])
-          .sort((a: any, b: any) => a.position - b.position)
-          .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined, image_url: p.image_url ?? null, deposit: p.deposit ?? null })),
-        deposit_amount: r.deposit_amount ?? undefined,
-        is_verified: Boolean(r.is_verified),
-        verified_at: r.verified_at ?? null,
-        verification_reason: r.verification_reason ?? null,
-        verification_tier: tierByStore[r.id] ?? null,
-      }];
+        return [
+          {
+            id: r.id,
+            name: r.name,
+            category: r.category as Store["category"],
+            subcategory: r.subcategory ?? null,
+            minimum_age: r.minimum_age ?? null,
+            tattoo_portfolio_url: r.tattoo_portfolio_url ?? null,
+            tattoo_license_url: r.tattoo_license_url ?? null,
+            is_verified_tattoo_artist: r.is_verified_tattoo_artist ?? false,
+            health_safety_certificate_status: r.health_safety_certificate_status ?? null,
+            is_open_now: isStoreOpenNow(r.store_availability ?? [], r.hours, r.timezone),
+            origin: r.origin || "🌍 Local",
+            rating: 0,
+            reviews: 0,
+            distance: "—",
+            city: r.city || undefined,
+            postcode: r.postcode || undefined,
+            timezone: r.timezone || undefined,
+            address: [r.address, r.city].filter(Boolean).join(", ") || "Address on request",
+            hours: r.hours || "Hours on request",
+            phone: r.phone || "—",
+            fulfillment:
+              (r.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") ||
+              "collection",
+            location_type: (r.location_type as Store["location_type"]) ?? null,
+            accepts_refunds: !!r.accepts_refunds,
+            refund_policy: r.refund_policy || undefined,
+            cancellation_policy: r.cancellation_policy || undefined,
+            selling_mode: r.selling_mode ?? null,
+            image: getImageUrl(r.image_url) || storePlaceholder,
+            description: r.description || "A new Lokal merchant.",
+            instagramHandle: r.instagram_handle || undefined,
+            tiktokHandle: r.tiktok_handle || undefined,
+            websiteUrl: r.website_url || undefined,
+            region: r.region || undefined,
+            bank: {
+              name: r.bank_name || "—",
+              accountName: r.bank_account_name || "—",
+              accountNumber: r.bank_account_number || "—",
+              sortCode: r.bank_sort_code || undefined,
+            },
+            products: (r.store_products ?? [])
+              .sort((a: any, b: any) => a.position - b.position)
+              .map((p: any) => ({
+                name: p.name,
+                price: Number(p.price),
+                unit: p.unit ?? undefined,
+                image_url: p.image_url ?? null,
+                deposit: p.deposit ?? null,
+              })),
+            deposit_amount: r.deposit_amount ?? undefined,
+            is_verified: Boolean(r.is_verified),
+            verified_at: r.verified_at ?? null,
+            verification_reason: r.verification_reason ?? null,
+            verification_tier: tierByStore[r.id] ?? null,
+          },
+        ];
       });
       setLiveStores(mapped);
 
@@ -309,10 +357,14 @@ function Index() {
             agg[r.store_id].sum += r.rating;
             agg[r.store_id].count += 1;
           }
-          setLiveStores(mapped.map((s) => {
-            const a = agg[s.id];
-            return a ? { ...s, rating: Math.round((a.sum / a.count) * 10) / 10, reviews: a.count } : s;
-          }));
+          setLiveStores(
+            mapped.map((s) => {
+              const a = agg[s.id];
+              return a
+                ? { ...s, rating: Math.round((a.sum / a.count) * 10) / 10, reviews: a.count }
+                : s;
+            }),
+          );
         }
       }
 
@@ -360,9 +412,16 @@ function Index() {
       return (b.reviews ?? 0) - (a.reviews ?? 0);
     });
 
-  const availableSubcategories = active === "All"
-    ? []
-    : Array.from(new Set(liveStores.filter((s) => s.category === active && !!s.subcategory).map((s) => s.subcategory as string)));
+  const availableSubcategories =
+    active === "All"
+      ? []
+      : Array.from(
+          new Set(
+            liveStores
+              .filter((s) => s.category === active && !!s.subcategory)
+              .map((s) => s.subcategory as string),
+          ),
+        );
 
   return (
     <div className="min-h-screen bg-background">
@@ -375,7 +434,11 @@ function Index() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold uppercase tracking-widest text-primary">
-                  {locationFilter ? `Near you · ${locationFilter}` : locationLoading ? "Detecting location…" : "All locations"}
+                  {locationFilter
+                    ? `Near you · ${locationFilter}`
+                    : locationLoading
+                      ? "Detecting location…"
+                      : "All locations"}
                 </span>
                 <button
                   onClick={() => setShowCityInput((v) => !v)}
@@ -402,7 +465,10 @@ function Index() {
                     placeholder="e.g. Birmingham"
                     className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   />
-                  <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                  >
                     Search
                   </button>
                 </form>
@@ -461,45 +527,58 @@ function Index() {
           )}
 
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {loadingStores
-              ? Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-                    <Skeleton className="aspect-[5/3] w-full" />
-                    <div className="p-4 space-y-2">
-                      <Skeleton className="h-5 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                      <Skeleton className="h-4 w-2/3" />
-                    </div>
+            {loadingStores ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="overflow-hidden rounded-2xl border border-border bg-card shadow-card"
+                >
+                  <Skeleton className="aspect-[5/3] w-full" />
+                  <div className="p-4 space-y-2">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-4 w-2/3" />
                   </div>
-                ))
-              : filtered.length === 0
-              ? (
-                  <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
-                    <div className="text-4xl mb-4">🏪</div>
-                    <h3 className="font-display text-xl font-semibold">
-                      {search
-                        ? `No stores found for "${search}"`
-                        : `No ${active === "All" ? "" : active.toLowerCase() + " "}stores${locationFilter ? ` in ${locationFilter}` : ""} yet`}
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground max-w-sm">
-                      {search
-                        ? "Try a different search term or change the category filter."
-                        : locationFilter
-                        ? "No stores in this area yet — try searching a nearby city using \"Change city\"."
-                        : "We're growing — check back soon, or be the first to list your store."}
-                    </p>
-                    {search && (
-                      <div className="mt-4">
-                        <button onClick={() => setSearch("")} className="text-sm text-primary hover:underline">
-                          Clear search
-                        </button>
-                      </div>
-                    )}
+                </div>
+              ))
+            ) : filtered.length === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
+                <div className="text-4xl mb-4">🏪</div>
+                <h3 className="font-display text-xl font-semibold">
+                  {search
+                    ? `No stores found for "${search}"`
+                    : `No ${active === "All" ? "" : active.toLowerCase() + " "}stores${locationFilter ? ` in ${locationFilter}` : ""} yet`}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+                  {search
+                    ? "Try a different search term or change the category filter."
+                    : locationFilter
+                      ? 'No stores in this area yet — try searching a nearby city using "Change city".'
+                      : "We're growing — check back soon, or be the first to list your store."}
+                </p>
+                {search && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setSearch("")}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Clear search
+                    </button>
                   </div>
-                )
-              : filtered.map((s) => (
-                  <StoreCard key={s.id} store={s} onClick={() => { setSelected(s); setOpen(true); }} />
-                ))}
+                )}
+              </div>
+            ) : (
+              filtered.map((s) => (
+                <StoreCard
+                  key={s.id}
+                  store={s}
+                  onClick={() => {
+                    setSelected(s);
+                    setOpen(true);
+                  }}
+                />
+              ))
+            )}
           </div>
         </section>
 
@@ -533,7 +612,9 @@ function Index() {
                   <span className="text-2xl">❤️</span>
                   <div>
                     <h2 className="font-display text-2xl font-bold">Followed on Lokal</h2>
-                    <p className="text-sm text-muted-foreground">Latest updates from stores you follow</p>
+                    <p className="text-sm text-muted-foreground">
+                      Latest updates from stores you follow
+                    </p>
                   </div>
                 </div>
 
@@ -548,28 +629,54 @@ function Index() {
                   </div>
                 ) : followedPosts.length === 0 ? (
                   <div className="rounded-xl border-2 border-dashed border-border bg-card p-10 text-center">
-                    <p className="text-sm text-muted-foreground">The stores you follow haven't posted any updates yet. Check back soon.</p>
+                    <p className="text-sm text-muted-foreground">
+                      The stores you follow haven't posted any updates yet. Check back soon.
+                    </p>
                   </div>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {followedPosts.map((post) => {
-                      const storeName = liveStores.find((s) => s.id === post.store_id)?.name ?? "Store";
+                      const storeName =
+                        liveStores.find((s) => s.id === post.store_id)?.name ?? "Store";
                       const storeObj = liveStores.find((s) => s.id === post.store_id);
                       return (
                         <div
                           key={post.id}
                           className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-card hover:border-primary/30 transition-colors"
-                          onClick={() => { if (storeObj) { setSelected(storeObj); setOpen(true); } }}
+                          onClick={() => {
+                            if (storeObj) {
+                              setSelected(storeObj);
+                              setOpen(true);
+                            }
+                          }}
                         >
                           {post.video_url ? (
-                            <PostMedia url={post.video_url} kind="video" className="aspect-[5/3]" mediaClassName="h-full w-full" />
+                            <PostMedia
+                              url={post.video_url}
+                              kind="video"
+                              className="aspect-[5/3]"
+                              mediaClassName="h-full w-full"
+                            />
                           ) : post.image_url ? (
-                            <PostMedia url={post.image_url} kind="image" className="aspect-[5/3]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                            <PostMedia
+                              url={post.image_url}
+                              kind="image"
+                              className="aspect-[5/3]"
+                              mediaClassName="h-full w-full"
+                              alt={post.body.slice(0, 120)}
+                            />
                           ) : null}
                           <div className="p-4">
                             <div className="mb-1.5 flex items-center gap-2">
-                              <span className="text-xs font-semibold text-primary">{storeName}</span>
-                              <span className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                              <span className="text-xs font-semibold text-primary">
+                                {storeName}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(post.created_at).toLocaleDateString("en-GB", {
+                                  day: "numeric",
+                                  month: "short",
+                                })}
+                              </span>
                             </div>
                             <p className="text-sm line-clamp-4 whitespace-pre-wrap">{post.body}</p>
                             <PostReactions postId={post.id} />

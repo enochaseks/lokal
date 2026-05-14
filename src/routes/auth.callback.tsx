@@ -24,16 +24,21 @@ function AuthCallbackPage() {
     };
 
     // Exchange the token from the URL (email confirmation & OAuth), then route using current session.
-    void supabase.auth.exchangeCodeForSession(window.location.search)
+    void supabase.auth
+      .exchangeCodeForSession(window.location.search)
       .catch(() => {
         // Ignore when no code is present (e.g. magic-link flow already exchanged).
       })
       .finally(async () => {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
         if (session) finish();
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
         subscription.unsubscribe();
         finish();

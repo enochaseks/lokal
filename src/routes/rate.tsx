@@ -116,9 +116,7 @@ function RatePage() {
       <Navbar />
       <main className="flex-1 flex items-center justify-center py-16 px-4">
         <div className="w-full max-w-md">
-          {loading && (
-            <p className="text-center text-sm text-muted-foreground">Loading…</p>
-          )}
+          {loading && <p className="text-center text-sm text-muted-foreground">Loading…</p>}
 
           {!loading && notFound && (
             <div className="text-center">
@@ -142,9 +140,7 @@ function RatePage() {
           {!loading && !notFound && !done && booking && (
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
               <div>
-                <h1 className="font-display text-2xl font-bold">
-                  How was your visit?
-                </h1>
+                <h1 className="font-display text-2xl font-bold">How was your visit?</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {booking.staff_name
                     ? `Rate your experience with ${booking.staff_name} at ${booking.store_name}`
@@ -190,7 +186,9 @@ function RatePage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Comment (optional)</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Comment (optional)
+                </label>
                 <Textarea
                   className="mt-1 resize-none"
                   rows={3}

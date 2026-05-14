@@ -112,7 +112,9 @@ function FollowingPage() {
             address: [row.address, row.city].filter(Boolean).join(", ") || "Address on request",
             hours: row.hours || "Hours on request",
             phone: row.phone || "—",
-            fulfillment: (row.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") || "collection",
+            fulfillment:
+              (row.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") ||
+              "collection",
             location_type: (row.location_type as Store["location_type"]) ?? null,
             accepts_refunds: !!row.accepts_refunds,
             refund_policy: row.refund_policy || undefined,
@@ -130,7 +132,11 @@ function FollowingPage() {
             },
             products: (row.store_products ?? [])
               .sort((a: any, b: any) => a.position - b.position)
-              .map((p: any) => ({ name: p.name, price: Number(p.price), unit: p.unit ?? undefined })),
+              .map((p: any) => ({
+                name: p.name,
+                price: Number(p.price),
+                unit: p.unit ?? undefined,
+              })),
           },
         ];
       });
@@ -154,9 +160,13 @@ function FollowingPage() {
       <main className="container mx-auto max-w-6xl px-4 py-12">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">Your feed</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+              Your feed
+            </p>
             <h1 className="mt-1 font-display text-4xl font-bold">Following on Lokal</h1>
-            <p className="mt-2 text-muted-foreground">See updates from stores you follow in one place.</p>
+            <p className="mt-2 text-muted-foreground">
+              See updates from stores you follow in one place.
+            </p>
           </div>
           <div className="rounded-full border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
             {followedStoreIds.length} followed store{followedStoreIds.length === 1 ? "" : "s"}
@@ -179,16 +189,25 @@ function FollowingPage() {
         ) : followedStoreIds.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-card p-12 text-center">
             <Heart className="mx-auto h-8 w-8 text-muted-foreground/60" />
-            <h2 className="mt-3 font-display text-2xl font-bold">You are not following any stores yet</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Follow stores to get their latest updates here.</p>
-            <Button className="mt-5 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95" asChild>
+            <h2 className="mt-3 font-display text-2xl font-bold">
+              You are not following any stores yet
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Follow stores to get their latest updates here.
+            </p>
+            <Button
+              className="mt-5 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+              asChild
+            >
               <a href="/#stores">Browse stores</a>
             </Button>
           </div>
         ) : (
           <div className="space-y-8">
             <section>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Following</h2>
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Following
+              </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {stores.map((store) => (
                   <button
@@ -199,7 +218,11 @@ function FollowingPage() {
                       setOpen(true);
                     }}
                   >
-                    <img src={store.image} alt={store.name} className="h-12 w-12 rounded-lg object-cover" />
+                    <img
+                      src={store.image}
+                      alt={store.name}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{store.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{store.category}</p>
@@ -210,10 +233,14 @@ function FollowingPage() {
             </section>
 
             <section>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Latest updates</h2>
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Latest updates
+              </h2>
               {posts.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed border-border bg-card p-10 text-center">
-                  <p className="text-sm text-muted-foreground">No updates yet from the stores you follow.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No updates yet from the stores you follow.
+                  </p>
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -231,9 +258,20 @@ function FollowingPage() {
                         }}
                       >
                         {post.video_url ? (
-                          <PostMedia url={post.video_url} kind="video" className="aspect-[5/3]" mediaClassName="h-full w-full" />
+                          <PostMedia
+                            url={post.video_url}
+                            kind="video"
+                            className="aspect-[5/3]"
+                            mediaClassName="h-full w-full"
+                          />
                         ) : post.image_url ? (
-                          <PostMedia url={post.image_url} kind="image" className="aspect-[5/3]" mediaClassName="h-full w-full" alt={post.body.slice(0, 120)} />
+                          <PostMedia
+                            url={post.image_url}
+                            kind="image"
+                            className="aspect-[5/3]"
+                            mediaClassName="h-full w-full"
+                            alt={post.body.slice(0, 120)}
+                          />
                         ) : null}
                         <div className="p-4">
                           <div className="mb-1.5 flex items-center gap-2">
