@@ -99,14 +99,10 @@ function HelpPage() {
                   <strong className="text-foreground">Online verified</strong> - store identity was
                   verified through established online presence (website/social pages).
                 </li>
-                <li>
-                  <strong className="text-foreground">Unsecured verified</strong> - manual evidence
-                  was accepted, but with fewer formal supporting documents.
-                </li>
               </ul>
               <p>
-                All live stores must pass one of these verification paths. Badges show which path
-                was used, but do not guarantee product quality, delivery speed, or merchant
+                Trusted badges show the verification path used, but do not guarantee product
+                quality, delivery speed, or merchant
                 reliability.
               </p>
             </div>
@@ -118,9 +114,9 @@ function HelpPage() {
             <h3 className="font-display text-lg font-bold">How do I verify my store?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               If you're a merchant, you can submit a verification request from your dashboard.
-              Provide business registration documents, proof of online presence, or manual details.
-              Our admin team reviews submissions within a few days and approves or rejects based on
-              available evidence.
+              Provide business registration documents or proof of online presence. Our admin team
+              reviews submissions within a few days and approves or rejects based on available
+              evidence.
             </p>
           </div>
         </div>
@@ -143,6 +139,9 @@ function HelpPage() {
             Reminder: Lokal does not hold customer funds and does not process refunds directly.
             Refund and cancellation disputes are resolved between customer and merchant under the
             merchant's policy.
+          </p>
+          <p className="mt-2">
+            Review proof photos can be reported from store pages and are moderated by our team.
           </p>
         </div>
       </main>

@@ -48,6 +48,8 @@ const STATUS_CONFIG: Record<string, { label: string; colour: string; icon: strin
   },
 };
 
+const CUSTOMER_CANCELLATION_CUTOFF_HOURS = 12;
+
 function prettySlot(iso: string): string {
   const [datePart, timePart] = iso.split("T");
   const [y, mo, d] = datePart.split("-").map(Number);
@@ -73,6 +75,11 @@ function isUuid(value: string): boolean {
 
 function isShortHexRef(value: string): boolean {
   return /^[0-9a-f]{8}$/i.test(value);
+}
+
+function getHoursUntilSlot(slotStart: string): number {
+  const startMs = new Date(slotStart).getTime();
+  return (startMs - Date.now()) / (1000 * 60 * 60);
 }
 
 function BookingLookupPage() {
@@ -175,11 +182,26 @@ function BookingLookupPage() {
 
   const cancelBooking = async () => {
     if (!result || result.status === "cancelled" || result.status === "completed") return;
+    const hoursUntilSlot = getHoursUntilSlot(result.slot_start);
+    if (hoursUntilSlot < CUSTOMER_CANCELLATION_CUTOFF_HOURS) {
+      toast.error(
+        `Cancellation window closed. Please contact the merchant directly for changes within ${CUSTOMER_CANCELLATION_CUTOFF_HOURS} hours.`,
+      );
+      return;
+    }
+
     setCancelling(true);
     try {
+      const cancelledAt = new Date().toISOString();
+      const isLateCancellation = hoursUntilSlot < 24;
       const { error: err } = await (supabase as any)
         .from("store_bookings")
-        .update({ status: "cancelled" })
+        .update({
+          status: "cancelled",
+          cancelled_by: "customer",
+          cancelled_at: cancelledAt,
+          cancelled_late: isLateCancellation,
+        })
         .eq("id", result.id);
 
       if (err) throw err;
@@ -211,7 +233,11 @@ function BookingLookupPage() {
     }
   };
 
-  const canCancel = result && result.status !== "cancelled" && result.status !== "completed";
+  const hoursUntilSlot = result ? getHoursUntilSlot(result.slot_start) : null;
+  const withinCancellationWindow =
+    hoursUntilSlot != null && hoursUntilSlot >= CUSTOMER_CANCELLATION_CUTOFF_HOURS;
+  const canCancel =
+    !!result && result.status !== "cancelled" && result.status !== "completed" && withinCancellationWindow;
   const statusCfg = result ? (STATUS_CONFIG[result.status] ?? STATUS_CONFIG.pending) : null;
 
   return (
@@ -322,6 +348,16 @@ function BookingLookupPage() {
                   </p>
                 </div>
               )}
+
+              {!!result &&
+                result.status !== "cancelled" &&
+                result.status !== "completed" &&
+                !withinCancellationWindow && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                    Online cancellation closes {CUSTOMER_CANCELLATION_CUTOFF_HOURS} hours before your appointment.
+                    Please contact the merchant directly for urgent changes.
+                  </div>
+                )}
 
               {result.status === "cancelled" && (
                 <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

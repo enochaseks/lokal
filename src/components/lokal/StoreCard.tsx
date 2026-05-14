@@ -55,7 +55,7 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
               {store.origin}
             </div>
             <VerificationBadge
-              verificationTier={store.verification_tier ?? (store.is_verified ? "verified" : null)}
+              verificationTier={store.verification_tier ?? null}
               verificationReason={
                 store.verification_reason ?? "Unverified store. Buy at your own risk."
               }

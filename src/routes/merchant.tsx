@@ -223,6 +223,8 @@ type OrderRow = {
   customer_name: string;
   customer_phone: string;
   customer_email: string | null;
+  rating_token?: string | null;
+  rating_completed?: boolean | null;
   note: string | null;
   items: Array<{ name: string; price: number; qty: number; unit?: string }>;
   total_gbp: number;
@@ -298,7 +300,14 @@ type StaffDraft = {
 };
 
 type VerificationStatus = "pending" | "approved" | "rejected";
-type VerificationTier = "verified" | "online_verified" | "unsecured_verified";
+type VerificationTier = "verified" | "online_verified";
+
+const STRICT_VERIFICATION_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
+const TRUSTED_VERIFICATION_TIERS = new Set<VerificationTier>(["verified", "online_verified"]);
+
+function requiresTrustedVerificationTier(store: Pick<StoreRow, "category">): boolean {
+  return STRICT_VERIFICATION_CATEGORIES.has(store.category);
+}
 
 type PostRow = {
   id: string;
@@ -698,15 +707,8 @@ function EditStoreDialog({
         );
         if (prodErr) throw prodErr;
 
-        // Auto-publish if adding products to unpublished store (only if verified)
-        if (!store.published && store.is_verified) {
-          const { error: pubErr } = await supabase
-            .from("stores")
-            .update({ published: true })
-            .eq("id", store.id);
-          if (pubErr) throw pubErr;
-          shouldPublish = true;
-        }
+        // Do not auto-publish after edits. Publishing must pass trust checks explicitly.
+        shouldPublish = store.published;
       } else {
         // Unpublish if all products are deleted
         if (store.published) {
@@ -1851,12 +1853,11 @@ function MerchantPage() {
         }>) {
           if (!latestByStore[req.store_id]) latestByStore[req.store_id] = req.status;
           if (!tierByStore[req.store_id] && req.status === "approved") {
-            tierByStore[req.store_id] =
-              req.verification_method === "registration_number"
-                ? "verified"
-                : req.verification_method === "online_presence"
-                  ? "online_verified"
-                  : "unsecured_verified";
+            if (req.verification_method === "registration_number") {
+              tierByStore[req.store_id] = "verified";
+            } else if (req.verification_method === "online_presence") {
+              tierByStore[req.store_id] = "online_verified";
+            }
           }
         }
         setVerificationStatusByStore(latestByStore);
@@ -2036,8 +2037,10 @@ function MerchantPage() {
                   ? "verified"
                   : updated.verification_method === "online_presence"
                     ? "online_verified"
-                    : "unsecured_verified";
-              setVerificationTierByStore((prev) => ({ ...prev, [updated.store_id]: tier }));
+                    : null;
+              if (tier) {
+                setVerificationTierByStore((prev) => ({ ...prev, [updated.store_id]: tier }));
+              }
               // Update store is_verified flag
               setStores((prev) =>
                 prev.map((s) => (s.id === updated.store_id ? { ...s, is_verified: true } : s)),
@@ -2075,6 +2078,16 @@ function MerchantPage() {
           description:
             "Your store must be verified before publishing. Submit a verification request from the Verification tab.",
           duration: 5000,
+        });
+        return;
+      }
+
+      const tier = verificationTierByStore[s.id] ?? null;
+      if (requiresTrustedVerificationTier(s) && (!tier || !TRUSTED_VERIFICATION_TIERS.has(tier))) {
+        toast.error("Stronger verification required", {
+          description:
+            "This category needs a trusted verification tier (business registration or online presence) before publishing.",
+          duration: 6000,
         });
         return;
       }
@@ -2168,6 +2181,24 @@ function MerchantPage() {
             customer_email: order.customer_email,
             customer_phone: order.customer_phone,
             customer_name: order.customer_name,
+          },
+        });
+      }
+    }
+
+    if (status === "completed") {
+      const order = orders.find((o) => o.id === orderId);
+      const store = stores.find((s) => s.id === order?.store_id);
+      if (order?.customer_email && order?.rating_token && !order?.rating_completed && store) {
+        void supabase.functions.invoke("send-order-rating-request", {
+          body: {
+            order_id: order.id,
+            order_reference: order.reference,
+            rating_token: order.rating_token,
+            customer_name: order.customer_name,
+            customer_email: order.customer_email,
+            store_name: store.name,
+            store_id: store.id,
           },
         });
       }
@@ -2490,15 +2521,13 @@ function MerchantPage() {
                       )}
                       {verificationTierByStore[s.id] && (
                         <div
-                          className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : verificationTierByStore[s.id] === "online_verified" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}
+                          className={`flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium w-full ${verificationTierByStore[s.id] === "verified" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300"}`}
                         >
                           <BadgeCheck className="h-3 w-3" />
                           <span>
                             {verificationTierByStore[s.id] === "verified"
                               ? "Verified"
-                              : verificationTierByStore[s.id] === "online_verified"
-                                ? "Online verified"
-                                : "Unsecured verified"}
+                              : "Online verified"}
                           </span>
                         </div>
                       )}
@@ -3631,9 +3660,15 @@ function MerchantPage() {
                                               variant="outline"
                                               className="text-red-600 hover:bg-red-50"
                                               onClick={async () => {
+                                                const cancelledAt = new Date().toISOString();
                                                 await db
                                                   .from("store_bookings")
-                                                  .update({ status: "cancelled" })
+                                                  .update({
+                                                    status: "cancelled",
+                                                    cancelled_by: "merchant",
+                                                    cancelled_at: cancelledAt,
+                                                    cancelled_late: false,
+                                                  })
                                                   .eq("id", b.id);
                                                 setBookings((prev) =>
                                                   prev.map((x) =>

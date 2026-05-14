@@ -445,7 +445,7 @@ export function StoreDialog({
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
   const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
-  const isStoreVerified = Boolean(store.verification_tier || store.is_verified);
+  const isStoreVerified = Boolean(store.verification_tier);
   const unverifiedWarningText =
     "This store is not verified yet. Make sure you trust this seller before shopping with them.";
 
@@ -1033,9 +1033,7 @@ export function StoreDialog({
             <DialogDescription className="text-base">{store.description}</DialogDescription>
             <div className="pt-2">
               <VerificationBadge
-                verificationTier={
-                  store.verification_tier ?? (store.is_verified ? "verified" : null)
-                }
+                verificationTier={store.verification_tier ?? null}
                 verificationReason={store.verification_reason ?? unverifiedWarningText}
                 showUnverified
                 isTattooArtistVerified={Boolean(

@@ -266,18 +266,17 @@ function Index() {
           rows.map((row: any) => row.id),
         );
 
-      const tierByStore: Record<string, "verified" | "online_verified" | "unsecured_verified"> = {};
+      const tierByStore: Record<string, "verified" | "online_verified"> = {};
       for (const item of (verifications ?? []) as Array<{
         store_id: string;
         verification_method: string;
       }>) {
         if (tierByStore[item.store_id]) continue;
-        tierByStore[item.store_id] =
-          item.verification_method === "registration_number"
-            ? "verified"
-            : item.verification_method === "online_presence"
-              ? "online_verified"
-              : "unsecured_verified";
+        if (item.verification_method === "registration_number") {
+          tierByStore[item.store_id] = "verified";
+        } else if (item.verification_method === "online_presence") {
+          tierByStore[item.store_id] = "online_verified";
+        }
       }
 
       const mapped: Store[] = rows.flatMap((r: any) => {
@@ -334,7 +333,7 @@ function Index() {
                 deposit: p.deposit ?? null,
               })),
             deposit_amount: r.deposit_amount ?? undefined,
-            is_verified: Boolean(r.is_verified),
+            is_verified: Boolean(r.is_verified && tierByStore[r.id]),
             verified_at: r.verified_at ?? null,
             verification_reason: r.verification_reason ?? null,
             verification_tier: tierByStore[r.id] ?? null,

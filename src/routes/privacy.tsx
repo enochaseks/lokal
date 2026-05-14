@@ -52,6 +52,10 @@ function PrivacyPage() {
                 store.
               </li>
               <li>
+                <strong className="text-foreground">Reviews:</strong> reviewer name, ratings,
+                optional review text, and optional proof photos submitted with ratings.
+              </li>
+              <li>
                 <strong className="text-foreground">All visitors:</strong> approximate location
                 (city-level, derived from your browser's geolocation API — only if you grant
                 permission), and standard web logs (IP address, browser type).
@@ -118,10 +122,14 @@ function PrivacyPage() {
           <Section title="6. Verification and trust data">
             <p>
               When merchants submit store verification requests, we collect and review supporting
-              documents (business registration, website/social media screenshots, or manual
-              submission details). We retain these submissions for 2 years to maintain verification
-              audit trails. If a request is rejected or withdrawn, supporting documents are deleted.
-              Verification approvals/rejections are recorded in our platform logs indefinitely.
+              documents (business registration and website/social media evidence). We retain these
+              submissions for 2 years to maintain verification audit trails. If a request is
+              rejected or withdrawn, supporting documents are deleted. Verification
+              approvals/rejections are recorded in our platform logs indefinitely.
+            </p>
+            <p>
+              Optional review proof photos are displayed publicly on relevant store profiles and may
+              be reported by users. We may hide or remove proof media that violates our policies.
             </p>
           </Section>
 

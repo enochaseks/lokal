@@ -3,11 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/lokal/Navbar";
+import { getImageUrl } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Star, CheckCircle2 } from "lucide-react";
+import { Star, CheckCircle2, Loader2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/rate")({
@@ -16,19 +17,21 @@ export const Route = createFileRoute("/rate")({
   head: () => ({ meta: [{ title: "Leave a rating · Lokal" }] }),
 });
 
-type BookingInfo = {
+type RatingTarget = {
   id: string;
+  source: "booking" | "order";
   customer_name: string;
   staff_id: string | null;
   staff_name: string | null;
   store_id: string;
   store_name: string;
   rating_completed: boolean;
+  order_reference?: string | null;
 };
 
 function RatePage() {
   const { token } = Route.useSearch();
-  const [booking, setBooking] = useState<BookingInfo | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -36,6 +39,8 @@ function RatePage() {
   const [hover, setHover] = useState(0);
   const [reviewerName, setReviewerName] = useState("");
   const [body, setBody] = useState("");
+  const [proofImagePath, setProofImagePath] = useState<string | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -46,19 +51,19 @@ function RatePage() {
       return;
     }
 
-    (supabase as any)
-      .from("store_bookings")
-      .select("id, customer_name, staff_id, staff_name, store_id, rating_completed, stores(name)")
-      .eq("rating_token", token)
-      .maybeSingle()
-      .then(({ data, error }: { data: any; error: any }) => {
+    (async () => {
+      const bookingResult = await (supabase as any)
+        .from("store_bookings")
+        .select("id, customer_name, staff_id, staff_name, store_id, rating_completed, stores(name)")
+        .eq("rating_token", token)
+        .maybeSingle();
+
+      if (bookingResult.data && !bookingResult.error) {
+        const data = bookingResult.data;
         setLoading(false);
-        if (error || !data) {
-          setNotFound(true);
-          return;
-        }
-        setBooking({
+        setRatingTarget({
           id: data.id,
+          source: "booking",
           customer_name: data.customer_name,
           staff_id: data.staff_id,
           staff_name: data.staff_name,
@@ -68,37 +73,93 @@ function RatePage() {
         });
         setReviewerName(data.customer_name ?? "");
         if (data.rating_completed) setDone(true);
+        return;
+      }
+
+      const orderResult = await (supabase as any)
+        .from("orders")
+        .select("id, reference, customer_name, store_id, rating_completed, stores(name)")
+        .eq("rating_token", token)
+        .maybeSingle();
+
+      setLoading(false);
+      if (orderResult.error || !orderResult.data) {
+        setNotFound(true);
+        return;
+      }
+
+      const data = orderResult.data;
+      setRatingTarget({
+        id: data.id,
+        source: "order",
+        customer_name: data.customer_name,
+        staff_id: null,
+        staff_name: null,
+        store_id: data.store_id,
+        store_name: data.stores?.name ?? "this store",
+        rating_completed: data.rating_completed,
+        order_reference: data.reference ?? null,
       });
+      setReviewerName(data.customer_name ?? "");
+      if (data.rating_completed) setDone(true);
+    })();
   }, [token]);
 
+  const handleProofUpload = async (file: File) => {
+    if (!ratingTarget) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file only.");
+      return;
+    }
+
+    setUploadingProof(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const safeExt = ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
+      const path = `reviews/${ratingTarget.store_id}/${ratingTarget.source}-${ratingTarget.id}-${Date.now()}.${safeExt}`;
+      const { error } = await supabase.storage.from("store-images").upload(path, file, {
+        upsert: false,
+      });
+      if (error) throw error;
+      setProofImagePath(path);
+      toast.success("Proof photo uploaded.");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not upload proof image");
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!booking || rating === 0 || !reviewerName.trim()) return;
+    if (!ratingTarget || rating === 0 || !reviewerName.trim()) return;
     setSubmitting(true);
     try {
-      if (booking.staff_id) {
+      if (ratingTarget.staff_id) {
         const { error } = await (supabase as any).from("staff_reviews").insert({
-          store_id: booking.store_id,
-          staff_id: booking.staff_id,
-          staff_name: booking.staff_name,
+          store_id: ratingTarget.store_id,
+          staff_id: ratingTarget.staff_id,
+          staff_name: ratingTarget.staff_name,
           rating,
           reviewer_name: reviewerName.trim(),
           body: body.trim() || null,
+          proof_image_url: proofImagePath,
         });
         if (error) throw error;
       } else {
         const { error } = await (supabase as any).from("reviews").insert({
-          store_id: booking.store_id,
+          store_id: ratingTarget.store_id,
           reviewer_name: reviewerName.trim(),
           rating,
           body: body.trim() || null,
+          proof_image_url: proofImagePath,
         });
         if (error) throw error;
       }
 
       await (supabase as any)
-        .from("store_bookings")
+        .from(ratingTarget.source === "booking" ? "store_bookings" : "orders")
         .update({ rating_completed: true })
-        .eq("id", booking.id);
+        .eq("id", ratingTarget.id);
 
       setDone(true);
       toast.success("Thanks for your rating!");
@@ -137,14 +198,18 @@ function RatePage() {
             </div>
           )}
 
-          {!loading && !notFound && !done && booking && (
+          {!loading && !notFound && !done && ratingTarget && (
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
               <div>
-                <h1 className="font-display text-2xl font-bold">How was your visit?</h1>
+                <h1 className="font-display text-2xl font-bold">
+                  {ratingTarget.source === "order" ? "How was your order?" : "How was your visit?"}
+                </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {booking.staff_name
-                    ? `Rate your experience with ${booking.staff_name} at ${booking.store_name}`
-                    : `Rate your experience at ${booking.store_name}`}
+                  {ratingTarget.source === "order"
+                    ? `Rate your order from ${ratingTarget.store_name}${ratingTarget.order_reference ? ` (${ratingTarget.order_reference})` : ""}`
+                    : ratingTarget.staff_name
+                      ? `Rate your experience with ${ratingTarget.staff_name} at ${ratingTarget.store_name}`
+                      : `Rate your experience at ${ratingTarget.store_name}`}
                 </p>
               </div>
 
@@ -198,9 +263,50 @@ function RatePage() {
                 />
               </div>
 
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Photo proof (optional)
+                </label>
+                {proofImagePath && (
+                  <img
+                    src={getImageUrl(proofImagePath) ?? undefined}
+                    alt="Proof preview"
+                    className="mt-2 h-28 w-full rounded-lg border border-border object-cover"
+                  />
+                )}
+                <label className="mt-2 block cursor-pointer">
+                  <div
+                    className={`flex items-center justify-center rounded-md border border-dashed border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground${uploadingProof ? " opacity-50" : ""}`}
+                  >
+                    {uploadingProof ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="mr-2 h-4 w-4" />
+                        Upload photo
+                      </>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingProof}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void handleProofUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
               <Button
                 className="w-full bg-gradient-primary text-primary-foreground"
-                disabled={rating === 0 || !reviewerName.trim() || submitting}
+                disabled={rating === 0 || !reviewerName.trim() || submitting || uploadingProof}
                 onClick={handleSubmit}
               >
                 {submitting ? "Submitting…" : "Submit rating"}

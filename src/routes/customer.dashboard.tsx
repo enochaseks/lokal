@@ -23,6 +23,8 @@ type BookingWithStore = {
   slot_start: string;
   status: string;
   staff_name: string | null;
+  rating_token: string | null;
+  rating_completed: boolean | null;
 };
 
 type OrderWithStore = {
@@ -83,7 +85,7 @@ function CustomerDashboardPage() {
             ? (supabase as any)
                 .from("store_bookings")
                 .select(
-                  "id, store_id, service, slot_start, status, staff_name, stores(name,category)",
+                  "id, store_id, service, slot_start, status, staff_name, rating_token, rating_completed, stores(name,category)",
                 )
                 .eq("customer_id", customerId)
                 .order("slot_start", { ascending: true })
@@ -93,7 +95,7 @@ function CustomerDashboardPage() {
             ? (supabase as any)
                 .from("store_bookings")
                 .select(
-                  "id, store_id, service, slot_start, status, staff_name, stores(name,category)",
+                  "id, store_id, service, slot_start, status, staff_name, rating_token, rating_completed, stores(name,category)",
                 )
                 .eq("customer_phone", customerPhone)
                 .order("slot_start", { ascending: true })
@@ -122,6 +124,8 @@ function CustomerDashboardPage() {
             slot_start: b.slot_start,
             status: b.status,
             staff_name: b.staff_name,
+            rating_token: b.rating_token ?? null,
+            rating_completed: b.rating_completed ?? false,
           })) ?? [],
         );
 
@@ -476,6 +480,15 @@ function CustomerDashboardPage() {
                       >
                         {b.status}
                       </span>
+                      {b.status === "completed" && !b.rating_completed && b.rating_token && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate({ to: "/rate", search: { token: b.rating_token! } })}
+                        >
+                          Leave rating
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"

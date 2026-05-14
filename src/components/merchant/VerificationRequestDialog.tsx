@@ -32,7 +32,7 @@ type Store = {
   tattoo_license_url?: string | null;
 };
 
-type VerificationMethod = "registration_number" | "online_presence" | "manual_review";
+type VerificationMethod = "registration_number" | "online_presence";
 
 type VerificationRequestDialogProps = {
   store: Store;
@@ -68,9 +68,6 @@ export function VerificationRequestDialog({
   const formatSubmitReason = () => {
     const pieces = [
       formData.submissionReason.trim(),
-      formData.verificationMethod === "manual_review" && formData.manualReviewDetails.trim()
-        ? `Manual review details:\n${formData.manualReviewDetails.trim()}`
-        : null,
       formData.supportingLinks.trim()
         ? `Supporting links: ${formData.supportingLinks.trim()}`
         : null,
@@ -86,9 +83,7 @@ export function VerificationRequestDialog({
     const routeLabel =
       formData.verificationMethod === "registration_number"
         ? "registered business"
-        : formData.verificationMethod === "online_presence"
-          ? "online business / social storefront"
-          : "manual review";
+        : "online business / social storefront";
 
     const details = formatSubmitReason();
     return `[Verification route: ${routeLabel}]${details ? `\n\n${details}` : ""}`;
@@ -114,24 +109,6 @@ export function VerificationRequestDialog({
     if (formData.verificationMethod === "online_presence" && !formData.onlinePresenceUrl.trim()) {
       toast.error(
         "Please add your website, Instagram, TikTok, Etsy, or other online storefront link.",
-      );
-      return;
-    }
-
-    if (
-      formData.verificationMethod === "manual_review" &&
-      formData.submissionReason.trim().length < 30
-    ) {
-      toast.error("Tell us more about your business so we can manually review it safely.");
-      return;
-    }
-
-    if (
-      formData.verificationMethod === "manual_review" &&
-      formData.manualReviewDetails.trim().length < 80
-    ) {
-      toast.error(
-        "Manual review needs a more detailed explanation, please add at least 80 characters.",
       );
       return;
     }
@@ -368,13 +345,12 @@ export function VerificationRequestDialog({
               <SelectContent>
                 <SelectItem value="online_presence">Online business / social storefront</SelectItem>
                 <SelectItem value="registration_number">Registered business</SelectItem>
-                <SelectItem value="manual_review">Manual review (no formal docs yet)</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
               {isBodyArtsArtistStore
                 ? "For Body Arts services, your portfolio, licence/ID evidence, and 18+ policy are mandatory for artist verification."
-                : "Registered business is strongest. Online verified needs a live storefront or profile. Manual review is the highest-risk route and is checked more strictly."}
+                : "Registered business is strongest. Online verified needs a live storefront or profile."}
             </p>
           </div>
 
@@ -417,46 +393,20 @@ export function VerificationRequestDialog({
             </div>
           )}
 
-          {formData.verificationMethod === "manual_review" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="manualReviewDetails">Manual Review Details *</Label>
-                <Textarea
-                  id="manualReviewDetails"
-                  value={formData.manualReviewDetails}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      manualReviewDetails: e.target.value,
-                    })
-                  }
-                  placeholder="Explain what you sell, how you take orders, how long you've been operating, how customers can contact you, and any proof that you are a real business."
-                  className="h-28"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Manual review is the riskiest route. Add as much real-world detail as possible.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="supportingLinks">Supporting Links or References</Label>
-                <Input
-                  id="supportingLinks"
-                  value={formData.supportingLinks}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      supportingLinks: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., Instagram, TikTok, WhatsApp catalog, customer reviews, website, references"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional, but very helpful for manual review.
-                </p>
-              </div>
-            </>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="supportingLinks">Supporting Links or References (optional)</Label>
+            <Input
+              id="supportingLinks"
+              value={formData.supportingLinks}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  supportingLinks: e.target.value,
+                })
+              }
+              placeholder="e.g., Instagram, TikTok, website, portfolio, customer references"
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="reason">Why should your store be verified?</Label>
@@ -468,7 +418,7 @@ export function VerificationRequestDialog({
               className="h-24"
             />
             <p className="text-xs text-muted-foreground">
-              Manual review needs extra detail. The more evidence you give, the safer the approval.
+              Add clear business context and evidence so our team can review quickly.
             </p>
           </div>
 

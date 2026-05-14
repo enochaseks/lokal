@@ -118,9 +118,9 @@ function TermsPage() {
           <Section title="6. Verification and badges">
             <p>
               Lokal offers optional store verification. Merchants may submit verification requests
-              using one of three methods: business registration documents, online presence proof, or
-              manual submission. Our admin team reviews submissions and approves or rejects based on
-              available evidence.
+              using one of two trusted methods: business registration documents or online presence
+              proof. Our admin team reviews submissions and approves or rejects based on available
+              evidence.
             </p>
             <p>Verified stores display blue verification badges:</p>
             <ul className="list-disc pl-5 space-y-1">
@@ -132,18 +132,14 @@ function TermsPage() {
                 <strong className="text-foreground">Online verified</strong> — verified via
                 established online presence (website, social media, etc).
               </li>
-              <li>
-                <strong className="text-foreground">Unsecured verified</strong> — verified via
-                manual submission with limited supporting evidence.
-              </li>
             </ul>
             <p>
               <strong className="text-foreground">Important:</strong> Verification badges indicate
               that we have reviewed available evidence at a point in time. Badges do not guarantee
               product quality, customer satisfaction, or merchant reliability. All transactions
-              remain at customer discretion. Unverified stores are not inherently unsafe — merchants
-              may choose not to verify. Always review store policies, ratings, and contact details
-              before ordering.
+              remain at customer discretion. Unverified stores are not inherently unsafe, but they
+              do not carry a trusted verification badge. Always review store policies, ratings, and
+              contact details before ordering.
             </p>
           </Section>
 

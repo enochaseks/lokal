@@ -7,7 +7,7 @@ export function VerificationBadge({
   showUnverified,
   isTattooArtistVerified,
 }: {
-  verificationTier?: "verified" | "online_verified" | "unsecured_verified" | null;
+  verificationTier?: "verified" | "online_verified" | null;
   verificationReason?: string | null;
   showUnverified?: boolean;
   isTattooArtistVerified?: boolean;
@@ -41,16 +41,14 @@ export function VerificationBadge({
   const label =
     verificationTier === "online_verified"
       ? "Online verified"
-      : verificationTier === "unsecured_verified"
-        ? "Unsecured verified"
-        : "Verified";
+      : "Verified";
 
   const toneClass =
     verificationTier === "verified"
       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
       : verificationTier === "online_verified"
         ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300"
-        : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300";
+        : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
 
   return (
     <div

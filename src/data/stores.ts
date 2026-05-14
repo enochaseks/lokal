@@ -383,7 +383,7 @@ export type Store = {
   is_verified?: boolean | null;
   verified_at?: string | null;
   verification_reason?: string | null;
-  verification_tier?: "verified" | "online_verified" | "unsecured_verified" | null;
+  verification_tier?: "verified" | "online_verified" | null;
 };
 
 export const stores: Store[] = [

@@ -131,6 +131,18 @@ type StoreDetails = {
   store_availability: AvailabilityRow[] | null;
   store_staff: StaffRow[] | null;
   staff_reviews: Array<{ staff_id: string; rating: number }> | null;
+  proof_reviews:
+    | Array<{
+        id: string;
+        source: "reviews" | "staff_reviews";
+        reviewer_name: string;
+        rating: number;
+        body: string | null;
+        created_at: string;
+        proof_image_url: string | null;
+        staff_name?: string | null;
+      }>
+    | null;
   deposit_amount?: number | null;
   bank_name: string | null;
   bank_account_name: string | null;
@@ -143,7 +155,7 @@ type StoreDetails = {
   is_verified?: boolean | null;
   verified_at?: string | null;
   verification_reason?: string | null;
-  verification_tier?: "verified" | "online_verified" | "unsecured_verified" | null;
+  verification_tier?: "verified" | "online_verified" | null;
   timezone?: string | null;
 };
 
@@ -288,29 +300,60 @@ export const Route = createFileRoute("/store/$id")({
     const verificationMethod = approvedVerification?.[0]?.verification_method as
       | "registration_number"
       | "online_presence"
-      | "manual_review"
       | undefined;
     const verificationTier =
       verificationMethod === "registration_number"
         ? "verified"
         : verificationMethod === "online_presence"
           ? "online_verified"
-          : verificationMethod === "manual_review"
-            ? "unsecured_verified"
-            : null;
+          : null;
 
-    const { data: rd } = await (supabase as any)
-      .from("staff_reviews")
-      .select("staff_id, rating")
-      .eq("store_id", params.id);
+    const [{ data: rd }, { data: publicReviews }, { data: staffProofReviews }] = await Promise.all([
+      (supabase as any).from("staff_reviews").select("staff_id, rating").eq("store_id", params.id),
+      (supabase as any)
+        .from("reviews")
+        .select("id, reviewer_name, rating, body, created_at, proof_image_url")
+        .eq("store_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      (supabase as any)
+        .from("staff_reviews")
+        .select("id, reviewer_name, staff_name, rating, body, created_at, proof_image_url")
+        .eq("store_id", params.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+
+    const proofReviews = [
+      ...((publicReviews ?? []) as Array<{
+        id: string;
+        reviewer_name: string;
+        rating: number;
+        body: string | null;
+        created_at: string;
+        proof_image_url: string | null;
+      }>).map((r) => ({ ...r, source: "reviews" as const })),
+      ...((staffProofReviews ?? []) as Array<{
+        id: string;
+        reviewer_name: string;
+        staff_name?: string | null;
+        rating: number;
+        body: string | null;
+        created_at: string;
+        proof_image_url: string | null;
+      }>).map((r) => ({ ...r, source: "staff_reviews" as const })),
+    ]
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 12);
 
     return {
       ...data[0],
-      is_verified: Boolean(data[0].is_verified && hasApprovedVerification),
+      is_verified: Boolean(data[0].is_verified && hasApprovedVerification && verificationTier),
       verified_at: hasApprovedVerification ? data[0].verified_at : null,
       verification_reason: hasApprovedVerification ? data[0].verification_reason : null,
       verification_tier: verificationTier,
       staff_reviews: rd ?? [],
+      proof_reviews: proofReviews,
     } as unknown as StoreDetails;
   },
   errorComponent: ({ error }) => (
@@ -429,6 +472,9 @@ function StoreDetail() {
     });
     return map;
   })();
+
+  const proofReviewsWithImages = (store.proof_reviews ?? []).filter((r) => !!r.proof_image_url);
+  const recentRatings = store.proof_reviews ?? [];
 
   const cartItems = products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 })).filter((p) => p.qty > 0);
   const orderTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -897,6 +943,86 @@ function StoreDetail() {
               </div>
             </div>
           </div>
+
+          {recentRatings.length > 0 && (
+            <section className="mb-8 rounded-2xl border border-border bg-card p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="font-display text-2xl font-bold">Customer ratings</h2>
+                <span className="text-xs text-muted-foreground">Recent verified experiences</span>
+              </div>
+              <div className="space-y-4">
+                {recentRatings.map((review) => (
+                  <article key={`rating-${review.source}-${review.id}`} className="rounded-xl border border-border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{review.reviewer_name}</p>
+                        {review.staff_name && (
+                          <p className="text-xs text-muted-foreground">with {review.staff_name}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">★ {review.rating.toFixed(1)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(review.created_at).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    {review.body && (
+                      <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">{review.body}</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {proofReviewsWithImages.length > 0 && (
+            <section className="mb-8 rounded-2xl border border-border bg-card p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="font-display text-2xl font-bold">Recent customer proof photos</h2>
+                <span className="text-xs text-muted-foreground">Reported images are moderated</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {proofReviewsWithImages.map((review) => {
+                  const imageUrl = getImageUrl(review.proof_image_url) || "";
+                  const reportSubject = encodeURIComponent(`Report review proof image (${review.id})`);
+                  const reportBody = encodeURIComponent(
+                    `Store: ${store.name}\nStore ID: ${store.id}\nReview ID: ${review.id}\nSource: ${review.source}\nReason: `,
+                  );
+
+                  return (
+                    <article key={`${review.source}-${review.id}`} className="overflow-hidden rounded-xl border border-border">
+                      <img
+                        src={imageUrl}
+                        alt={`Proof shared by ${review.reviewer_name}`}
+                        className="h-44 w-full object-cover"
+                      />
+                      <div className="space-y-2 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">{review.reviewer_name}</p>
+                          <span className="text-xs text-muted-foreground">★ {review.rating.toFixed(1)}</span>
+                        </div>
+                        {review.staff_name && (
+                          <p className="text-xs text-muted-foreground">for {review.staff_name}</p>
+                        )}
+                        {review.body && <p className="line-clamp-3 text-xs text-muted-foreground">{review.body}</p>}
+                        <a
+                          href={`mailto:helplokal@gmail.com?subject=${reportSubject}&body=${reportBody}`}
+                          className="inline-flex text-xs font-medium text-primary hover:underline"
+                        >
+                          Report image
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Buy / book section */}
           <div className="mb-8 rounded-2xl border border-border bg-card p-6">
