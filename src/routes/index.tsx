@@ -477,7 +477,7 @@ function Index() {
                 Browse available stores{locationFilter ? ` in ${locationFilter}` : " near you"}.
               </h2>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {categories.map((c) => (
                 <button
                   key={c.name}
@@ -485,13 +485,12 @@ function Index() {
                     setActive(c.name);
                     setActiveSubcategory(null);
                   }}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                  className={`rounded-full border px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-medium tracking-tight transition-colors ${
                     active === c.name
-                      ? "border-transparent bg-gradient-primary text-primary-foreground shadow-warm"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      ? "border-foreground/25 bg-foreground/5 text-foreground"
+                      : "border-border/70 bg-transparent text-muted-foreground hover:border-foreground/20 hover:text-foreground"
                   }`}
                 >
-                  <span className="mr-1.5">{c.emoji}</span>
                   {c.name}
                 </button>
               ))}
@@ -499,13 +498,13 @@ function Index() {
           </div>
 
           {availableSubcategories.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               <button
                 onClick={() => setActiveSubcategory(null)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-medium transition-colors ${
                   !activeSubcategory
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    ? "border-foreground/25 bg-foreground/5 text-foreground"
+                    : "border-border/70 bg-transparent text-muted-foreground hover:border-foreground/20 hover:text-foreground"
                 }`}
               >
                 All {active}
@@ -514,10 +513,10 @@ function Index() {
                 <button
                   key={subcategory}
                   onClick={() => setActiveSubcategory(subcategory)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                  className={`rounded-full border px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-medium transition-colors ${
                     activeSubcategory === subcategory
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                      ? "border-foreground/25 bg-foreground/5 text-foreground"
+                      : "border-border/70 bg-transparent text-muted-foreground hover:border-foreground/20 hover:text-foreground"
                   }`}
                 >
                   {subcategory}
