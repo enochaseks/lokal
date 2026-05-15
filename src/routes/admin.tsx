@@ -64,6 +64,30 @@ function AdminDashboard() {
   const [fraudQueue, setFraudQueue] = useState<FraudQueueItem[]>([]);
   const [fraudQueueLoading, setFraudQueueLoading] = useState(true);
 
+  const openReviewNotification = async (notification: ReviewNotification) => {
+    if (!notification.store_id) return;
+
+    if (!notification.is_read) {
+      const { error } = await (supabase as any)
+        .from("review_notifications")
+        .update({ is_read: true })
+        .eq("id", notification.id);
+
+      if (!error) {
+        setNotifications((prev) =>
+          prev.map((item) =>
+            item.id === notification.id ? { ...item, is_read: true } : item,
+          ),
+        );
+      }
+    }
+
+    navigate({ to: "/store/$id", params: { id: notification.store_id } });
+    window.setTimeout(() => {
+      window.location.hash = "customer-ratings";
+    }, 0);
+  };
+
   // Check admin access
   useEffect(() => {
     if (!loading && (!user || !isAdminEmail(user.email))) {
@@ -388,12 +412,14 @@ function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {notifications.map((notification) => (
-                  <div
+                  <button
                     key={notification.id}
+                    type="button"
+                    onClick={() => openReviewNotification(notification)}
                     className={`rounded-lg border p-4 ${notification.is_read ? "border-border bg-background" : "border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="text-left">
                         <p className="font-semibold">{notification.title}</p>
                         <p className="text-sm text-muted-foreground">
                           {notification.stores?.name ?? "Unknown store"} ·{" "}
@@ -407,7 +433,7 @@ function AdminDashboard() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

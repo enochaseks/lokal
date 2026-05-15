@@ -945,7 +945,7 @@ function StoreDetail() {
           </div>
 
           {recentRatings.length > 0 && (
-            <section className="mb-8 rounded-2xl border border-border bg-card p-6">
+            <section id="customer-ratings" className="mb-8 rounded-2xl border border-border bg-card p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="font-display text-2xl font-bold">Customer ratings</h2>
                 <span className="text-xs text-muted-foreground">Recent verified experiences</span>

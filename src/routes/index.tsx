@@ -17,6 +17,7 @@ import { LIVE_CATEGORIES, categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
+import { WelcomeModal } from "@/components/lokal/WelcomeModal";
 import storePlaceholder from "@/assets/store-grocery.jpg";
 
 export const Route = createFileRoute("/")({
@@ -695,6 +696,7 @@ function Index() {
       <Footer />
 
       <StoreDialog store={selected} open={open} onOpenChange={setOpen} />
+      <WelcomeModal />
       <Toaster position="bottom-center" />
     </div>
   );

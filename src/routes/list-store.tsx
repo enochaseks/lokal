@@ -23,7 +23,15 @@ import {
   Check,
   ArrowLeft,
   Loader2,
+  UserCheck,
+  Mail,
 } from "lucide-react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import { Navbar } from "@/components/lokal/Navbar";
 import { NavigationLoadingScreen } from "@/components/lokal/NavigationLoadingOverlay";
 import { useAuth } from "@/auth/AuthProvider";
@@ -128,13 +136,9 @@ function RouteError({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createFileRoute("/list-store")({
-  beforeLoad: async () => {
-    if (typeof window === "undefined") return;
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) throw redirect({ to: "/auth", search: { redirect: "/list-store" } });
-  },
+  validateSearch: (s) => ({
+    category: typeof s.category === "string" ? s.category : undefined,
+  }),
   errorComponent: RouteError,
   component: ListStorePage,
   head: () => ({
@@ -336,17 +340,30 @@ function describeDbError(err: any): string {
 function ListStorePage() {
   const { user, loading, refreshRoles } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const { category: categoryParam } = Route.useSearch();
+  const initialCategory: (typeof CATEGORIES)[number] =
+    categoryParam && (CATEGORIES as readonly string[]).includes(categoryParam)
+      ? (categoryParam as (typeof CATEGORIES)[number])
+      : "Groceries";
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [onboardingStarted, setOnboardingStarted] = useState(false);
+  // Inline auth (step 4)
+  const [authTab, setAuthTab] = useState<"signup" | "signin">("signup");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
   const [region, setRegion] = useState<Region>("GB");
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>("GB");
 
   const [store, setStore] = useState({
     name: "",
-    category: "Groceries" as (typeof CATEGORIES)[number],
+    category: initialCategory,
     origin: ORIGINS[0] as (typeof ORIGINS)[number],
     subcategory: "",
     minimum_age: null as number | null,
@@ -403,8 +420,60 @@ function ListStorePage() {
     trackEvent("merchant_onboarding_visit", { page: "list-store" });
   }, []);
 
+  // Restore a draft saved before email confirmation and auto-submit
+  const DRAFT_KEY = "lokal:pending-store-draft";
+  useEffect(() => {
+    if (loading || !user) return;
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    try {
+      const draft = JSON.parse(raw);
+      localStorage.removeItem(DRAFT_KEY);
+      setStore(draft.store);
+      setBank(draft.bank);
+      setProducts(draft.products);
+      setSchedule(draft.schedule);
+      setStaff(draft.staff ?? []);
+      setPendingSubmit(true);
+    } catch {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading]);
+
+  // Fire submit once state has settled after draft restore
+  useEffect(() => {
+    if (pendingSubmit && user && !submitting) {
+      setPendingSubmit(false);
+      handleSubmit();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, user]);
+
+  function saveDraft() {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ store, bank, products, schedule, staff }),
+    );
+  }
+
+  function getAuthSiteOrigin() {
+    const configured = (import.meta.env.VITE_SITE_URL || "").trim().replace(/\/$/, "");
+    if (configured) return configured;
+    if (typeof window === "undefined") return "https://lokalshops.co.uk";
+    const host = window.location.hostname;
+    return host === "localhost" || host === "127.0.0.1"
+      ? window.location.origin
+      : "https://lokalshops.co.uk";
+  }
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!user) return;
+    if (!user) {
+      toast.error("Create your account first", {
+        description: "Complete step 4 to upload photos.",
+      });
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
@@ -432,7 +501,12 @@ function ListStorePage() {
     setProducts((p) => p.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
 
   const uploadProductImage = async (i: number, file: File) => {
-    if (!user) return;
+    if (!user) {
+      toast.error("Create your account first", {
+        description: "Complete step 4 to upload photos.",
+      });
+      return;
+    }
     const ext = file.name.split(".").pop();
     const path = `${user.id}/products/${Date.now()}-${i}.${ext}`;
     const { error } = await supabase.storage
@@ -462,6 +536,72 @@ function ListStorePage() {
     return true;
   };
 
+  const validateStep3 = () => {
+    const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
+    if (validProducts.length === 0) {
+      toast.error(`Add at least one ${isServiceStore ? "service" : "product"} before continuing`);
+      return false;
+    }
+    return true;
+  };
+
+  const handleStep3Continue = () => {
+    if (!validateStep3()) return;
+    if (user) {
+      // Already signed in — submit directly
+      handleSubmit();
+    } else {
+      setStep(4);
+    }
+  };
+
+  const handleInlineSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) throw error;
+      // handleSubmit will fire via the pendingSubmit useEffect once user state updates
+      setPendingSubmit(true);
+    } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      toast.error(
+        msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("credentials")
+          ? "Incorrect email or password."
+          : msg || "Could not sign in.",
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleInlineSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthBusy(true);
+    try {
+      saveDraft();
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: {
+          emailRedirectTo: `${getAuthSiteOrigin()}/auth/callback?redirect=/list-store`,
+          data: { display_name: authName.trim() || undefined },
+        },
+      });
+      if (error) throw error;
+      setEmailSent(true);
+    } catch (err: any) {
+      localStorage.removeItem(DRAFT_KEY);
+      const msg = String(err?.message ?? "");
+      toast.error(msg || "Could not create account. Please try again.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   const handleStep1Continue = () => {
     if (!validateStep1()) return;
     if (!onboardingStarted) {
@@ -475,7 +615,11 @@ function ListStorePage() {
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) {
+      toast.error("Please sign in to save your store.");
+      return;
+    }
     const isBarber = isServiceStore;
     const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
     if (validProducts.length === 0) {
@@ -503,7 +647,7 @@ function ListStorePage() {
       const payload = {
         ...parsedStore,
         ...bankSchema.parse(bank),
-        owner_id: user.id,
+        owner_id: currentUser.id,
         slug,
         region,
         currency: REGIONS[region].currency,
@@ -576,9 +720,9 @@ function ListStorePage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              user_id: user.id,
-              email: user.email,
-              display_name: user.user_metadata?.display_name || "",
+              user_id: currentUser.id,
+              email: currentUser.email,
+              display_name: currentUser.user_metadata?.display_name || "",
               store_name: store.name,
               store_category: store.category,
               phone: normalizePhoneForAlerts(store.phone, phoneCountry) || "",
@@ -653,7 +797,7 @@ function ListStorePage() {
       }
 
       // Promote to merchant role
-      await supabase.from("user_roles").insert({ user_id: user.id, role: "merchant" });
+      await supabase.from("user_roles").insert({ user_id: currentUser.id, role: "merchant" });
       await refreshRoles();
 
       trackEvent("merchant_onboarding_success", {
@@ -710,7 +854,7 @@ function ListStorePage() {
     }
   };
 
-  if (loading || !user) {
+  if (loading) {
     return <NavigationLoadingScreen />;
   }
 
@@ -727,7 +871,7 @@ function ListStorePage() {
 
         <h1 className="font-display text-4xl font-bold md:text-5xl">List your store on Lokal</h1>
         <p className="mt-2 text-muted-foreground">
-          Three quick steps. Free to list. Customers pay you directly by bank transfer.
+          {user ? "Three quick steps. Free to list." : "Fill in your store details, then create a free account to go live."} Customers pay you directly by bank transfer.
         </p>
 
         {/* Stepper */}
@@ -740,7 +884,8 @@ function ListStorePage() {
               label: isServiceStore ? "Schedule" : "Products & hours",
               icon: isServiceStore ? Calendar : Package,
             },
-          ].map((s, i) => (
+            ...(!user ? [{ n: 4, label: "Create account", icon: UserCheck }] : []),
+          ].map((s, i, arr) => (
             <div key={s.n} className="flex flex-1 items-center gap-2">
               <div
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
@@ -756,7 +901,7 @@ function ListStorePage() {
               >
                 {s.label}
               </span>
-              {i < 2 && (
+              {i < arr.length - 1 && (
                 <div className={`h-px flex-1 ${step > s.n ? "bg-primary" : "bg-border"}`} />
               )}
             </div>
@@ -1847,12 +1992,135 @@ function ListStorePage() {
                 <Button
                   size="lg"
                   className="flex-[2] bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-                  onClick={handleSubmit}
+                  onClick={handleStep3Continue}
                   disabled={submitting}
                 >
-                  {submitting ? "Saving..." : "Save and continue"}
+                  {submitting
+                    ? "Saving..."
+                    : user
+                      ? "Save and continue"
+                      : "Continue to Create Account →"}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <UserCheck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-2xl font-bold">Almost there</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Create a free account to publish your store.
+                  </p>
+                </div>
+              </div>
+
+              <Tabs value={authTab} onValueChange={(v) => setAuthTab(v as "signup" | "signin")}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="signup" className="flex-1">Create account</TabsTrigger>
+                  <TabsTrigger value="signin" className="flex-1">Sign in</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="signup" className="mt-4">
+                  {emailSent ? (
+                    <div className="rounded-xl border border-border bg-muted/40 p-6 text-center">
+                      <Mail className="mx-auto mb-3 h-8 w-8 text-primary" />
+                      <p className="font-semibold">Check your email</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        We've sent a confirmation link to <strong>{authEmail}</strong>.
+                        Click it to confirm and your store will be saved automatically.
+                      </p>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleInlineSignUp} className="space-y-3">
+                      <div>
+                        <Label>Your name</Label>
+                        <Input
+                          className="mt-1"
+                          placeholder="Ada Osei"
+                          value={authName}
+                          onChange={(e) => setAuthName(e.target.value)}
+                          maxLength={60}
+                        />
+                      </div>
+                      <div>
+                        <Label>Email *</Label>
+                        <Input
+                          className="mt-1"
+                          type="email"
+                          placeholder="you@example.com"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label>Password *</Label>
+                        <Input
+                          className="mt-1"
+                          type="password"
+                          placeholder="At least 8 characters"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          minLength={8}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        size="lg"
+                        className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                        disabled={authBusy}
+                      >
+                        {authBusy ? "Creating account…" : "Create account & list store"}
+                      </Button>
+                    </form>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="signin" className="mt-4">
+                  <form onSubmit={handleInlineSignIn} className="space-y-3">
+                    <div>
+                      <Label>Email *</Label>
+                      <Input
+                        className="mt-1"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label>Password *</Label>
+                      <Input
+                        className="mt-1"
+                        type="password"
+                        placeholder="Your password"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                      disabled={authBusy || submitting}
+                    >
+                      {authBusy || submitting ? "Signing in…" : "Sign in & list store"}
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+
+              <Button variant="outline" size="sm" className="w-full" onClick={() => setStep(3)}>
+                ← Back to products
+              </Button>
             </div>
           )}
         </div>
