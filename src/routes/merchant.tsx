@@ -151,7 +151,11 @@ export const Route = createFileRoute("/merchant")({
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    if (!session) throw redirect({ to: "/auth", search: { redirect: "/merchant" } });
+    if (!session)
+      throw redirect({
+        to: "/auth",
+        search: () => ({ redirect: "/merchant", mode: "" }),
+      });
 
     // Check if user has created a store
     const { data: stores } = await supabase
@@ -491,6 +495,7 @@ function EditStoreDialog({
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
   const isBodyContact = isBodyContactService(form.category, form.subcategory);
   const categoryLocked = Boolean(store.category_locked ?? store.published) && !isAdminUser;
+  const subcategoryLocked = Boolean(store.published && store.is_verified) && !isAdminUser;
 
   useEffect(() => {
     supabase
@@ -593,6 +598,12 @@ function EditStoreDialog({
     if (categoryLocked && form.category !== store.category) {
       toast.error("Category cannot be changed for live stores", {
         description: "Please contact support to request a category migration review.",
+      });
+      return;
+    }
+    if (subcategoryLocked && form.subcategory !== (store.subcategory ?? "")) {
+      toast.error("Subcategory cannot be changed for verified live stores", {
+        description: "Unpublish and contact support if you need a subcategory migration.",
       });
       return;
     }
@@ -903,6 +914,7 @@ function EditStoreDialog({
                   <Label>Subcategory</Label>
                   <Select
                     value={form.subcategory || "none"}
+                    disabled={subcategoryLocked}
                     onValueChange={(v) =>
                       setForm((f) => {
                         const nextSubcategory = v === "none" ? "" : v;
@@ -939,6 +951,11 @@ function EditStoreDialog({
                       )}
                     </SelectContent>
                   </Select>
+                  {subcategoryLocked && (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Subcategory is locked after verification while your store is live.
+                    </p>
+                  )}
                 </div>
               )}
               {form.category === "Groceries" && form.subcategory === "Meat & Fish" && (
