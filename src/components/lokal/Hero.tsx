@@ -70,7 +70,7 @@ export function Hero({ onSearch }: HeroProps) {
           </div>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Link to="/list-store">
+            <Link to="/list-store" search={() => ({ category: undefined })}>
               <Button
                 size="lg"
                 className="gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
@@ -81,10 +81,7 @@ export function Hero({ onSearch }: HeroProps) {
                 List your store <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Button variant="outline" size="lg" onClick={handleSearch}>
-              <Search className="mr-2 h-4 w-4" />
-              Browse stores
-            </Button>
+          
           </div>
 
           {/* Keep buyer search available, but secondary to merchant onboarding CTA. */}
@@ -122,17 +119,9 @@ export function Hero({ onSearch }: HeroProps) {
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-            <span>
-              <strong className="text-foreground">Direct</strong> messaging
-            </span>
-            <span>
-              <strong className="text-foreground">Bank transfer</strong> — no card fees
-            </span>
-            <span>
-              <strong className="text-foreground">Free</strong> to list your store
-            </span>
-          </div>
+          <p className="mt-6 text-sm text-muted-foreground">
+            Verified local merchants. Direct bank transfer checkout.
+          </p>
         </div>
       </div>
     </section>

@@ -163,11 +163,11 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="sm"
-            className="hidden gap-1.5 sm:inline-flex"
+            className="hidden gap-1.5 md:inline-flex"
             disabled={loading}
           >
-            <MapPin className="h-4 w-4" />
-            <span className="text-xs text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5 text-muted-foreground/70" />
+            <span className="text-[11px] text-muted-foreground/70">
               {loading ? "Detecting..." : (city ?? "Location")}
             </span>
           </Button>
@@ -186,12 +186,33 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="sm"
+                className="hidden sm:inline-flex"
                 onClick={() =>
                   navigate({ to: "/auth", search: () => ({ redirect: "/", mode: "" }) })
                 }
               >
                 Sign in
               </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Open account menu"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-secondary sm:hidden"
+                  >
+                    <User className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      navigate({ to: "/auth", search: () => ({ redirect: "/", mode: "" }) })
+                    }
+                  >
+                    <User className="mr-2 h-4 w-4" /> Sign in
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ) : (
             <DropdownMenu>

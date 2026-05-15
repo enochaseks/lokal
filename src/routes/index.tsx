@@ -54,6 +54,7 @@ function Index() {
   const [showCityInput, setShowCityInput] = useState(false);
   const [cityInputValue, setCityInputValue] = useState("");
   const [showMoreSections, setShowMoreSections] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   const timeToMinutes = (time: string) => {
     const [h, m] = time.slice(0, 5).split(":").map(Number);
@@ -423,6 +424,10 @@ function Index() {
           ),
         );
 
+  const visibleCategories = showAllCategories
+    ? categories
+    : categories.filter((c, i) => i < 5 || c.name === active);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -478,7 +483,7 @@ function Index() {
               </h2>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {categories.map((c) => (
+              {visibleCategories.map((c) => (
                 <button
                   key={c.name}
                   onClick={() => {
@@ -494,6 +499,14 @@ function Index() {
                   {c.name}
                 </button>
               ))}
+              {categories.length > 5 && (
+                <button
+                  onClick={() => setShowAllCategories((v) => !v)}
+                  className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground sm:px-3 sm:text-xs"
+                >
+                  {showAllCategories ? "Less" : "More"}
+                </button>
+              )}
             </div>
           </div>
 
