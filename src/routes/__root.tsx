@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 
 import appCss from "../styles.css?url";
 import logoUrl from "../assets/logo.svg?url";
+import faviconIcoUrl from "../assets/favicon.ico?url";
 
 function NotFoundComponent() {
   return (
@@ -41,7 +42,8 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: logoUrl },
+      { rel: "icon", type: "image/svg+xml", sizes: "any", href: logoUrl },
+      { rel: "shortcut icon", type: "image/x-icon", href: faviconIcoUrl },
       { rel: "apple-touch-icon", href: logoUrl },
     ],
   }),
