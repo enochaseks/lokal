@@ -101,8 +101,8 @@ function Index() {
 
     const timeTokens = normalized.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)/g) ?? [];
     if (timeTokens.length < 2) return [];
-    const startTime = parseClockTime(timeTokens[0]);
-    const endTime = parseClockTime(timeTokens[1]);
+    const startTime = parseClockTime(timeTokens[0]!);
+    const endTime = parseClockTime(timeTokens[1]!);
     if (!startTime || !endTime) return [];
 
     const allDays = [0, 1, 2, 3, 4, 5, 6];

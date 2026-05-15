@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
@@ -15,7 +16,10 @@ const passwordSchema = z.string().min(8, "At least 8 characters").max(72);
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  validateSearch: (s) => ({ redirect: (s.redirect as string) || "/" }),
+  validateSearch: (s) => ({
+    redirect: (s.redirect as string) || "/",
+    mode: (s.mode as string) || "",
+  }),
   head: () => ({ meta: [{ title: "Sign in · Lokal" }] }),
 });
 
@@ -34,7 +38,7 @@ function getAuthSiteOrigin() {
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { redirect } = useSearch({ from: "/auth" });
+  const { redirect, mode } = useSearch({ from: "/auth" });
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +46,24 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
   const authSiteOrigin = getAuthSiteOrigin();
+
+  // Pre-fill saved email if remember me was used before
+  useEffect(() => {
+    const saved = localStorage.getItem("lokal:saved-email");
+    if (saved) {
+      setEmail(saved);
+      setRememberMe(true);
+    }
+  }, []);
 
   const getFriendlyAuthError = (message: string, mode: "signin" | "signup") => {
     const normalized = message.toLowerCase();
@@ -116,6 +137,8 @@ function AuthPage() {
           password: p1.data,
         });
         if (error) throw error;
+        if (rememberMe) localStorage.setItem("lokal:saved-email", e1.data);
+        else localStorage.removeItem("lokal:saved-email");
         toast.success("Welcome back");
         navigate({ to: redirect === "/" ? "/merchant" : redirect });
       }
@@ -125,6 +148,42 @@ function AuthPage() {
       toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotBusy(true);
+    try {
+      const parsed = emailSchema.safeParse(forgotEmail || email);
+      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+      const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+        redirectTo: authSiteOrigin + "/auth/callback?type=recovery",
+      });
+      if (error) throw error;
+      setForgotSent(true);
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not send reset email. Please try again.");
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const p1 = passwordSchema.safeParse(newPassword);
+    if (!p1.success) { toast.error(p1.error.issues[0].message); return; }
+    if (newPassword !== confirmPassword) { toast.error("Passwords don't match"); return; }
+    setResetBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: p1.data });
+      if (error) throw error;
+      toast.success("Password updated! Signing you in…");
+      setTimeout(() => navigate({ to: "/merchant" }), 1500);
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update password");
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -158,7 +217,103 @@ function AuthPage() {
           <span className="font-display text-3xl font-bold">Lokal</span>
         </Link>
 
-        {emailSent ? (
+        {mode === "reset" ? (
+          /* ── Update password (after clicking reset email link) ── */
+          <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-card">
+            <h2 className="font-display text-2xl font-bold">Set a new password</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Choose a strong password for your account.</p>
+            <form onSubmit={handleUpdatePassword} className="mt-6 space-y-4">
+              <div>
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="At least 8 characters"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirm-password">Confirm password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="Repeat your new password"
+                  className="mt-1"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={resetBusy}
+                className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                size="lg"
+              >
+                {resetBusy ? "Updating…" : "Update password"}
+              </Button>
+            </form>
+          </div>
+        ) : forgotSent ? (
+          /* ── Forgot password email sent ── */
+          <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-card text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="font-display text-2xl font-bold">Check your inbox</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              We sent a password reset link to <strong className="text-foreground">{forgotEmail || email}</strong>.
+            </p>
+            <button
+              onClick={() => { setForgotSent(false); setForgotMode(false); }}
+              className="mt-6 text-sm text-primary hover:underline"
+            >
+              Back to sign in
+            </button>
+          </div>
+        ) : forgotMode ? (
+          /* ── Forgot password form ── */
+          <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-card">
+            <button onClick={() => setForgotMode(false)} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+            <h2 className="font-display text-2xl font-bold">Reset your password</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Enter your email and we'll send you a reset link.</p>
+            <form onSubmit={handleForgotPassword} className="mt-6 space-y-4">
+              <div>
+                <Label htmlFor="forgot-email">Email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  value={forgotEmail || email}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                  className="mt-1"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={forgotBusy}
+                className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                size="lg"
+              >
+                {forgotBusy ? "Sending…" : "Send reset link"}
+              </Button>
+            </form>
+          </div>
+        ) : emailSent ? (
+          /* ── Sign-up email confirmation ── */
           <div className="rounded-2xl border border-border/60 bg-card p-8 shadow-card text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
               <svg
@@ -192,6 +347,7 @@ function AuthPage() {
             </button>
           </div>
         ) : (
+          /* ── Main sign in / sign up form ── */
           <div className="rounded-2xl border border-border/60 bg-card p-7 shadow-card">
             <h1 className="font-display text-2xl font-bold">Welcome to Lokal</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -251,6 +407,27 @@ function AuthPage() {
                     className="mt-1"
                   />
                 </div>
+
+                {/* Remember me + Forgot password — sign-in tab only */}
+                <TabsContent value="signin" className="mt-0">
+                  <div className="flex items-center justify-between">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                      <Checkbox
+                        id="remember-me"
+                        checked={rememberMe}
+                        onCheckedChange={(v) => setRememberMe(!!v)}
+                      />
+                      Remember me
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setForgotMode(true); setAuthError(null); }}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                </TabsContent>
 
                 <Button
                   type="submit"

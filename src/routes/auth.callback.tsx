@@ -15,10 +15,17 @@ function AuthCallbackPage() {
     // Respect a ?redirect= param passed through from the auth page
     const params = new URLSearchParams(window.location.search);
     const redirectTo = params.get("redirect") || "/";
+    const isRecovery =
+      params.get("type") === "recovery" ||
+      window.location.hash.includes("type=recovery");
 
-    const finish = () => {
+    const finish = (recovery = false) => {
       if (isDone) return;
       isDone = true;
+      if (recovery) {
+        navigate({ to: "/auth", search: { redirect: "/merchant", mode: "reset" } });
+        return;
+      }
       const dest = redirectTo === "/" ? "/merchant" : redirectTo;
       navigate({ to: dest as any });
     };
@@ -33,15 +40,15 @@ function AuthCallbackPage() {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session) finish();
+        if (session) finish(isRecovery);
       });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
+      if ((event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") && session) {
         subscription.unsubscribe();
-        finish();
+        finish(event === "PASSWORD_RECOVERY" || isRecovery);
       }
     });
 
