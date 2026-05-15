@@ -10,6 +10,7 @@ import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import { z } from "zod";
 import logoImage from "@/assets/logo.jpg";
+import xIcon from "@/assets/X_icon.svg.png";
 
 const emailSchema = z.string().trim().email("Enter a valid email").max(255);
 const passwordSchema = z.string().min(8, "At least 8 characters").max(72);
@@ -194,13 +195,33 @@ function AuthPage() {
         redirect && redirect !== "/"
           ? `${authSiteOrigin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
           : `${authSiteOrigin}/auth/callback`;
-      const { error, data } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: callbackUrl },
       });
       if (error) throw error;
-    } catch (err: any) {
+    } catch {
       toast.error("Could not sign in with Google");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleX = async () => {
+    setBusy(true);
+    try {
+      const callbackUrl =
+        redirect && redirect !== "/"
+          ? `${authSiteOrigin}/auth/callback?redirect=${encodeURIComponent(redirect)}`
+          : `${authSiteOrigin}/auth/callback`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "x",
+        options: { redirectTo: callbackUrl },
+      });
+      if (error) throw error;
+    } catch {
+      toast.error("Could not sign in with X");
+    } finally {
       setBusy(false);
     }
   };
@@ -473,6 +494,18 @@ function AuthPage() {
               </svg>
               Continue with Google
             </Button>
+
+            <Button
+              variant="outline"
+              className="w-full mt-3"
+              size="lg"
+              onClick={handleX}
+              disabled={busy}
+            >
+              <img src={xIcon} alt="X" className="h-4 w-4" />
+              Continue with X
+            </Button>
+
           </div>
         )}
 
