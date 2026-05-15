@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import logoImage from "@/assets/logo.jpg";
+import logoImage from "@/assets/logo.png";
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -109,9 +109,8 @@ export function Navbar() {
           <img
             src={logoImage}
             alt="Lokal logo"
-            className="h-9 w-9 rounded-xl object-cover shadow-warm"
+            className="h-9 w-auto object-contain"
           />
-          <span className="font-display text-2xl font-bold tracking-tight">Lokal</span>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">

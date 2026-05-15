@@ -1,8 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import logoUrl from "../assets/logo.jpg?url";
-import logoSvgUrl from "../assets/logo.svg?url";
+import logoUrl from "../assets/logo.png?url";
 
 function NotFoundComponent() {
   return (
@@ -42,7 +41,7 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: logoSvgUrl },
+      { rel: "icon", type: "image/png", href: logoUrl },
       { rel: "apple-touch-icon", href: logoUrl },
     ],
   }),

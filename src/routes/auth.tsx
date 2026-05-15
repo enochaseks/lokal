@@ -6,10 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import { z } from "zod";
-import logoImage from "@/assets/logo.jpg";
+import logoImage from "@/assets/logo.png";
 import xIcon from "@/assets/X_icon.svg.png";
 
 const emailSchema = z.string().trim().email("Enter a valid email").max(255);
@@ -229,13 +228,12 @@ function AuthPage() {
   return (
     <div className="min-h-screen bg-gradient-hero flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <Link to="/" className="mb-8 flex items-center justify-center gap-2">
+        <Link to="/" className="mb-8 flex items-center justify-center">
           <img
             src={logoImage}
             alt="Lokal logo"
-            className="h-10 w-10 rounded-xl object-cover shadow-warm"
+            className="h-10 w-auto object-contain"
           />
-          <span className="font-display text-3xl font-bold">Lokal</span>
         </Link>
 
         {mode === "reset" ? (

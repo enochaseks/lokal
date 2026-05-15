@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import logoImage from "@/assets/logo.jpg";
+import logoImage from "@/assets/logo.png";
 import { WaitlistSignup } from "./WaitlistSignup";
 
 export function Footer() {
@@ -16,9 +16,8 @@ export function Footer() {
               <img
                 src={logoImage}
                 alt="Lokal logo"
-                className="h-9 w-9 rounded-xl object-cover shadow-warm"
+                className="h-9 w-auto object-contain"
               />
-              <span className="font-display text-2xl font-bold">Lokal</span>
             </div>
             <p className="mt-4 max-w-sm text-sm text-muted-foreground">
               A home for African and Caribbean stores. Built so the corner shop, the auntie's
@@ -50,7 +49,7 @@ export function Footer() {
             <h4 className="mb-3 text-sm font-semibold">For merchants</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link to="/list-store" className="hover:text-foreground">
+                <Link to="/list-store" search={{ category: undefined }} className="hover:text-foreground">
                   List your store
                 </Link>
               </li>
