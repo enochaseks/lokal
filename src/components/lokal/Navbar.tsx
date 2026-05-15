@@ -174,13 +174,21 @@ export function Navbar() {
 
           {!user ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate({ to: "/list-store" })}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  navigate({ to: "/list-store", search: () => ({ category: undefined }) })
+                }
+              >
                 List your store
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate({ to: "/auth", search: { redirect: "/" } })}
+                onClick={() =>
+                  navigate({ to: "/auth", search: () => ({ redirect: "/", mode: "" }) })
+                }
               >
                 Sign in
               </Button>
@@ -213,7 +221,11 @@ export function Navbar() {
                 {!storeId && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate({ to: "/list-store" })}>
+                    <DropdownMenuItem
+                      onClick={() =>
+                        navigate({ to: "/list-store", search: () => ({ category: undefined }) })
+                      }
+                    >
                       <Store className="mr-2 h-4 w-4" /> List your store
                     </DropdownMenuItem>
                   </>
