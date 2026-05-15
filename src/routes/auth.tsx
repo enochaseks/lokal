@@ -41,6 +41,7 @@ function AuthPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const authSiteOrigin = getAuthSiteOrigin();
 
   const getFriendlyAuthError = (message: string, mode: "signin" | "signup") => {
@@ -90,6 +91,7 @@ function AuthPage() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     setBusy(true);
     try {
       const e1 = emailSchema.safeParse(email);
@@ -118,7 +120,9 @@ function AuthPage() {
         navigate({ to: redirect === "/" ? "/merchant" : redirect });
       }
     } catch (err: any) {
-      toast.error(getFriendlyAuthError(String(err?.message ?? ""), tab));
+      const msg = getFriendlyAuthError(String(err?.message ?? ""), tab);
+      setAuthError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -196,7 +200,7 @@ function AuthPage() {
 
             <Tabs
               value={tab}
-              onValueChange={(v) => setTab(v as "signin" | "signup")}
+              onValueChange={(v) => { setTab(v as "signin" | "signup"); setAuthError(null); }}
               className="mt-6"
             >
               <TabsList className="grid w-full grid-cols-2">
@@ -205,6 +209,11 @@ function AuthPage() {
               </TabsList>
 
               <form onSubmit={handleEmailAuth} className="mt-5 space-y-4">
+                {authError && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {authError}
+                  </div>
+                )}
                 <TabsContent value="signup" className="space-y-4 mt-0">
                   <div>
                     <Label htmlFor="name">Your name</Label>
@@ -225,7 +234,7 @@ function AuthPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
                     required
                     className="mt-1"
                   />
@@ -236,7 +245,7 @@ function AuthPage() {
                     id="password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setAuthError(null); }}
                     required
                     minLength={8}
                     className="mt-1"

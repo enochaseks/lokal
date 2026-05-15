@@ -161,7 +161,7 @@ export const Route = createFileRoute("/merchant")({
       .limit(1);
 
     if (!stores || stores.length === 0) {
-      throw redirect({ to: "/list-store" });
+      throw redirect({ to: "/list-store", search: { category: undefined } });
     }
   },
   errorComponent: RouteError,
@@ -2159,10 +2159,27 @@ function MerchantPage() {
   const deleteAccount = async () => {
     setDeleting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("No active session");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user-account`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete account");
+      }
+
+      // Sign out and redirect
       await supabase.auth.signOut();
-      const supabaseAny = supabase as any;
-      const { error } = await supabaseAny.rpc("delete_user_account");
-      if (error) throw error;
       window.location.href = "/";
     } catch (e: any) {
       toast.error(e.message ?? "Could not delete account. Please email helplokal@gmail.com");
@@ -2297,7 +2314,7 @@ function MerchantPage() {
           {stores.length === 0 && (
             <Button
               className="bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95 gap-2"
-              onClick={() => navigate({ to: "/list-store" })}
+              onClick={() => navigate({ to: "/list-store", search: { category: undefined } })}
             >
               <Plus className="h-4 w-4" /> Add a store
             </Button>
@@ -2466,7 +2483,7 @@ function MerchantPage() {
               </p>
               <Button
                 className="mt-5 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
-                onClick={() => navigate({ to: "/list-store" })}
+                onClick={() => navigate({ to: "/list-store", search: { category: undefined } })}
               >
                 List a store
               </Button>
