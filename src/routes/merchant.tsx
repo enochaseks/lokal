@@ -190,6 +190,9 @@ type StoreRow = {
   tattoo_portfolio_url?: string | null;
   tattoo_license_url?: string | null;
   is_verified_tattoo_artist?: boolean | null;
+  barber_license_url?: string | null;
+  beauty_license_url?: string | null;
+  hair_beauty_license_url?: string | null;
   food_business_license_url?: string | null;
   food_business_license_status?: "pending" | "approved" | "rejected" | null;
   health_safety_certificate_url?: string | null;
@@ -390,6 +393,9 @@ function EditStoreDialog({
     minimum_age: string;
     tattoo_portfolio_url: string;
     tattoo_license_url: string;
+    barber_license_url: string;
+    beauty_license_url: string;
+    hair_beauty_license_url: string;
     food_business_license_url: string;
     health_safety_certificate_url: string;
     health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected";
@@ -426,6 +432,9 @@ function EditStoreDialog({
     minimum_age: store.minimum_age != null ? String(store.minimum_age) : "18",
     tattoo_portfolio_url: store.tattoo_portfolio_url ?? "",
     tattoo_license_url: store.tattoo_license_url ?? "",
+    barber_license_url: store.barber_license_url ?? "",
+    beauty_license_url: store.beauty_license_url ?? "",
+    hair_beauty_license_url: store.hair_beauty_license_url ?? "",
     food_business_license_url: store.food_business_license_url ?? "",
     health_safety_certificate_url: store.health_safety_certificate_url ?? "",
     health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
@@ -661,6 +670,12 @@ function EditStoreDialog({
         ? (n(form.tattoo_license_url) ??
           (isAdminUser ? "https://lokal.admin/override/tattoo-licence" : null))
         : null;
+      const barberLicenseUrl =
+        form.category === "Barbers" ? n(form.barber_license_url) : null;
+      const beautyLicenseUrl =
+        form.category === "Beauty Store" ? n(form.beauty_license_url) : null;
+      const hairBeautyLicenseUrl =
+        form.category === "Hair & Beauty" ? n(form.hair_beauty_license_url) : null;
       const foodLicenseUrl = isGrocery ? n(form.food_business_license_url) : null;
       const certificateUrl = requiresFoodSafetyApproval
         ? n(form.health_safety_certificate_url)
@@ -683,6 +698,9 @@ function EditStoreDialog({
           minimum_age: tattooMinimumAge,
           tattoo_portfolio_url: tattooPortfolioUrl,
           tattoo_license_url: tattooLicenseUrl,
+          barber_license_url: barberLicenseUrl,
+          beauty_license_url: beautyLicenseUrl,
+          hair_beauty_license_url: hairBeautyLicenseUrl,
           food_business_license_url: foodLicenseUrl,
           health_safety_certificate_url: certificateUrl,
           health_safety_certificate_status: nextCertStatus,
@@ -869,6 +887,9 @@ function EditStoreDialog({
                         minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
                         tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
                         tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
+                        barber_license_url: nextCategory === "Barbers" ? f.barber_license_url : "",
+                        beauty_license_url: nextCategory === "Beauty Store" ? f.beauty_license_url : "",
+                        hair_beauty_license_url: nextCategory === "Hair & Beauty" ? f.hair_beauty_license_url : "",
                         food_business_license_url: keepGroceryFields ? f.food_business_license_url : "",
                         health_safety_certificate_url: keepCertificate
                           ? f.health_safety_certificate_url
@@ -1002,6 +1023,57 @@ function EditStoreDialog({
                   />
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     Upload a document proving you're licensed to sell food in your country. This can vary by location (e.g. food business registration, health permit, EHO certificate).
+                  </p>
+                </div>
+              )}
+              {form.category === "Barbers" && (
+                <div className="sm:col-span-2">
+                  <Label>Barber Licence/Certification URL (optional)</Label>
+                  <Input
+                    value={form.barber_license_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, barber_license_url: e.target.value }))
+                    }
+                    maxLength={500}
+                    className="mt-1"
+                    placeholder="Link to barber licence or certification"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Add your barber licence to build customer trust. Shows as "Certified" badge on your store.
+                  </p>
+                </div>
+              )}
+              {form.category === "Beauty Store" && (
+                <div className="sm:col-span-2">
+                  <Label>Beauty Licence/Certification URL (optional)</Label>
+                  <Input
+                    value={form.beauty_license_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, beauty_license_url: e.target.value }))
+                    }
+                    maxLength={500}
+                    className="mt-1"
+                    placeholder="Link to beauty licence or certification"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Add your beauty licence to build customer trust. Shows as "Certified" badge on your store.
+                  </p>
+                </div>
+              )}
+              {form.category === "Hair & Beauty" && (
+                <div className="sm:col-span-2">
+                  <Label>Hair & Beauty Licence/Certification URL (optional)</Label>
+                  <Input
+                    value={form.hair_beauty_license_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, hair_beauty_license_url: e.target.value }))
+                    }
+                    maxLength={500}
+                    className="mt-1"
+                    placeholder="Link to hair & beauty licence or certification"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Add your hair & beauty licence to build customer trust. Shows as "Certified" badge on your store.
                   </p>
                 </div>
               )}

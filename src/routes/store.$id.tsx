@@ -112,6 +112,9 @@ type StoreDetails = {
   tattoo_portfolio_url?: string | null;
   tattoo_license_url?: string | null;
   is_verified_tattoo_artist?: boolean | null;
+  barber_license_url?: string | null;
+  beauty_license_url?: string | null;
+  hair_beauty_license_url?: string | null;
   food_business_license_url?: string | null;
   food_business_license_status?: "pending" | "approved" | "rejected" | null;
   origin: string | null;
@@ -1051,6 +1054,39 @@ function StoreDetail() {
                       : store.food_business_license_status === "rejected"
                         ? "Rejected"
                         : "Pending"}
+                  </a>
+                )}
+                {store.category === "Barbers" && store.barber_license_url && (
+                  <a
+                    href={store.barber_license_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View barber licence"
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800 hover:opacity-80 dark:bg-blue-900/40 dark:text-blue-300"
+                  >
+                    <FileCheck2 className="h-3.5 w-3.5" /> Certified
+                  </a>
+                )}
+                {store.category === "Beauty Store" && store.beauty_license_url && (
+                  <a
+                    href={store.beauty_license_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View beauty licence"
+                    className="inline-flex items-center gap-1 rounded-full bg-pink-100 px-2.5 py-1 text-xs font-medium text-pink-800 hover:opacity-80 dark:bg-pink-900/40 dark:text-pink-300"
+                  >
+                    <FileCheck2 className="h-3.5 w-3.5" /> Certified
+                  </a>
+                )}
+                {store.category === "Hair & Beauty" && store.hair_beauty_license_url && (
+                  <a
+                    href={store.hair_beauty_license_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="View hair & beauty licence"
+                    className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-xs font-medium text-purple-800 hover:opacity-80 dark:bg-purple-900/40 dark:text-purple-300"
+                  >
+                    <FileCheck2 className="h-3.5 w-3.5" /> Certified
                   </a>
                 )}
               </div>

@@ -200,6 +200,27 @@ const storeSchema = z
       .refine(isValidImageReference, "Must be a valid licence URL")
       .optional()
       .or(z.literal("")),
+    barber_license_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine(isValidImageReference, "Must be a valid licence URL")
+      .optional()
+      .or(z.literal("")),
+    beauty_license_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine(isValidImageReference, "Must be a valid licence URL")
+      .optional()
+      .or(z.literal("")),
+    hair_beauty_license_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine(isValidImageReference, "Must be a valid licence URL")
+      .optional()
+      .or(z.literal("")),
     food_business_license_url: z
       .string()
       .trim()
@@ -396,6 +417,9 @@ function ListStorePage() {
     minimum_age: null as number | null,
     tattoo_portfolio_url: "",
     tattoo_license_url: "",
+    barber_license_url: "",
+    beauty_license_url: "",
+    hair_beauty_license_url: "",
     food_business_license_url: "",
     health_safety_certificate_url: "",
     description: "",
@@ -1012,6 +1036,9 @@ function ListStorePage() {
                           minimum_age: keepTattooFields ? (prev.minimum_age ?? 18) : null,
                           tattoo_portfolio_url: keepTattooFields ? prev.tattoo_portfolio_url : "",
                           tattoo_license_url: keepTattooFields ? prev.tattoo_license_url : "",
+                          barber_license_url: nextCategory === "Barbers" ? prev.barber_license_url : "",
+                          beauty_license_url: nextCategory === "Beauty Store" ? prev.beauty_license_url : "",
+                          hair_beauty_license_url: nextCategory === "Hair & Beauty" ? prev.hair_beauty_license_url : "",
                           food_business_license_url: keepGroceryFields ? prev.food_business_license_url : "",
                           selling_mode: nextMode,
                         };
@@ -1131,6 +1158,75 @@ function ListStorePage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       Upload a document or certificate that proves you're licensed to sell food. This can be a food business registration, health certificate, or similar authority document for your country.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {store.category === "Barbers" && (
+                <div className="space-y-3 rounded-lg border border-blue-300 bg-blue-50 p-3">
+                  <p className="text-sm font-medium text-blue-900">
+                    Barber licence (optional)
+                  </p>
+                  <p className="text-xs text-blue-800">
+                    Add your barber licence or certification to build customer trust. This is optional but helps establish credibility.
+                  </p>
+                  <div>
+                    <Label>Barber Licence/Certification URL</Label>
+                    <Input
+                      value={store.barber_license_url}
+                      onChange={(e) =>
+                        setStore((s) => ({ ...s, barber_license_url: e.target.value }))
+                      }
+                      placeholder="Link to your barber licence or certification"
+                      maxLength={500}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {store.category === "Beauty Store" && (
+                <div className="space-y-3 rounded-lg border border-pink-300 bg-pink-50 p-3">
+                  <p className="text-sm font-medium text-pink-900">
+                    Beauty licence (optional)
+                  </p>
+                  <p className="text-xs text-pink-800">
+                    Add your beauty licence or certification to build customer trust. This is optional but helps establish credibility.
+                  </p>
+                  <div>
+                    <Label>Beauty Licence/Certification URL</Label>
+                    <Input
+                      value={store.beauty_license_url}
+                      onChange={(e) =>
+                        setStore((s) => ({ ...s, beauty_license_url: e.target.value }))
+                      }
+                      placeholder="Link to your beauty licence or certification"
+                      maxLength={500}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {store.category === "Hair & Beauty" && (
+                <div className="space-y-3 rounded-lg border border-purple-300 bg-purple-50 p-3">
+                  <p className="text-sm font-medium text-purple-900">
+                    Hair & Beauty licence (optional)
+                  </p>
+                  <p className="text-xs text-purple-800">
+                    Add your hair & beauty licence or certification to build customer trust. This is optional but helps establish credibility.
+                  </p>
+                  <div>
+                    <Label>Hair & Beauty Licence/Certification URL</Label>
+                    <Input
+                      value={store.hair_beauty_license_url}
+                      onChange={(e) =>
+                        setStore((s) => ({ ...s, hair_beauty_license_url: e.target.value }))
+                      }
+                      placeholder="Link to your hair & beauty licence or certification"
+                      maxLength={500}
+                      className="mt-1"
+                    />
                   </div>
                 </div>
               )}
