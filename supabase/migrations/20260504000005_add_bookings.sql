@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS store_availability (
   slot_duration_mins int NOT NULL DEFAULT 30,
   UNIQUE (store_id, day_of_week)
 );
-
 -- Individual bookings
 CREATE TABLE IF NOT EXISTS store_bookings (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -26,38 +25,29 @@ CREATE TABLE IF NOT EXISTS store_bookings (
   note text,
   created_at timestamptz DEFAULT now()
 );
-
 -- RLS
 ALTER TABLE store_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_bookings ENABLE ROW LEVEL SECURITY;
-
 -- Availability: anyone can read; only owners can write
 CREATE POLICY "public read availability"
   ON store_availability FOR SELECT USING (true);
-
 CREATE POLICY "owners insert availability"
   ON store_availability FOR INSERT
   WITH CHECK (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
-
 CREATE POLICY "owners update availability"
   ON store_availability FOR UPDATE
   USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
-
 CREATE POLICY "owners delete availability"
   ON store_availability FOR DELETE
   USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
-
 -- Bookings: anyone can insert/read; only owners can update/delete
 CREATE POLICY "public insert bookings"
   ON store_bookings FOR INSERT WITH CHECK (true);
-
 CREATE POLICY "public read bookings"
   ON store_bookings FOR SELECT USING (true);
-
 CREATE POLICY "owners update bookings"
   ON store_bookings FOR UPDATE
   USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
-
 CREATE POLICY "owners delete bookings"
   ON store_bookings FOR DELETE
   USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));

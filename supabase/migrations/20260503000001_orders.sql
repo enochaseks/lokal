@@ -11,21 +11,17 @@ create table if not exists public.orders (
                    check (status in ('pending_transfer', 'payment_received', 'cancelled')),
   created_at     timestamptz not null default now()
 );
-
 alter table public.orders enable row level security;
-
 -- Merchants can read orders for stores they own
 create policy "Merchant reads own store orders" on public.orders
   for select to authenticated
   using (
     store_id in (select id from public.stores where owner_id = auth.uid())
   );
-
 -- Anyone (including anonymous shoppers) can place an order
 create policy "Anyone can place an order" on public.orders
   for insert to public
   with check (true);
-
 -- Merchants can update the status of their orders
 create policy "Merchant updates own store orders" on public.orders
   for update to authenticated

@@ -12,7 +12,6 @@ begin
   delete from auth.users where id = auth.uid();
 end;
 $$;
-
 -- Grant execute to authenticated users only
 revoke all on function public.delete_user_account() from public;
 grant execute on function public.delete_user_account() to authenticated;

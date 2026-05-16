@@ -3,9 +3,7 @@ ALTER TABLE public.store_bookings
   ADD COLUMN IF NOT EXISTS rating_token uuid NOT NULL DEFAULT gen_random_uuid(),
   ADD COLUMN IF NOT EXISTS rating_sent boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS rating_completed boolean NOT NULL DEFAULT false;
-
 CREATE UNIQUE INDEX IF NOT EXISTS store_bookings_rating_token_idx ON public.store_bookings(rating_token);
-
 -- Function called by pg_cron: sends rating request emails for appointments that have ended
 CREATE OR REPLACE FUNCTION public.send_pending_rating_emails()
 RETURNS void
@@ -55,7 +53,6 @@ BEGIN
   END LOOP;
 END;
 $$;
-
 -- Schedule: run every hour at :05 past (requires pg_cron extension — enable in Supabase Dashboard > Database > Extensions)
 SELECT cron.schedule(
   'send-rating-emails',
