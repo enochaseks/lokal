@@ -213,6 +213,7 @@ type StoreRow = {
   image_url: string | null;
   published: boolean;
   fulfillment: string;
+  delivery_fee_gbp?: number | null;
   bank_name: string | null;
   bank_account_name: string | null;
   bank_account_number: string | null;
@@ -237,6 +238,9 @@ type OrderRow = {
   rating_completed?: boolean | null;
   note: string | null;
   items: Array<{ name: string; price: number; qty: number; unit?: string }>;
+  fulfillment_method?: "collection" | "delivery" | null;
+  items_subtotal_gbp?: number | null;
+  delivery_fee_gbp?: number | null;
   total_gbp: number;
   status: string;
   created_at: string;
@@ -414,6 +418,7 @@ function EditStoreDialog({
     tiktok_handle: string;
     website_url: string;
     fulfillment: string;
+    delivery_fee_gbp: string;
     image_url: string;
     bank_name: string;
     bank_account_name: string;
@@ -457,6 +462,8 @@ function EditStoreDialog({
     fulfillment: requiresPayAtStoreFulfillment(store.category)
       ? "pay_at_store"
       : (store.fulfillment ?? "collection"),
+    delivery_fee_gbp:
+      store.delivery_fee_gbp != null ? Number(store.delivery_fee_gbp).toFixed(2) : "0.00",
     image_url: normalizeImagePath(store.image_url) ?? "",
     bank_name: store.bank_name ?? "",
     bank_account_name: store.bank_account_name ?? "",
@@ -715,6 +722,10 @@ function EditStoreDialog({
           fulfillment: requiresPayAtStoreFulfillment(form.category)
             ? "pay_at_store"
             : form.fulfillment,
+          delivery_fee_gbp:
+            form.fulfillment === "delivery" || form.fulfillment === "both"
+              ? Math.max(0, Number(form.delivery_fee_gbp || 0))
+              : 0,
           image_url: n(form.image_url),
           accepts_refunds: form.accepts_refunds,
           refund_policy: n(form.refund_policy),
@@ -814,6 +825,10 @@ function EditStoreDialog({
         fulfillment: requiresPayAtStoreFulfillment(form.category)
           ? "pay_at_store"
           : form.fulfillment,
+        delivery_fee_gbp:
+          form.fulfillment === "delivery" || form.fulfillment === "both"
+            ? Math.max(0, Number(form.delivery_fee_gbp || 0))
+            : 0,
         image_url: n(form.image_url),
         bank_name: n(form.bank_name),
         bank_account_name: n(form.bank_account_name),
@@ -1398,6 +1413,25 @@ function EditStoreDialog({
                   </>
                 )}
               </div>
+              {(form.fulfillment === "delivery" || form.fulfillment === "both") && (
+                <div className="sm:col-span-2">
+                  <Label>Local delivery fee ({form.currency})</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.delivery_fee_gbp}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, delivery_fee_gbp: e.target.value }))
+                    }
+                    className="mt-1"
+                    placeholder="0.00"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Added to customer total only when they select delivery.
+                  </p>
+                </div>
+              )}
               {isServiceStore && (
                 <div className="sm:col-span-2">
                   <Label>Where do you offer services?</Label>
@@ -2918,6 +2952,9 @@ function MerchantPage() {
                             >
                               📞 {o.customer_phone}
                             </a>
+                            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              {o.fulfillment_method === "delivery" ? "🚚 Delivery" : "🏪 Collection"}
+                            </span>
                           </div>
 
                           {o.note && (
@@ -2945,6 +2982,30 @@ function MerchantPage() {
                               minute: "2-digit",
                             })}
                           </div>
+                          {(o.items_subtotal_gbp != null || o.delivery_fee_gbp != null) && (
+                            <div className="mt-2 rounded-md bg-secondary/60 px-3 py-2 text-xs space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span>Subtotal</span>
+                                <span>
+                                  {formatCurrency(
+                                    Number(o.items_subtotal_gbp ?? o.total_gbp),
+                                    getOrderCurrency(o.store_id),
+                                  )}
+                                </span>
+                              </div>
+                              {Number(o.delivery_fee_gbp ?? 0) > 0 && (
+                                <div className="flex items-center justify-between">
+                                  <span>Delivery fee</span>
+                                  <span>
+                                    {formatCurrency(
+                                      Number(o.delivery_fee_gbp),
+                                      getOrderCurrency(o.store_id),
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Amount + actions */}

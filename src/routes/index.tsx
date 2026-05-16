@@ -256,7 +256,7 @@ function Index() {
       const { data: rows } = await supabase
         .from("stores")
         .select(
-          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
+          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,delivery_fee_gbp,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
         )
         .eq("published", true)
         .order("created_at", { ascending: false });
@@ -311,6 +311,7 @@ function Index() {
             fulfillment:
               (r.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") ||
               "collection",
+            delivery_fee_gbp: r.delivery_fee_gbp != null ? Number(r.delivery_fee_gbp) : 0,
             location_type: (r.location_type as Store["location_type"]) ?? null,
             accepts_refunds: !!r.accepts_refunds,
             refund_policy: r.refund_policy || undefined,

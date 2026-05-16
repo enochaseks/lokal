@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Mail, Instagram, MessageCircleHeart, BadgeCheck } from "lucide-react";
+import { Mail, Instagram, MessageCircleHeart, BadgeCheck, ReceiptText } from "lucide-react";
 import { Navbar } from "@/components/lokal/Navbar";
 
 export const Route = createFileRoute("/help")({
@@ -117,6 +117,35 @@ function HelpPage() {
               Provide business registration documents or proof of online presence. Our admin team
               reviews submissions within a few days and approves or rejects based on available
               evidence.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-10 rounded-2xl border border-border/60 bg-card p-6 shadow-card">
+          <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
+            <ReceiptText className="h-5 w-5" />
+          </div>
+          <h3 className="font-display text-lg font-bold">Refunds &amp; cancellations: where to start</h3>
+          <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+            <p>Use this quick path to resolve issues faster:</p>
+            <p>
+              1) Review the store&apos;s refund and cancellation terms on their profile first.
+              <br />
+              2) For bookings/services, online cancellation is available up to 12 hours before the
+              appointment. Inside 12 hours, contact the merchant directly.
+              <br />
+              3) For product orders, online cancellation is available while order status is
+              pending transfer.
+              <br />
+              4) If you still need help, contact support and include your order or booking
+              reference.
+            </p>
+            <p>
+              Full policy details are on the{" "}
+              <Link to="/refunds-cancellations" className="text-primary hover:underline">
+                Refund &amp; Cancellation page
+              </Link>
+              .
             </p>
           </div>
         </div>

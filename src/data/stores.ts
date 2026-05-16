@@ -385,6 +385,7 @@ export type Store = {
   image: string;
   description: string;
   fulfillment: "collection" | "delivery" | "both" | "pay_at_store";
+  delivery_fee_gbp?: number | null;
   location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
   accepts_refunds?: boolean;
   refund_policy?: string;

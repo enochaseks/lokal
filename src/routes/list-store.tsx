@@ -248,6 +248,7 @@ const storeSchema = z
     hours: z.string().trim().max(80).optional(),
     phone: z.string().trim().max(40).optional(),
     fulfillment: z.enum(["collection", "delivery", "both", "pay_at_store"]).default("collection"),
+    delivery_fee_gbp: z.number().min(0).max(9999).default(0),
     image_url: z
       .string()
       .trim()
@@ -430,6 +431,7 @@ function ListStorePage() {
     hours: "",
     phone: "",
     fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store",
+    delivery_fee_gbp: 0,
     image_url: "",
     instagram_handle: "",
     tiktok_handle: "",
@@ -729,6 +731,10 @@ function ListStorePage() {
           PAY_AT_STORE_ONLY_CATEGORIES.has(parsedStore.category)
             ? "pay_at_store"
             : parsedStore.fulfillment,
+        delivery_fee_gbp:
+          parsedStore.fulfillment === "delivery" || parsedStore.fulfillment === "both"
+            ? Number(parsedStore.delivery_fee_gbp ?? 0)
+            : 0,
         address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
         city: requiresFixedAddress ? toNullable(parsedStore.city) : null,
         timezone: parsedStore.timezone,
@@ -1345,6 +1351,28 @@ function ListStorePage() {
                   </>
                 )}
               </div>
+
+              {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
+                <div>
+                  <Label>Local delivery fee ({REGIONS[region].currency})</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={store.delivery_fee_gbp}
+                    onChange={(e) =>
+                      setStore((prev) => ({
+                        ...prev,
+                        delivery_fee_gbp: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
+                    className="mt-1"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    This fee is added only when the customer chooses delivery.
+                  </p>
+                </div>
+              )}
 
               {isServiceStore && (
                 <div>

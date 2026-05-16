@@ -220,6 +220,9 @@ export function StoreDialog({
   const [phoneCountryCode, setPhoneCountryCode] = useState<CountryCode>("GB");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+  const [orderFulfillment, setOrderFulfillment] = useState<"collection" | "delivery">(
+    "collection",
+  );
   const [reference, setReference] = useState(() => makeRef());
   const [copied, setCopied] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -350,6 +353,11 @@ export function StoreDialog({
     })();
   }, [open, store?.id]);
 
+  useEffect(() => {
+    if (!store) return;
+    setOrderFulfillment(store.fulfillment === "delivery" ? "delivery" : "collection");
+  }, [store?.id, store?.fulfillment]);
+
   // Load weekly availability for bookable stores
   useEffect(() => {
     if (!open || !store || !isBookable(store.category, store.selling_mode)) return;
@@ -458,8 +466,11 @@ export function StoreDialog({
   ].filter((item): item is { label: string; href: string | null } => !!item && !!item.href);
 
   const items = store.products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 }));
-  const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-  const hasItems = total > 0;
+  const itemsSubtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const deliveryFee =
+    orderFulfillment === "delivery" ? Math.max(0, Number(store.delivery_fee_gbp ?? 0)) : 0;
+  const total = itemsSubtotal + deliveryFee;
+  const hasItems = itemsSubtotal > 0;
   const selectedBookingDay = bookDate ? getDayOfWeekInTimezone(bookDate, store?.timezone) : null;
   const availableBookStaff =
     selectedBookingDay == null
@@ -486,6 +497,7 @@ export function StoreDialog({
     setPhoneCountryCode("GB");
     setEmail("");
     setNote("");
+    setOrderFulfillment(store.fulfillment === "delivery" ? "delivery" : "collection");
     setReference(makeRef());
     setShowMsgForm(false);
     setMsgName("");
@@ -624,6 +636,9 @@ export function StoreDialog({
         items: items
           .filter((i) => i.qty > 0)
           .map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit })),
+        items_subtotal_gbp: itemsSubtotal,
+        delivery_fee_gbp: deliveryFee,
+        fulfillment_method: orderFulfillment,
         total_gbp: total,
         status: "pending_transfer",
       });
@@ -2016,6 +2031,35 @@ export function StoreDialog({
               </p>
 
               <div className="mt-4 space-y-3">
+                {(store.fulfillment === "both" || store.fulfillment === "delivery") && (
+                  <div>
+                    <label className="text-sm font-medium">Fulfilment</label>
+                    {store.fulfillment === "both" ? (
+                      <Select
+                        value={orderFulfillment}
+                        onValueChange={(value) =>
+                          setOrderFulfillment(value as "collection" | "delivery")
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="collection">🏪 Collection</SelectItem>
+                          <SelectItem value="delivery">
+                            🚚 Delivery ({currencySymbol}
+                            {Number(store.delivery_fee_gbp ?? 0).toFixed(2)} fee)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="mt-1 rounded-md border border-border bg-secondary px-3 py-2 text-sm">
+                        🚚 Delivery (fee: {currencySymbol}
+                        {Number(store.delivery_fee_gbp ?? 0).toFixed(2)})
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium">Full name</label>
                   <Input
@@ -2093,6 +2137,22 @@ export function StoreDialog({
                       </span>
                     </div>
                   ))}
+                <div className="mt-2 flex justify-between border-t border-border pt-2 font-semibold">
+                  <span>Subtotal</span>
+                  <span>
+                    {currencySymbol}
+                    {itemsSubtotal.toFixed(2)}
+                  </span>
+                </div>
+                {orderFulfillment === "delivery" && (
+                  <div className="mt-2 flex justify-between text-muted-foreground">
+                    <span>Delivery fee</span>
+                    <span>
+                      {currencySymbol}
+                      {deliveryFee.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="mt-2 flex justify-between border-t border-border pt-2 font-semibold">
                   <span>Total</span>
                   <span>

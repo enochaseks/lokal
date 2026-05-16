@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, PackageSearch, CheckCircle2, Clock, Truck, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/order")({
   component: OrderLookupPage,
@@ -14,9 +15,14 @@ export const Route = createFileRoute("/order")({
 });
 
 type OrderResult = {
+  id: string;
   reference: string;
+  store_id: string;
   status: string;
   store_name: string;
+  fulfillment_method?: "collection" | "delivery" | null;
+  items_subtotal_gbp?: number | null;
+  delivery_fee_gbp?: number | null;
   total_gbp: number;
   created_at: string;
   items: Array<{ name: string; qty: number; price: number; unit?: string }>;
@@ -123,6 +129,7 @@ function OrderLookupPage() {
   const [ref, setRef] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [result, setResult] = useState<OrderResult | null>(null);
   const [phoneResults, setPhoneResults] = useState<OrderResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +145,57 @@ function OrderLookupPage() {
     }
   }, []);
 
+  const canCancelOrder = (status: string) => status === "pending_transfer";
+
+  const cancelOrder = async (orderId: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Sign in to cancel orders");
+      return;
+    }
+
+    setCancellingId(orderId);
+    try {
+      const order = result?.id === orderId ? result : phoneResults.find((o) => o.id === orderId);
+      const { error } = await (supabase as any)
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("id", orderId)
+        .eq("status", "pending_transfer");
+      if (error) throw error;
+
+      setResult((prev) => (prev && prev.id === orderId ? { ...prev, status: "cancelled" } : prev));
+      setPhoneResults((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "cancelled" } : o)));
+
+      if (order) {
+        const profileRaw = localStorage.getItem("lokal_customer_profile");
+        const profile = profileRaw ? JSON.parse(profileRaw) : null;
+        void supabase.functions.invoke("send-order-cancelled", {
+          body: {
+            order_id: order.id,
+            reference: order.reference,
+            store_id: order.store_id,
+            store_name: order.store_name,
+            customer_name: profile?.name ?? "Customer",
+            customer_phone: profile?.phone ?? null,
+            customer_email: profile?.email ?? null,
+            total_gbp: Number(order.total_gbp),
+            fulfillment_method: order.fulfillment_method ?? "collection",
+            delivery_fee_gbp: Number(order.delivery_fee_gbp ?? 0),
+          },
+        });
+      }
+
+      toast.success("Order cancelled");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not cancel order");
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const lookup = async () => {
     const cleaned = ref.trim().toUpperCase();
     if (!cleaned) return;
@@ -147,7 +205,7 @@ function OrderLookupPage() {
     try {
       const { data, error: err } = await (supabase as any)
         .from("orders")
-        .select("reference, status, total_gbp, created_at, items, stores(name)")
+        .select("id, reference, store_id, status, fulfillment_method, items_subtotal_gbp, delivery_fee_gbp, total_gbp, created_at, items, stores(name)")
         .eq("reference", cleaned)
         .maybeSingle();
       if (err) throw err;
@@ -156,9 +214,14 @@ function OrderLookupPage() {
         return;
       }
       setResult({
+        id: data.id,
         reference: data.reference,
+        store_id: data.store_id,
         status: data.status,
         store_name: data.stores?.name ?? "—",
+        fulfillment_method: data.fulfillment_method ?? "collection",
+        items_subtotal_gbp: data.items_subtotal_gbp != null ? Number(data.items_subtotal_gbp) : null,
+        delivery_fee_gbp: data.delivery_fee_gbp != null ? Number(data.delivery_fee_gbp) : null,
         total_gbp: data.total_gbp,
         created_at: data.created_at,
         items: data.items ?? [],
@@ -179,7 +242,7 @@ function OrderLookupPage() {
     try {
       const { data, error: err } = await (supabase as any)
         .from("orders")
-        .select("reference, status, total_gbp, created_at, items, stores(name)")
+        .select("id, reference, store_id, status, fulfillment_method, items_subtotal_gbp, delivery_fee_gbp, total_gbp, created_at, items, stores(name)")
         .ilike("customer_phone", `%${cleanPhone.replace(/\D/g, "").slice(-9)}%`)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -190,9 +253,14 @@ function OrderLookupPage() {
       }
       setPhoneResults(
         data.map((d: any) => ({
+          id: d.id,
           reference: d.reference,
+          store_id: d.store_id,
           status: d.status,
           store_name: d.stores?.name ?? "—",
+          fulfillment_method: d.fulfillment_method ?? "collection",
+          items_subtotal_gbp: d.items_subtotal_gbp != null ? Number(d.items_subtotal_gbp) : null,
+          delivery_fee_gbp: d.delivery_fee_gbp != null ? Number(d.delivery_fee_gbp) : null,
           total_gbp: d.total_gbp,
           created_at: d.created_at,
           items: d.items ?? [],
@@ -317,8 +385,25 @@ function OrderLookupPage() {
                   <p className="font-display text-2xl font-bold">
                     £{Number(result.total_gbp).toFixed(2)}
                   </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {result.fulfillment_method === "delivery" ? "Delivery" : "Collection"}
+                  </p>
                 </div>
               </div>
+              {(result.items_subtotal_gbp != null || result.delivery_fee_gbp != null) && (
+                <div className="mt-3 rounded-lg bg-secondary/60 px-3 py-2 text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span>Subtotal</span>
+                    <span>£{Number(result.items_subtotal_gbp ?? result.total_gbp).toFixed(2)}</span>
+                  </div>
+                  {Number(result.delivery_fee_gbp ?? 0) > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span>Delivery fee</span>
+                      <span>£{Number(result.delivery_fee_gbp).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {result.items.map((it, i) => (
                   <span key={i} className="rounded-md bg-secondary px-2 py-0.5 text-xs">
@@ -329,6 +414,16 @@ function OrderLookupPage() {
               </div>
             </div>
             <StatusTimeline status={result.status} />
+            {canCancelOrder(result.status) && (
+              <Button
+                variant="outline"
+                className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                onClick={() => cancelOrder(result.id)}
+                disabled={cancellingId === result.id}
+              >
+                {cancellingId === result.id ? "Cancelling..." : "Cancel order"}
+              </Button>
+            )}
           </div>
         )}
 
@@ -358,6 +453,23 @@ function OrderLookupPage() {
                     £{Number(o.total_gbp).toFixed(2)}
                   </p>
                 </div>
+                <div className="rounded-md bg-secondary/60 px-2.5 py-1 text-xs text-muted-foreground inline-block">
+                  {o.fulfillment_method === "delivery" ? "Delivery" : "Collection"}
+                </div>
+                {(o.items_subtotal_gbp != null || o.delivery_fee_gbp != null) && (
+                  <div className="rounded-lg bg-secondary/60 px-3 py-2 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span>Subtotal</span>
+                      <span>£{Number(o.items_subtotal_gbp ?? o.total_gbp).toFixed(2)}</span>
+                    </div>
+                    {Number(o.delivery_fee_gbp ?? 0) > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span>Delivery fee</span>
+                        <span>£{Number(o.delivery_fee_gbp).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {o.items.map((it, i) => (
                     <span key={i} className="rounded-md bg-secondary px-2 py-0.5 text-xs">
@@ -366,6 +478,16 @@ function OrderLookupPage() {
                   ))}
                 </div>
                 <StatusTimeline status={o.status} />
+                {canCancelOrder(o.status) && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={() => cancelOrder(o.id)}
+                    disabled={cancellingId === o.id}
+                  >
+                    {cancellingId === o.id ? "Cancelling..." : "Cancel order"}
+                  </Button>
+                )}
               </div>
             ))}
           </div>

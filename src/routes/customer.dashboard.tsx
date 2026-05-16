@@ -28,10 +28,14 @@ type BookingWithStore = {
 };
 
 type OrderWithStore = {
+  id: string;
   reference: string;
   store_id: string;
   store_name: string;
   store_category: string | null;
+  fulfillment_method?: "collection" | "delivery" | null;
+  items_subtotal_gbp?: string | null;
+  delivery_fee_gbp?: string | null;
   total_gbp: string;
   status: string;
   created_at: string;
@@ -53,7 +57,11 @@ function CustomerDashboardPage() {
   const [orders, setOrders] = useState<OrderWithStore[]>([]);
   const [mostVisitedStores, setMostVisitedStores] = useState<MostVisitedStore[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [hasStore, setHasStore] = useState(false);
+
+  const CUSTOMER_CANCELLATION_CUTOFF_HOURS = 12;
 
   useEffect(() => {
     const loadData = async () => {
@@ -135,7 +143,7 @@ function CustomerDashboardPage() {
             ? (supabase as any)
                 .from("orders")
                 .select(
-                  "reference, store_id, total_gbp, status, created_at, items, stores(name,category)",
+                  "id, reference, store_id, fulfillment_method, items_subtotal_gbp, delivery_fee_gbp, total_gbp, status, created_at, items, stores(name,category)",
                 )
                 .eq("customer_id", customerId)
                 .order("created_at", { ascending: false })
@@ -145,7 +153,7 @@ function CustomerDashboardPage() {
             ? (supabase as any)
                 .from("orders")
                 .select(
-                  "reference, store_id, total_gbp, status, created_at, items, stores(name,category)",
+                  "id, reference, store_id, fulfillment_method, items_subtotal_gbp, delivery_fee_gbp, total_gbp, status, created_at, items, stores(name,category)",
                 )
                 .eq("customer_phone", customerPhone)
                 .order("created_at", { ascending: false })
@@ -167,9 +175,13 @@ function CustomerDashboardPage() {
         setOrders(
           ordersData?.map((o: any) => ({
             reference: o.reference,
+            id: o.id,
             store_id: o.store_id,
             store_name: o.stores?.name ?? "—",
             store_category: o.stores?.category ?? null,
+            fulfillment_method: o.fulfillment_method ?? "collection",
+            items_subtotal_gbp: o.items_subtotal_gbp ?? null,
+            delivery_fee_gbp: o.delivery_fee_gbp ?? null,
             total_gbp: o.total_gbp,
             status: o.status,
             created_at: o.created_at,
@@ -221,6 +233,98 @@ function CustomerDashboardPage() {
     localStorage.removeItem("lokal_customer_profile");
     navigate({ to: "/" });
     toast.success("Logged out");
+  };
+
+  const canCancelBooking = (slotStart: string, status: string) => {
+    if (!(status === "pending" || status === "confirmed")) return false;
+    const hoursUntil = (new Date(slotStart).getTime() - Date.now()) / (1000 * 60 * 60);
+    return hoursUntil >= CUSTOMER_CANCELLATION_CUTOFF_HOURS;
+  };
+
+  const cancelBooking = async (bookingId: string) => {
+    if (!user?.id) {
+      toast.error("Sign in to cancel bookings");
+      return;
+    }
+    setCancellingBookingId(bookingId);
+    try {
+      const cancelledAt = new Date().toISOString();
+      const booking = bookings.find((b) => b.id === bookingId);
+      const { error } = await (supabase as any)
+        .from("store_bookings")
+        .update({
+          status: "cancelled",
+          cancelled_by: "customer",
+          cancelled_at: cancelledAt,
+        })
+        .eq("id", bookingId);
+      if (error) throw error;
+      setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b)));
+
+      if (booking) {
+        void supabase.functions.invoke("send-booking-cancelled", {
+          body: {
+            booking_id: booking.id,
+            store_id: booking.store_id,
+            store_name: booking.store_name,
+            customer_name: profile?.name ?? "Customer",
+            customer_email: profile?.email ?? null,
+            customer_phone: profile?.phone ?? null,
+            service: booking.service,
+            staff_name: booking.staff_name,
+            slot_start: booking.slot_start,
+            cancelled_by: "customer",
+          },
+        });
+      }
+
+      toast.success("Booking cancelled");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not cancel booking");
+    } finally {
+      setCancellingBookingId(null);
+    }
+  };
+
+  const cancelOrder = async (orderId: string) => {
+    if (!user?.id) {
+      toast.error("Sign in to cancel orders");
+      return;
+    }
+    setCancellingOrderId(orderId);
+    try {
+      const order = orders.find((o) => o.id === orderId);
+      const { error } = await (supabase as any)
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("id", orderId)
+        .eq("status", "pending_transfer");
+      if (error) throw error;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "cancelled" } : o)));
+
+      if (order) {
+        void supabase.functions.invoke("send-order-cancelled", {
+          body: {
+            order_id: order.id,
+            reference: order.reference,
+            store_id: order.store_id,
+            store_name: order.store_name,
+            customer_name: profile?.name ?? "Customer",
+            customer_phone: profile?.phone ?? null,
+            customer_email: profile?.email ?? null,
+            total_gbp: Number(order.total_gbp),
+            fulfillment_method: order.fulfillment_method ?? "collection",
+            delivery_fee_gbp: Number(order.delivery_fee_gbp ?? 0),
+          },
+        });
+      }
+
+      toast.success("Order cancelled");
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not cancel order");
+    } finally {
+      setCancellingOrderId(null);
+    }
   };
 
   if (loading) {
@@ -325,6 +429,9 @@ function CustomerDashboardPage() {
           <h2 className="font-display text-lg font-bold mb-4 flex items-center gap-2">
             <Calendar className="h-5 w-5" /> Upcoming bookings ({upcomingBookings.length})
           </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Customer cancellations close {CUSTOMER_CANCELLATION_CUTOFF_HOURS} hours before the appointment time.
+          </p>
           {upcomingBookings.length > 0 ? (
             <div className="space-y-3">
               {upcomingBookings.map((b) => {
@@ -367,6 +474,22 @@ function CustomerDashboardPage() {
                     >
                       Manage booking
                     </Button>
+                    {canCancelBooking(b.slot_start, b.status) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full border-red-200 text-red-600 hover:bg-red-50"
+                        onClick={() => cancelBooking(b.id)}
+                        disabled={cancellingBookingId === b.id}
+                      >
+                        {cancellingBookingId === b.id ? "Cancelling..." : "Cancel booking"}
+                      </Button>
+                    )}
+                    {!canCancelBooking(b.slot_start, b.status) && (b.status === "pending" || b.status === "confirmed") && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Online cancellation is closed within {CUSTOMER_CANCELLATION_CUTOFF_HOURS} hours. Contact the merchant directly.
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -411,6 +534,9 @@ function CustomerDashboardPage() {
                       <p className="font-display text-lg font-bold">
                         £{Number(o.total_gbp).toFixed(2)}
                       </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {o.fulfillment_method === "delivery" ? "Delivery" : "Collection"}
+                      </p>
                       <span
                         className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[o.status]?.bg} ${STATUS_BADGE[o.status]?.text}`}
                       >
@@ -418,6 +544,20 @@ function CustomerDashboardPage() {
                       </span>
                     </div>
                   </div>
+                  {(o.items_subtotal_gbp != null || o.delivery_fee_gbp != null) && (
+                    <div className="mt-2 rounded-md bg-secondary/60 px-3 py-2 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>Subtotal</span>
+                        <span>£{Number(o.items_subtotal_gbp ?? o.total_gbp).toFixed(2)}</span>
+                      </div>
+                      {Number(o.delivery_fee_gbp ?? 0) > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span>Delivery fee</span>
+                          <span>£{Number(o.delivery_fee_gbp).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-1">
                     {o.items.map((item, i) => (
                       <span key={i} className="rounded-md bg-secondary px-2 py-1 text-xs">
@@ -433,6 +573,17 @@ function CustomerDashboardPage() {
                   >
                     Track order
                   </Button>
+                  {o.status === "pending_transfer" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full border-red-200 text-red-600 hover:bg-red-50"
+                      onClick={() => cancelOrder(o.id)}
+                      disabled={cancellingOrderId === o.id}
+                    >
+                      {cancellingOrderId === o.id ? "Cancelling..." : "Cancel order"}
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

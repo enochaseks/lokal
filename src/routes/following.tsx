@@ -84,7 +84,7 @@ function FollowingPage() {
         supabase
           .from("stores")
           .select(
-            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,accepts_refunds,refund_policy,cancellation_policy,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)",
+            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,delivery_fee_gbp,location_type,accepts_refunds,refund_policy,cancellation_policy,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)",
           )
           .in("id", ids)
           .eq("published", true),
@@ -115,6 +115,7 @@ function FollowingPage() {
             fulfillment:
               (row.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") ||
               "collection",
+            delivery_fee_gbp: row.delivery_fee_gbp != null ? Number(row.delivery_fee_gbp) : 0,
             location_type: (row.location_type as Store["location_type"]) ?? null,
             accepts_refunds: !!row.accepts_refunds,
             refund_policy: row.refund_policy || undefined,

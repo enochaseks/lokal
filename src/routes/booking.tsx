@@ -90,6 +90,7 @@ function BookingLookupPage() {
   const [result, setResult] = useState<BookingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Load customer profile on mount
   useEffect(() => {
@@ -99,6 +100,10 @@ function BookingLookupPage() {
       setPhone(parsed.phone);
       setIsLoggedIn(true);
     }
+
+    supabase.auth.getSession().then(({ data }) => {
+      setIsAuthenticated(!!data.session?.user);
+    });
   }, []);
 
   const lookup = async () => {
@@ -182,6 +187,10 @@ function BookingLookupPage() {
 
   const cancelBooking = async () => {
     if (!result || result.status === "cancelled" || result.status === "completed") return;
+    if (!isAuthenticated) {
+      toast.error("Sign in to cancel bookings");
+      return;
+    }
     const hoursUntilSlot = getHoursUntilSlot(result.slot_start);
     if (hoursUntilSlot < CUSTOMER_CANCELLATION_CUTOFF_HOURS) {
       toast.error(
@@ -237,7 +246,11 @@ function BookingLookupPage() {
   const withinCancellationWindow =
     hoursUntilSlot != null && hoursUntilSlot >= CUSTOMER_CANCELLATION_CUTOFF_HOURS;
   const canCancel =
-    !!result && result.status !== "cancelled" && result.status !== "completed" && withinCancellationWindow;
+    !!result &&
+    isAuthenticated &&
+    result.status !== "cancelled" &&
+    result.status !== "completed" &&
+    withinCancellationWindow;
   const statusCfg = result ? (STATUS_CONFIG[result.status] ?? STATUS_CONFIG.pending) : null;
 
   return (

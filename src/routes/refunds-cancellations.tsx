@@ -44,9 +44,36 @@ function RefundsAndCancellationsPage() {
               booking.
             </p>
             <p>
+              For services/bookings on Lokal, online customer cancellation is available up to 12
+              hours before the appointment start time. Within 12 hours, online cancellation is
+              closed and customers should contact the merchant directly.
+            </p>
+            <p>
+              For product orders, customers can cancel online while the order is still in
+              <strong> pending transfer</strong> status. Once payment has been marked received or
+              the order has moved to preparation/ready/completed, cancellation requests must be
+              handled directly with the merchant under that store&apos;s policy.
+            </p>
+            <p>
               If a cancellation dispute arises, the customer and merchant must resolve it directly.
               Lokal can provide platform support in good faith but cannot enforce a payout or
               refund.
+            </p>
+          </Section>
+
+          <Section title="Cancellation Policy Checklist">
+            <p>
+              Before confirming an order or booking, customers should check each store&apos;s profile
+              for:
+            </p>
+            <p>
+              1) Cancellation deadlines
+              <br />
+              2) Whether deposits are refundable
+              <br />
+              3) No-show rules
+              <br />
+              4) Reschedule terms
             </p>
           </Section>
 

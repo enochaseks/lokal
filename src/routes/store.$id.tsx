@@ -129,6 +129,7 @@ type StoreDetails = {
   website_url: string | null;
   image_url: string | null;
   fulfillment: string;
+  delivery_fee_gbp?: number | null;
   location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
   selling_mode?: SellingMode | null;
   published: boolean;
@@ -532,6 +533,9 @@ function StoreDetail() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [orderPhoneCountry, setOrderPhoneCountry] = useState<CountryCode>("GB");
   const [orderNote, setOrderNote] = useState("");
+  const [orderFulfillment, setOrderFulfillment] = useState<"collection" | "delivery">(
+    store.fulfillment === "delivery" ? "delivery" : "collection",
+  );
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const [bookService, setBookService] = useState("");
@@ -603,7 +607,10 @@ function StoreDetail() {
   const recentRatings = store.proof_reviews ?? [];
 
   const cartItems = products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 })).filter((p) => p.qty > 0);
-  const orderTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const orderSubtotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const orderDeliveryFee =
+    orderFulfillment === "delivery" ? Math.max(0, Number(store.delivery_fee_gbp ?? 0)) : 0;
+  const orderTotal = orderSubtotal + orderDeliveryFee;
 
   const selectedDayAvailability = (() => {
     if (!bookDate) return null;
@@ -791,6 +798,9 @@ function StoreDetail() {
           qty: item.qty,
           unit: item.unit ?? undefined,
         })),
+        items_subtotal_gbp: orderSubtotal,
+        delivery_fee_gbp: orderDeliveryFee,
+        fulfillment_method: orderFulfillment,
         total_gbp: orderTotal,
         status: "pending_transfer",
       });
@@ -806,6 +816,7 @@ function StoreDetail() {
       setCustomerName("");
       setCustomerPhone("");
       setOrderNote("");
+      setOrderFulfillment(store.fulfillment === "delivery" ? "delivery" : "collection");
       setReference(makeRef());
     } catch (e: any) {
       toast.error(e.message ?? "Could not place order");
@@ -1751,12 +1762,63 @@ function StoreDetail() {
                           placeholder="Any substitutions or notes?"
                         />
                       </div>
+                      {(store.fulfillment === "both" || store.fulfillment === "delivery") && (
+                        <div className="sm:col-span-2">
+                          <p className="mb-1 text-xs font-medium text-muted-foreground">
+                            Fulfilment
+                          </p>
+                          {store.fulfillment === "both" ? (
+                            <Select
+                              value={orderFulfillment}
+                              onValueChange={(value) =>
+                                setOrderFulfillment(value as "collection" | "delivery")
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="collection">🏪 Collection</SelectItem>
+                                <SelectItem value="delivery">
+                                  🚚 Delivery ({currencySymbol}
+                                  {Number(store.delivery_fee_gbp ?? 0).toFixed(2)} fee)
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
+                              🚚 Delivery (fee: {currencySymbol}
+                              {Number(store.delivery_fee_gbp ?? 0).toFixed(2)})
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="sm:col-span-2 rounded-md bg-secondary px-3 py-2 text-sm">
-                        Total:{" "}
-                        <span className="font-semibold">
-                          {currencySymbol}
-                          {orderTotal.toFixed(2)}
-                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span>Subtotal</span>
+                            <span className="font-medium">
+                              {currencySymbol}
+                              {orderSubtotal.toFixed(2)}
+                            </span>
+                          </div>
+                          {orderFulfillment === "delivery" && (
+                            <div className="flex items-center justify-between">
+                              <span>Delivery fee</span>
+                              <span className="font-medium">
+                                {currencySymbol}
+                                {orderDeliveryFee.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between border-t border-border pt-1">
+                            <span>Total</span>
+                            <span className="font-semibold">
+                              {currencySymbol}
+                              {orderTotal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                       {revealBankDetails && store.bank_account_name && (
                         <div className="sm:col-span-2 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm">
