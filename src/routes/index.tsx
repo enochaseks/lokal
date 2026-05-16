@@ -24,17 +24,17 @@ export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "Lokal — African & Caribbean stores near you" },
+      { title: "Lokal for Merchants — Get Your Shop Found Locally" },
       {
         name: "description",
         content:
-          "Discover African and Caribbean grocers, beauty stores and barbers nearby. Reserve with the merchant, pay by bank transfer.",
+          "Own an African or Caribbean shop, beauty store, or barbershop? Join Lokal to get discovered by nearby customers and receive direct orders without building a website.",
       },
-      { property: "og:title", content: "Lokal — African & Caribbean stores near you" },
+      { property: "og:title", content: "Lokal for Merchants — Get Your Shop Found Locally" },
       {
         property: "og:description",
         content:
-          "A marketplace for the diaspora. Find local stores and pay merchants directly by bank transfer.",
+          "For African and Caribbean merchants: get found by local customers and accept direct orders with Lokal.",
       },
     ],
   }),

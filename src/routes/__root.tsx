@@ -33,10 +33,18 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Lokal" },
-      { name: "description", content: "African & Caribbean stores near you" },
+      {
+        name: "description",
+        content:
+          "Lokal helps African and Caribbean shops get found by nearby customers and receive direct orders, no website needed.",
+      },
       { name: "author", content: "Lokal" },
       { property: "og:title", content: "Lokal" },
-      { property: "og:description", content: "Discover African and Caribbean stores near you" },
+      {
+        property: "og:description",
+        content:
+          "For merchants: get your African or Caribbean shop discovered locally and take direct orders with Lokal.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@lokal_app" },
