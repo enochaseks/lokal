@@ -144,17 +144,17 @@ export const Route = createFileRoute("/list-store")({
   component: ListStorePage,
   head: () => ({
     meta: [
-      { title: "List Your African or Caribbean Shop on Lokal" },
+      { title: "Get More Local Customers — List Your African Shop Free on Lokal" },
       {
         name: "description",
         content:
-          "Own a local African or Caribbean shop? Join Lokal to get discovered by nearby customers and accept direct orders without building a website.",
+          "Own an African or Caribbean shop, barber or beauty store? List free on Lokal and start getting local customers online — no website needed, no fees.",
       },
-      { property: "og:title", content: "List Your African or Caribbean Shop on Lokal" },
+      { property: "og:title", content: "Get More Local Customers — List Your African Shop Free on Lokal" },
       {
         property: "og:description",
         content:
-          "Create your merchant profile on Lokal in minutes and reach nearby customers looking for African and Caribbean products and services.",
+          "Join Lokal free and get your African or Caribbean shop found by nearby customers. Take direct orders in minutes — no website, no setup fees.",
       },
     ],
   }),
@@ -1464,7 +1464,7 @@ function ListStorePage() {
               {showOptionalFields && (
                 <>
                   <div>
-                    <Label>Opening hours</Label>
+                    <Label>Opening hours <span className="font-normal text-muted-foreground">(optional)</span></Label>
                     <Input
                       value={store.hours}
                       onChange={(e) => setStore({ ...store, hours: e.target.value })}
@@ -1472,6 +1472,7 @@ function ListStorePage() {
                       maxLength={80}
                       className="mt-1"
                     />
+                    <p className="mt-1 text-[11px] text-muted-foreground">Leave blank if your hours vary, you work by appointment, or you operate online.</p>
                   </div>
 
                   <div className="space-y-3">

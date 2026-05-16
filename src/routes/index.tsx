@@ -13,7 +13,7 @@ import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LIVE_CATEGORIES, categories, type Store } from "@/data/stores";
+import { LIVE_CATEGORIES, LIVE_ORIGINS, categories, type Store } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import { getImageUrl } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,17 +24,17 @@ export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "Lokal — African & Caribbean stores near you" },
+      { title: "African Grocery, Barbers & Beauty Stores Near You — Lokal" },
       {
         name: "description",
         content:
-          "Discover African and Caribbean grocers, beauty stores and barbers near you. Order direct and pay merchants by bank transfer.",
+          "Find African and Caribbean groceries, barbers and beauty stores near you. Order direct from local shops and pay by bank transfer — no card fees.",
       },
-      { property: "og:title", content: "Lokal — African & Caribbean stores near you" },
+      { property: "og:title", content: "African Grocery, Barbers & Beauty Stores Near You — Lokal" },
       {
         property: "og:description",
         content:
-          "Find trusted local African and Caribbean stores for groceries, beauty essentials and barbers on Lokal.",
+          "Discover trusted African and Caribbean shops near you. Order direct, pay by bank transfer, no middleman.",
       },
     ],
   }),
@@ -55,6 +55,9 @@ function Index() {
   const [cityInputValue, setCityInputValue] = useState("");
   const [showMoreSections, setShowMoreSections] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [sortBy, setSortBy] = useState<"reviews" | "rating" | "price_asc" | "price_desc" | "name">("reviews");
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<"all" | "collection" | "delivery" | "both" | "pay_at_store">("all");
+  const [originFilter, setOriginFilter] = useState<string>("all");
 
   const timeToMinutes = (time: string) => {
     const [h, m] = time.slice(0, 5).split(":").map(Number);
@@ -154,10 +157,10 @@ function Index() {
       | undefined,
     hoursText?: string | null,
     timezone?: string | null,
-  ): boolean => {
+  ): boolean | null => {
     const windows =
       availability && availability.length > 0 ? availability : parseHoursText(hoursText);
-    if (!windows || windows.length === 0) return false;
+    if (!windows || windows.length === 0) return null; // no hours set — don't show open/closed
     const now = new Date();
     let today = now.getDay();
     let nowMins = now.getHours() * 60 + now.getMinutes();
@@ -407,7 +410,28 @@ function Index() {
         s.description?.toLowerCase().includes(q)
       );
     })
+    .filter((s) => {
+      if (fulfillmentFilter === "all") return true;
+      if (fulfillmentFilter === "delivery") return s.fulfillment === "delivery" || s.fulfillment === "both";
+      if (fulfillmentFilter === "collection") return s.fulfillment === "collection" || s.fulfillment === "both";
+      return s.fulfillment === fulfillmentFilter;
+    })
+    .filter((s) => {
+      if (originFilter === "all") return true;
+      return s.origin === originFilter;
+    })
     .sort((a, b) => {
+      if (sortBy === "rating") return (b.rating ?? 0) - (a.rating ?? 0);
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "price_asc" || sortBy === "price_desc") {
+        const minPrice = (s: Store) => {
+          const prices = s.products?.map((p) => p.price).filter((p) => p != null) ?? [];
+          return prices.length ? Math.min(...prices) : Infinity;
+        };
+        const diff = minPrice(a) - minPrice(b);
+        return sortBy === "price_asc" ? diff : -diff;
+      }
+      // default: most reviewed, proximity-aware
       const scoreDelta = locationScore(a) - locationScore(b);
       if (scoreDelta !== 0) return scoreDelta;
       return (b.reviews ?? 0) - (a.reviews ?? 0);
@@ -508,6 +532,55 @@ function Index() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Filter + Sort bar */}
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            >
+              <option value="reviews">Sort: Most popular</option>
+              <option value="rating">Sort: Top rated</option>
+              <option value="price_asc">Sort: Price low → high</option>
+              <option value="price_desc">Sort: Price high → low</option>
+              <option value="name">Sort: A – Z</option>
+            </select>
+
+            <select
+              value={fulfillmentFilter}
+              onChange={(e) => setFulfillmentFilter(e.target.value as typeof fulfillmentFilter)}
+              className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Fulfilment: All</option>
+              <option value="collection">Collection only</option>
+              <option value="delivery">Delivery only</option>
+              <option value="both">Collection &amp; delivery</option>
+              <option value="pay_at_store">Pay at store</option>
+            </select>
+
+            <select
+              value={originFilter}
+              onChange={(e) => setOriginFilter(e.target.value)}
+              className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">Origin: All</option>
+              {LIVE_ORIGINS.filter((o) =>
+                liveStores.some((s) => s.origin === o)
+              ).map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+
+            {(sortBy !== "reviews" || fulfillmentFilter !== "all" || originFilter !== "all") && (
+              <button
+                onClick={() => { setSortBy("reviews"); setFulfillmentFilter("all"); setOriginFilter("all"); }}
+                className="rounded-lg border border-border/70 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           {availableSubcategories.length > 0 && (

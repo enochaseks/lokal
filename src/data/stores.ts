@@ -18,8 +18,16 @@ export const CLOTHES_FASHION_PRODUCT_SUBCATEGORIES = [
   "Men's Wear",
   "Women's Wear",
   "Kids Wear",
-  "Accessories",
+  "Unisex",
+  "Clothing Store",
+  "African Traditional Wear",
+  "Sportswear & Trainers",
   "Shoes",
+  "Bags & Handbags",
+  "Jewellery & Watches",
+  "Accessories",
+  "Vintage & Second-Hand",
+  "Crochet",
 ] as const;
 
 export const CLOTHES_FASHION_SERVICE_SUBCATEGORIES = [
@@ -29,6 +37,10 @@ export const CLOTHES_FASHION_SERVICE_SUBCATEGORIES = [
   "Uniforms",
   "Embroidery & Print",
   "Custom Shoe Making",
+  "Shoe & Trainer Cleaning",
+  "Shoe Repair & Cobbling",
+  "Laundry & Ironing",
+  "Clothing Repair",
 ] as const;
 
 export const CATEGORY_SUBCATEGORIES = {

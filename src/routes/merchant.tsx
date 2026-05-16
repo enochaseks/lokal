@@ -1181,7 +1181,7 @@ function EditStoreDialog({
                 </p>
               </div>
               <div>
-                <Label>Opening hours</Label>
+                <Label>Opening hours <span className="font-normal text-muted-foreground">(optional)</span></Label>
                 <Input
                   value={form.hours}
                   onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
@@ -1189,6 +1189,7 @@ function EditStoreDialog({
                   maxLength={80}
                   className="mt-1"
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">Leave blank if your hours vary, you work by appointment, or you operate online.</p>
               </div>
               <div className="sm:col-span-2 rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
                 <Label>Refunds & cancellation policy</Label>
