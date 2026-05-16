@@ -531,6 +531,7 @@ function StoreDetail() {
   const [qty, setQty] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [orderPhoneCountry, setOrderPhoneCountry] = useState<CountryCode>("GB");
   const [orderNote, setOrderNote] = useState("");
   const [orderFulfillment, setOrderFulfillment] = useState<"collection" | "delivery">(
@@ -790,7 +791,7 @@ function StoreDetail() {
         reference,
         customer_name: customerName.trim(),
         customer_phone: normalizedOrderPhone,
-        customer_email: null,
+        customer_email: customerEmail.trim() || null,
         note: orderNote.trim() || null,
         items: cartItems.map((item) => ({
           name: item.name,
@@ -815,6 +816,7 @@ function StoreDetail() {
       setQty({});
       setCustomerName("");
       setCustomerPhone("");
+      setCustomerEmail("");
       setOrderNote("");
       setOrderFulfillment(store.fulfillment === "delivery" ? "delivery" : "collection");
       setReference(makeRef());
@@ -1524,7 +1526,7 @@ function StoreDetail() {
                     </div>
                     <div className="sm:col-span-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Email (optional — for rating reminder)
+                        Email (optional — confirmations and fallback updates)
                       </p>
                       <Input
                         value={bookEmail}
@@ -1532,6 +1534,9 @@ function StoreDetail() {
                         placeholder="you@example.com"
                         type="email"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        If WhatsApp/SMS cannot be delivered, we'll use this email when provided.
+                      </p>
                     </div>
                     <div className="sm:col-span-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -1750,6 +1755,20 @@ function StoreDetail() {
                             />
                           </div>
                         </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Use a WhatsApp-enabled mobile number for faster updates.
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Email (optional — fallback updates)
+                        </p>
+                        <Input
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          type="email"
+                        />
                       </div>
                       <div className="sm:col-span-2">
                         <p className="mb-1 text-xs font-medium text-muted-foreground">

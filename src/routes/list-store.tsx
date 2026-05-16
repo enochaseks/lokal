@@ -247,6 +247,8 @@ const storeSchema = z
     postcode: z.string().trim().max(20).optional(),
     hours: z.string().trim().max(80).optional(),
     phone: z.string().trim().max(40).optional(),
+    merchant_sms_alerts: z.boolean().default(true),
+    merchant_email_alerts: z.boolean().default(true),
     fulfillment: z.enum(["collection", "delivery", "both", "pay_at_store"]).default("collection"),
     delivery_fee_gbp: z.number().min(0).max(9999).default(0),
     image_url: z
@@ -430,6 +432,8 @@ function ListStorePage() {
     timezone: getDetectedTimezone(),
     hours: "",
     phone: "",
+    merchant_sms_alerts: true,
+    merchant_email_alerts: true,
     fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store",
     delivery_fee_gbp: 0,
     image_url: "",
@@ -483,7 +487,12 @@ function ListStorePage() {
     try {
       const draft = JSON.parse(raw);
       localStorage.removeItem(DRAFT_KEY);
-      setStore(draft.store);
+      setStore((prev) => ({
+        ...prev,
+        ...draft.store,
+        merchant_sms_alerts: draft.store?.merchant_sms_alerts ?? true,
+        merchant_email_alerts: draft.store?.merchant_email_alerts ?? true,
+      }));
       setBank(draft.bank);
       setProducts(draft.products);
       setSchedule(draft.schedule);
@@ -1631,8 +1640,33 @@ function ListStorePage() {
                     </div>
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    You'll receive order alerts by email and SMS to this number.
+                    Use a WhatsApp-enabled mobile number for faster alerts. If WhatsApp/SMS is
+                    unavailable, we'll fall back to email when enabled.
                   </p>
+                  <div className="mt-3 space-y-2">
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={store.merchant_sms_alerts}
+                        onChange={(e) =>
+                          setStore({ ...store, merchant_sms_alerts: e.target.checked })
+                        }
+                        className="rounded border-gray-300"
+                      />
+                      Enable SMS order/booking alerts
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={store.merchant_email_alerts}
+                        onChange={(e) =>
+                          setStore({ ...store, merchant_email_alerts: e.target.checked })
+                        }
+                        className="rounded border-gray-300"
+                      />
+                      Enable email order/booking alerts
+                    </label>
+                  </div>
                 </div>
               </div>
 

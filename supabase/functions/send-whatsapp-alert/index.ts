@@ -50,12 +50,14 @@ Deno.serve(async (req) => {
 
     // Look up merchant email via service role
     const storeRes = await fetch(
-      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone`,
+      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone,merchant_sms_alerts,merchant_email_alerts`,
       { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
     const merchantPhone = toE164(stores?.[0]?.phone);
+    const merchantSmsAlerts = stores?.[0]?.merchant_sms_alerts ?? true;
+    const merchantEmailAlerts = stores?.[0]?.merchant_email_alerts ?? true;
     if (!ownerId) {
       return new Response(JSON.stringify({ skipped: true, reason: "store owner not found" }), {
         status: 200,
@@ -91,7 +93,7 @@ Deno.serve(async (req) => {
     ].join("\n");
 
     const [emailResult, smsResult] = await Promise.all([
-      merchantEmail
+      merchantEmailAlerts && merchantEmail
         ? fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
@@ -105,8 +107,11 @@ Deno.serve(async (req) => {
               htmlContent: html,
             }),
           }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant email not found" }),
-      merchantPhone
+        : Promise.resolve({
+            ok: false,
+            body: merchantEmailAlerts ? "merchant email not found" : "merchant email alerts disabled",
+          }),
+      merchantSmsAlerts && merchantPhone
         ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
             method: "POST",
             headers: {
@@ -121,7 +126,10 @@ Deno.serve(async (req) => {
               tag: "merchant-new-order",
             }),
           }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant phone not found" }),
+        : Promise.resolve({
+            ok: false,
+            body: merchantSmsAlerts ? "merchant phone not found" : "merchant sms alerts disabled",
+          }),
     ]);
 
     return new Response(

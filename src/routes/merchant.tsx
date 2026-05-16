@@ -204,6 +204,8 @@ type StoreRow = {
   timezone?: string | null;
   hours: string | null;
   phone: string | null;
+  merchant_sms_alerts?: boolean | null;
+  merchant_email_alerts?: boolean | null;
   accepts_refunds?: boolean | null;
   refund_policy?: string | null;
   cancellation_policy?: string | null;
@@ -411,6 +413,8 @@ function EditStoreDialog({
     timezone: string;
     hours: string;
     phone: string;
+    merchant_sms_alerts: boolean;
+    merchant_email_alerts: boolean;
     accepts_refunds: boolean;
     refund_policy: string;
     cancellation_policy: string;
@@ -453,6 +457,8 @@ function EditStoreDialog({
     timezone: store.timezone ?? getDetectedTimezone(),
     hours: store.hours ?? "",
     phone: store.phone ?? "",
+    merchant_sms_alerts: store.merchant_sms_alerts ?? true,
+    merchant_email_alerts: store.merchant_email_alerts ?? true,
     accepts_refunds: !!store.accepts_refunds,
     refund_policy: store.refund_policy ?? "",
     cancellation_policy: store.cancellation_policy ?? "",
@@ -719,6 +725,8 @@ function EditStoreDialog({
           timezone: form.timezone.trim(),
           hours: n(form.hours),
           phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone),
+          merchant_sms_alerts: form.merchant_sms_alerts,
+          merchant_email_alerts: form.merchant_email_alerts,
           fulfillment: requiresPayAtStoreFulfillment(form.category)
             ? "pay_at_store"
             : form.fulfillment,
@@ -816,6 +824,8 @@ function EditStoreDialog({
         timezone: form.timezone.trim(),
         hours: n(form.hours),
         phone: n(form.phone),
+        merchant_sms_alerts: form.merchant_sms_alerts,
+        merchant_email_alerts: form.merchant_email_alerts,
         accepts_refunds: form.accepts_refunds,
         refund_policy: n(form.refund_policy),
         cancellation_policy: n(form.cancellation_policy),
@@ -1294,8 +1304,33 @@ function EditStoreDialog({
                   </div>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Order alerts sent by email and SMS to this number.
+                  Use a WhatsApp-enabled mobile number for faster alerts. If WhatsApp/SMS is
+                  unavailable, we'll fall back to email when enabled.
                 </p>
+                <div className="mt-2 space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.merchant_sms_alerts}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, merchant_sms_alerts: e.target.checked }))
+                      }
+                      className="rounded border-gray-300"
+                    />
+                    Enable SMS order/booking alerts
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.merchant_email_alerts}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, merchant_email_alerts: e.target.checked }))
+                      }
+                      className="rounded border-gray-300"
+                    />
+                    Enable email order/booking alerts
+                  </label>
+                </div>
               </div>
               <div>
                 <Label>Opening hours <span className="font-normal text-muted-foreground">(optional)</span></Label>

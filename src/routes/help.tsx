@@ -150,6 +150,24 @@ function HelpPage() {
           </div>
         </div>
 
+        <div className="mt-10 rounded-2xl border border-border/60 bg-card p-6 shadow-card">
+          <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
+            <MessageCircleHeart className="h-5 w-5" />
+          </div>
+          <h3 className="font-display text-lg font-bold">WhatsApp and email updates</h3>
+          <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+            <p>How delivery of updates works for both customers and merchants:</p>
+            <p>
+              1) Add a WhatsApp-enabled mobile number in your order, booking, or store profile.
+              <br />
+              2) Lokal attempts WhatsApp/SMS first for time-sensitive alerts.
+              <br />
+              3) If WhatsApp/SMS is unavailable or fails, updates can fall back to email when an
+              email address is provided and enabled.
+            </p>
+          </div>
+        </div>
+
         <div className="mt-10 rounded-2xl border border-border/60 bg-secondary/40 p-6 text-sm leading-relaxed text-muted-foreground">
           For privacy or legal questions, you can also review our{" "}
           <Link to="/privacy" className="text-primary hover:underline">

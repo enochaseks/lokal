@@ -66,12 +66,14 @@ Deno.serve(async (req) => {
 
     // Look up merchant email and phone via service role
     const storeRes = await fetch(
-      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone`,
+      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone,merchant_sms_alerts,merchant_email_alerts`,
       { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
     const merchantPhone = toE164(stores?.[0]?.phone);
+    const merchantSmsAlerts = stores?.[0]?.merchant_sms_alerts ?? true;
+    const merchantEmailAlerts = stores?.[0]?.merchant_email_alerts ?? true;
 
     if (!ownerId) {
       return new Response(JSON.stringify({ skipped: true, reason: "store owner not found" }), {
@@ -116,8 +118,11 @@ Deno.serve(async (req) => {
       .join("\n");
 
     // Try SMS first; fall back to email if SMS is unavailable or fails.
-    let smsResult: { ok: boolean; body: string } = { ok: false, body: "merchant phone not found" };
-    if (merchantPhone) {
+    let smsResult: { ok: boolean; body: string } = {
+      ok: false,
+      body: merchantSmsAlerts ? "merchant phone not found" : "merchant sms alerts disabled",
+    };
+    if (merchantSmsAlerts && merchantPhone) {
       const smsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
         method: "POST",
         headers: { "api-key": brevoKey, "Content-Type": "application/json" },
@@ -134,7 +139,9 @@ Deno.serve(async (req) => {
 
     let emailResult: { ok: boolean; body: string } = { ok: false, body: "sms succeeded" };
     if (!smsResult.ok) {
-      if (merchantEmail) {
+      if (!merchantEmailAlerts) {
+        emailResult = { ok: false, body: "merchant email alerts disabled" };
+      } else if (merchantEmail) {
         const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
           method: "POST",
           headers: { "api-key": brevoKey, "Content-Type": "application/json" },

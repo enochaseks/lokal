@@ -34,11 +34,12 @@ Deno.serve(async (req) => {
     }
 
     const storeRes = await fetch(
-      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id`,
+      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,merchant_email_alerts`,
       { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
+    const merchantEmailAlerts = stores?.[0]?.merchant_email_alerts ?? true;
 
     if (!ownerId) {
       return new Response(JSON.stringify({ skipped: true, reason: "store owner not found" }), {
@@ -52,13 +53,6 @@ Deno.serve(async (req) => {
     });
     const user = await userRes.json();
     const merchantEmail = user?.email ?? user?.user?.email ?? null;
-
-    if (!merchantEmail) {
-      return new Response(JSON.stringify({ skipped: true, reason: "merchant email not found" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     const stars = Math.max(1, Math.min(5, Math.round(payload.rating)));
     const reviewLine = payload.body?.trim()
@@ -74,9 +68,16 @@ Deno.serve(async (req) => {
       <p><a href="https://lokalshops.co.uk">Open Lokal</a></p>
     `;
 
-    const recipients = [merchantEmail, ...ADMIN_EMAILS].filter(
+    const recipients = [merchantEmailAlerts ? merchantEmail : null, ...ADMIN_EMAILS].filter(
       (email, index, list) => Boolean(email) && list.indexOf(email) === index,
     );
+
+    if (recipients.length === 0) {
+      return new Response(JSON.stringify({ skipped: true, reason: "no review recipients" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",

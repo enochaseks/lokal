@@ -189,12 +189,14 @@ Deno.serve(async (req) => {
 
         if (resolvedStoreId) {
           const storeRes = await fetch(
-            `${supabaseUrl}/rest/v1/stores?id=eq.${resolvedStoreId}&select=owner_id,phone,name`,
+            `${supabaseUrl}/rest/v1/stores?id=eq.${resolvedStoreId}&select=owner_id,phone,name,merchant_sms_alerts,merchant_email_alerts`,
             { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
           );
           const stores = await storeRes.json();
           const ownerId = stores?.[0]?.owner_id;
           const merchantPhone = toE164(stores?.[0]?.phone);
+          const merchantSmsAlerts = stores?.[0]?.merchant_sms_alerts ?? true;
+          const merchantEmailAlerts = stores?.[0]?.merchant_email_alerts ?? true;
           const merchantStoreName = stores?.[0]?.name ?? payload.store_name;
 
           let merchantEmail: string | null = null;
@@ -227,7 +229,7 @@ Deno.serve(async (req) => {
             <p><a href="https://lokalshops.co.uk/merchant">Open Merchant Dashboard →</a></p>
           `;
 
-          if (merchantPhone) {
+          if (merchantSmsAlerts && merchantPhone) {
             const merchantSmsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
               method: "POST",
               headers: { "api-key": brevoKey, "Content-Type": "application/json" },
@@ -240,9 +242,11 @@ Deno.serve(async (req) => {
               }),
             });
             merchantResult = { ok: merchantSmsRes.ok, body: await merchantSmsRes.text() };
+          } else if (!merchantSmsAlerts) {
+            merchantResult = { ok: false, body: "merchant sms alerts disabled" };
           }
 
-          if (!merchantResult.ok && merchantEmail) {
+          if (!merchantResult.ok && merchantEmailAlerts && merchantEmail) {
             const merchantEmailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
               method: "POST",
               headers: { "api-key": brevoKey, "Content-Type": "application/json" },
@@ -254,6 +258,8 @@ Deno.serve(async (req) => {
               }),
             });
             merchantResult = { ok: merchantEmailRes.ok, body: await merchantEmailRes.text() };
+          } else if (!merchantResult.ok && !merchantEmailAlerts) {
+            merchantResult = { ok: false, body: "merchant email alerts disabled" };
           }
         } else {
           merchantResult = { ok: false, body: "store not found for booking" };

@@ -1612,10 +1612,13 @@ export function StoreDialog({
                                   />
                                 </div>
                               </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Use a WhatsApp-enabled mobile number for faster updates.
+                              </p>
                             </div>
                             <div>
                               <label className="text-xs font-medium text-muted-foreground">
-                                Email (optional — for rating reminder)
+                                Email (optional — confirmations and fallback updates)
                               </label>
                               <Input
                                 value={bookEmail}
@@ -1624,6 +1627,10 @@ export function StoreDialog({
                                 type="email"
                                 className="mt-1"
                               />
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                If WhatsApp/SMS cannot be delivered, we'll use this email when
+                                provided.
+                              </p>
                             </div>
                             <div>
                               <label className="text-xs font-medium text-muted-foreground">
@@ -2097,11 +2104,13 @@ export function StoreDialog({
                       />
                     </div>
                   </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use a WhatsApp-enabled mobile number for faster updates.
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">
-                    Email{" "}
-                    <span className="text-muted-foreground font-normal">(for order updates)</span>
+                    Email <span className="text-muted-foreground font-normal">(fallback updates)</span>
                   </label>
                   <Input
                     type="email"
@@ -2110,6 +2119,9 @@ export function StoreDialog({
                     placeholder="you@example.com"
                     className="mt-1"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    If WhatsApp/SMS cannot be delivered, we'll use this email when provided.
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Note for merchant (optional)</label>

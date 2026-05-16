@@ -95,6 +95,8 @@ export type Database = {
           origin: string | null;
           owner_id: string;
           phone: string | null;
+          merchant_sms_alerts: boolean;
+          merchant_email_alerts: boolean;
           postcode: string | null;
           published: boolean;
           slug: string;
@@ -120,6 +122,8 @@ export type Database = {
           origin?: string | null;
           owner_id: string;
           phone?: string | null;
+          merchant_sms_alerts?: boolean;
+          merchant_email_alerts?: boolean;
           postcode?: string | null;
           published?: boolean;
           slug: string;
@@ -145,6 +149,8 @@ export type Database = {
           origin?: string | null;
           owner_id?: string;
           phone?: string | null;
+          merchant_sms_alerts?: boolean;
+          merchant_email_alerts?: boolean;
           postcode?: string | null;
           published?: boolean;
           slug?: string;

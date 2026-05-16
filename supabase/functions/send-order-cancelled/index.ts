@@ -53,12 +53,14 @@ Deno.serve(async (req) => {
     }
 
     const storeRes = await fetch(
-      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone,name`,
+      `${supabaseUrl}/rest/v1/stores?id=eq.${payload.store_id}&select=owner_id,phone,name,merchant_sms_alerts,merchant_email_alerts`,
       { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
     );
     const stores = await storeRes.json();
     const ownerId = stores?.[0]?.owner_id;
     const merchantPhone = toE164(stores?.[0]?.phone);
+    const merchantSmsAlerts = stores?.[0]?.merchant_sms_alerts ?? true;
+    const merchantEmailAlerts = stores?.[0]?.merchant_email_alerts ?? true;
     const storeName = stores?.[0]?.name ?? payload.store_name ?? "Your store";
 
     if (!ownerId) {
@@ -97,7 +99,7 @@ Deno.serve(async (req) => {
     `;
 
     const [smsResult, emailResult] = await Promise.all([
-      merchantPhone
+      merchantSmsAlerts && merchantPhone
         ? fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
             method: "POST",
             headers: { "api-key": brevoKey, "Content-Type": "application/json" },
@@ -109,8 +111,11 @@ Deno.serve(async (req) => {
               tag: "merchant-order-cancelled-by-customer",
             }),
           }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant phone missing" }),
-      merchantEmail
+        : Promise.resolve({
+            ok: false,
+            body: merchantSmsAlerts ? "merchant phone missing" : "merchant sms alerts disabled",
+          }),
+      merchantEmailAlerts && merchantEmail
         ? fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: { "api-key": brevoKey, "Content-Type": "application/json" },
@@ -121,7 +126,10 @@ Deno.serve(async (req) => {
               htmlContent: html,
             }),
           }).then(async (res) => ({ ok: res.ok, body: await res.text() }))
-        : Promise.resolve({ ok: false, body: "merchant email missing" }),
+        : Promise.resolve({
+            ok: false,
+            body: merchantEmailAlerts ? "merchant email missing" : "merchant email alerts disabled",
+          }),
     ]);
 
     return new Response(
