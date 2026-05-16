@@ -366,6 +366,8 @@ export type Store = {
   tattoo_license_url?: string | null;
   is_verified_tattoo_artist?: boolean | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
+  food_business_license_url?: string | null;
+  food_business_license_status?: "pending" | "approved" | "rejected" | null;
   is_open_now?: boolean | null;
   origin: string;
   rating: number;

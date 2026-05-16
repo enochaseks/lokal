@@ -112,6 +112,8 @@ type StoreDetails = {
   tattoo_portfolio_url?: string | null;
   tattoo_license_url?: string | null;
   is_verified_tattoo_artist?: boolean | null;
+  food_business_license_url?: string | null;
+  food_business_license_status?: "pending" | "approved" | "rejected" | null;
   origin: string | null;
   description: string | null;
   address: string | null;
@@ -1027,6 +1029,28 @@ function StoreDetail() {
                     className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:opacity-80 dark:bg-indigo-900/40 dark:text-indigo-300"
                   >
                     <Images className="h-3.5 w-3.5" /> Portfolio
+                  </a>
+                )}
+                {store.category === "Groceries" && store.food_business_license_url && (
+                  <a
+                    href={store.food_business_license_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Food business licence - Status: ${store.food_business_license_status || "pending"}`}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                      store.food_business_license_status === "approved"
+                        ? "bg-green-100 text-green-800 hover:opacity-80 dark:bg-green-900/40 dark:text-green-300"
+                        : store.food_business_license_status === "rejected"
+                          ? "bg-red-100 text-red-800 hover:opacity-80 dark:bg-red-900/40 dark:text-red-300"
+                          : "bg-yellow-100 text-yellow-800 hover:opacity-80 dark:bg-yellow-900/40 dark:text-yellow-300"
+                    }`}
+                  >
+                    <FileCheck2 className="h-3.5 w-3.5" />
+                    {store.food_business_license_status === "approved"
+                      ? "Licence"
+                      : store.food_business_license_status === "rejected"
+                        ? "Rejected"
+                        : "Pending"}
                   </a>
                 )}
               </div>

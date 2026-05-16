@@ -177,6 +177,8 @@ function isValidImageReference(value: string) {
 const isBodyArtsArtistStore = (category: string, subcategory?: string | null) =>
   isBodyContactService(category, subcategory);
 
+const isGroceryStore = (category: string) => category === "Groceries";
+
 const storeSchema = z
   .object({
     name: z.string().trim().min(2, "Store name is too short").max(80),
@@ -192,6 +194,13 @@ const storeSchema = z
       .optional()
       .or(z.literal("")),
     tattoo_license_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine(isValidImageReference, "Must be a valid licence URL")
+      .optional()
+      .or(z.literal("")),
+    food_business_license_url: z
       .string()
       .trim()
       .max(500)
@@ -274,6 +283,16 @@ const storeSchema = z
     {
       message: "Artist licence/ID URL is required for Body Arts touch services",
       path: ["tattoo_license_url"],
+    },
+  )
+  .refine(
+    (value) => {
+      if (!isGroceryStore(value.category)) return true;
+      return !!value.food_business_license_url?.trim();
+    },
+    {
+      message: "Food business licence URL is required for grocery stores",
+      path: ["food_business_license_url"],
     },
   )
   .refine(
@@ -377,6 +396,7 @@ function ListStorePage() {
     minimum_age: null as number | null,
     tattoo_portfolio_url: "",
     tattoo_license_url: "",
+    food_business_license_url: "",
     health_safety_certificate_url: "",
     description: "",
     address: "",
@@ -700,6 +720,9 @@ function ListStorePage() {
           ? parsedStore.tattoo_license_url.trim()
           : null,
         is_verified_tattoo_artist: false,
+        food_business_license_url: parsedStore.food_business_license_url?.trim()
+          ? parsedStore.food_business_license_url.trim()
+          : null,
         health_safety_certificate_url: parsedStore.health_safety_certificate_url?.trim()
           ? parsedStore.health_safety_certificate_url.trim()
           : null,
@@ -977,6 +1000,7 @@ function ListStorePage() {
                           nextCategory,
                           nextSubcategory,
                         );
+                        const keepGroceryFields = isGroceryStore(nextCategory);
                         return {
                           ...prev,
                           category: nextCategory,
@@ -988,6 +1012,7 @@ function ListStorePage() {
                           minimum_age: keepTattooFields ? (prev.minimum_age ?? 18) : null,
                           tattoo_portfolio_url: keepTattooFields ? prev.tattoo_portfolio_url : "",
                           tattoo_license_url: keepTattooFields ? prev.tattoo_license_url : "",
+                          food_business_license_url: keepGroceryFields ? prev.food_business_license_url : "",
                           selling_mode: nextMode,
                         };
                       })
@@ -1081,6 +1106,32 @@ function ListStorePage() {
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     Required for Meat &amp; Fish stores. Your store stays hidden until approved.
                   </p>
+                </div>
+              )}
+
+              {isGroceryStore(store.category) && (
+                <div className="space-y-3 rounded-lg border border-green-300 bg-green-50 p-3">
+                  <p className="text-sm font-medium text-green-900">
+                    Grocery store requirements
+                  </p>
+                  <p className="text-xs text-green-800">
+                    Food business certificates vary by country. Upload your licence, permit, or health certificate to prove you're authorised to sell food.
+                  </p>
+                  <div>
+                    <Label>Food Business Licence/Certificate URL *</Label>
+                    <Input
+                      value={store.food_business_license_url}
+                      onChange={(e) =>
+                        setStore((s) => ({ ...s, food_business_license_url: e.target.value }))
+                      }
+                      placeholder="Link to your food business licence or health certificate"
+                      maxLength={500}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Upload a document or certificate that proves you're licensed to sell food. This can be a food business registration, health certificate, or similar authority document for your country.
+                    </p>
+                  </div>
                 </div>
               )}
 

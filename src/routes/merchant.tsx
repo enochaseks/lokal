@@ -190,6 +190,8 @@ type StoreRow = {
   tattoo_portfolio_url?: string | null;
   tattoo_license_url?: string | null;
   is_verified_tattoo_artist?: boolean | null;
+  food_business_license_url?: string | null;
+  food_business_license_status?: "pending" | "approved" | "rejected" | null;
   health_safety_certificate_url?: string | null;
   health_safety_certificate_status?: "not_required" | "pending" | "approved" | "rejected" | null;
   description: string | null;
@@ -388,6 +390,7 @@ function EditStoreDialog({
     minimum_age: string;
     tattoo_portfolio_url: string;
     tattoo_license_url: string;
+    food_business_license_url: string;
     health_safety_certificate_url: string;
     health_safety_certificate_status: "not_required" | "pending" | "approved" | "rejected";
     origin: Origin;
@@ -423,6 +426,7 @@ function EditStoreDialog({
     minimum_age: store.minimum_age != null ? String(store.minimum_age) : "18",
     tattoo_portfolio_url: store.tattoo_portfolio_url ?? "",
     tattoo_license_url: store.tattoo_license_url ?? "",
+    food_business_license_url: store.food_business_license_url ?? "",
     health_safety_certificate_url: store.health_safety_certificate_url ?? "",
     health_safety_certificate_status: store.health_safety_certificate_status ?? "not_required",
     origin: ORIGINS.includes((store.origin ?? "") as Origin)
@@ -494,6 +498,7 @@ function EditStoreDialog({
   const isAdminUser = roles.includes("admin") || isAdminEmail(user?.email);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
   const isBodyContact = isBodyContactService(form.category, form.subcategory);
+  const isGrocery = form.category === "Groceries";
   const categoryLocked = Boolean(store.category_locked ?? store.published) && !isAdminUser;
   const subcategoryLocked = Boolean(store.published && store.is_verified) && !isAdminUser;
 
@@ -613,6 +618,10 @@ function EditStoreDialog({
       toast.error("Health and safety certificate is required for Meat & Fish");
       return;
     }
+    if (isGrocery && !form.food_business_license_url.trim()) {
+      toast.error("Food business licence/certificate URL is required for grocery stores");
+      return;
+    }
     if (isBodyContact && !isAdminUser) {
       const minimumAge = Number(form.minimum_age || 0);
       if (!Number.isFinite(minimumAge) || minimumAge < 18) {
@@ -652,6 +661,7 @@ function EditStoreDialog({
         ? (n(form.tattoo_license_url) ??
           (isAdminUser ? "https://lokal.admin/override/tattoo-licence" : null))
         : null;
+      const foodLicenseUrl = isGrocery ? n(form.food_business_license_url) : null;
       const certificateUrl = requiresFoodSafetyApproval
         ? n(form.health_safety_certificate_url)
         : null;
@@ -673,6 +683,7 @@ function EditStoreDialog({
           minimum_age: tattooMinimumAge,
           tattoo_portfolio_url: tattooPortfolioUrl,
           tattoo_license_url: tattooLicenseUrl,
+          food_business_license_url: foodLicenseUrl,
           health_safety_certificate_url: certificateUrl,
           health_safety_certificate_status: nextCertStatus,
           origin: form.origin,
@@ -847,6 +858,7 @@ function EditStoreDialog({
                       const keepCertificate =
                         nextCategory === "Groceries" && nextSubcategory === "Meat & Fish";
                       const keepTattooFields = isBodyContactService(nextCategory, nextSubcategory);
+                      const keepGroceryFields = nextCategory === "Groceries";
                       return {
                         ...f,
                         category: nextCategory,
@@ -857,6 +869,7 @@ function EditStoreDialog({
                         minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
                         tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
                         tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
+                        food_business_license_url: keepGroceryFields ? f.food_business_license_url : "",
                         health_safety_certificate_url: keepCertificate
                           ? f.health_safety_certificate_url
                           : "",
@@ -972,6 +985,23 @@ function EditStoreDialog({
                   />
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     Certificate review status: {form.health_safety_certificate_status}
+                  </p>
+                </div>
+              )}
+              {isGrocery && (
+                <div className="sm:col-span-2">
+                  <Label>Food Business Licence/Certificate URL *</Label>
+                  <Input
+                    value={form.food_business_license_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, food_business_license_url: e.target.value }))
+                    }
+                    maxLength={500}
+                    className="mt-1"
+                    placeholder="Link to food business licence or health certificate"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Upload a document proving you're licensed to sell food in your country. This can vary by location (e.g. food business registration, health permit, EHO certificate).
                   </p>
                 </div>
               )}
