@@ -121,12 +121,13 @@ export function Navbar() {
           >
             Stores
           </Link>
-          <a
-            href="/#how"
+          <Link
+            to="/"
+            hash="how"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             How it works
-          </a>
+          </Link>
           <Link
             to="/help"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
