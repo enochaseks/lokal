@@ -144,10 +144,17 @@ export const Route = createFileRoute("/list-store")({
   component: ListStorePage,
   head: () => ({
     meta: [
-      { title: "List your store · Lokal" },
+      { title: "List Your African or Caribbean Shop on Lokal" },
       {
         name: "description",
-        content: "List your African or Caribbean store on Lokal in three quick steps.",
+        content:
+          "Own a local African or Caribbean shop? Join Lokal to get discovered by nearby customers and accept direct orders without building a website.",
+      },
+      { property: "og:title", content: "List Your African or Caribbean Shop on Lokal" },
+      {
+        property: "og:description",
+        content:
+          "Create your merchant profile on Lokal in minutes and reach nearby customers looking for African and Caribbean products and services.",
       },
     ],
   }),

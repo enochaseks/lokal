@@ -36,14 +36,14 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Lokal helps African and Caribbean shops get found by nearby customers and receive direct orders, no website needed.",
+          "Discover African and Caribbean stores near you, or list your shop on Lokal to get found by local customers.",
       },
       { name: "author", content: "Lokal" },
       { property: "og:title", content: "Lokal" },
       {
         property: "og:description",
         content:
-          "For merchants: get your African or Caribbean shop discovered locally and take direct orders with Lokal.",
+          "Find trusted African and Caribbean stores near you, or join Lokal as a merchant and grow locally.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

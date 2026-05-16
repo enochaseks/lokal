@@ -12,14 +12,14 @@ type HeroProps = {
 
 const heroMessages = [
   {
-    headingMain: "Own an African or Caribbean business?",
-    headingAccent: "Start selling on Lokal.",
-    subtext: "Get verified, add your first listings, and start taking direct orders in minutes.",
-  },
-  {
     headingMain: "Find African & Caribbean stores",
     headingAccent: "near you.",
     subtext: "Groceries, beauty, barbers & more — order direct, pay by bank transfer.",
+  },
+  {
+    headingMain: "Own an African or Caribbean business?",
+    headingAccent: "Start selling on Lokal.",
+    subtext: "Get verified, add your first listings, and start taking direct orders in minutes.",
   },
 ] as const;
 
