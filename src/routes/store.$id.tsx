@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star } from "lucide-react";
+import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star, ShieldAlert, FileCheck2, Images } from "lucide-react";
 import whatsappLogo from "@/assets/WhatsApp_icon.png";
 import facebookLogo from "@/assets/Facebook_Logo_2023.png";
 import xLogo from "@/assets/X_icon.svg.png";
@@ -161,6 +161,127 @@ type StoreDetails = {
 
 const isBookable = (category: string, sellingMode?: string | null) =>
   isStoreBookable(category, sellingMode);
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+}
+
+const DAY_TO_INDEX: Record<string, number> = {
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+};
+
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+function parseClockTime(raw: string): string | null {
+  const cleaned = raw.trim().toLowerCase().replace(/\./g, "");
+  const match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+  if (!match) return null;
+  const hour12 = Number(match[1]);
+  const minute = Number(match[2] ?? "0");
+  const period = match[3];
+  if (hour12 < 1 || hour12 > 12 || minute < 0 || minute > 59) return null;
+  const hour24 = (hour12 % 12) + (period === "pm" ? 12 : 0);
+  return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function parseHoursText(
+  hours: string | null | undefined,
+): Array<{ day_of_week: number; start_time: string; end_time: string }> {
+  if (!hours) return [];
+  const normalized = hours.toLowerCase().trim();
+  if (!normalized || normalized.includes("request")) return [];
+  const timeTokens = normalized.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)/g) ?? [];
+  if (timeTokens.length < 2) return [];
+  const startTime = parseClockTime(timeTokens[0]!);
+  const endTime = parseClockTime(timeTokens[1]!);
+  if (!startTime || !endTime) return [];
+  const allDays = [0, 1, 2, 3, 4, 5, 6];
+  const daySegmentRaw = hours.split("·")[0]?.trim() ?? hours.trim();
+  const daySegment = daySegmentRaw.toLowerCase();
+  if (
+    daySegment.includes("daily") ||
+    daySegment.includes("every day") ||
+    daySegment.includes("everyday")
+  ) {
+    return allDays.map((day) => ({ day_of_week: day, start_time: startTime, end_time: endTime }));
+  }
+  const segments = daySegment
+    .replace(/[–—]/g, "-")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const resolvedDays = new Set<number>();
+  for (const segment of segments) {
+    if (segment.includes("-")) {
+      const [fromRaw, toRaw] = segment.split("-").map((p) => p.trim().slice(0, 3));
+      const from = DAY_TO_INDEX[fromRaw];
+      const to = DAY_TO_INDEX[toRaw];
+      if (from == null || to == null) continue;
+      if (from <= to) {
+        for (let day = from; day <= to; day += 1) resolvedDays.add(day);
+      } else {
+        for (let day = from; day <= 6; day += 1) resolvedDays.add(day);
+        for (let day = 0; day <= to; day += 1) resolvedDays.add(day);
+      }
+    } else {
+      const key = segment.slice(0, 3);
+      const day = DAY_TO_INDEX[key];
+      if (day != null) resolvedDays.add(day);
+    }
+  }
+  const days = resolvedDays.size > 0 ? Array.from(resolvedDays) : allDays;
+  return days.map((day) => ({ day_of_week: day, start_time: startTime, end_time: endTime }));
+}
+
+function isStoreOpenNow(
+  availability: Array<{ day_of_week: number; start_time: string; end_time: string }> | null | undefined,
+  hoursText?: string | null,
+  timezone?: string | null,
+): boolean | null {
+  const windows =
+    availability && availability.length > 0 ? availability : parseHoursText(hoursText);
+  if (!windows || windows.length === 0) return null;
+  const now = new Date();
+  let today = now.getDay();
+  let nowMins = now.getHours() * 60 + now.getMinutes();
+  if (timezone?.trim()) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(now);
+      const weekday = parts.find((p) => p.type === "weekday")?.value;
+      const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+      const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+      today = WEEKDAY_TO_INDEX[weekday ?? ""] ?? today;
+      nowMins = hour * 60 + minute;
+    } catch {
+      // fall back to local time
+    }
+  }
+  const prevDay = (today + 6) % 7;
+  for (const row of windows) {
+    const start = timeToMinutes(row.start_time);
+    const end = timeToMinutes(row.end_time);
+    if (start === end) {
+      if (row.day_of_week === today) return true;
+      continue;
+    }
+    const overnight = end < start;
+    if (!overnight && row.day_of_week === today && nowMins >= start && nowMins < end) return true;
+    if (overnight) {
+      if (row.day_of_week === today && nowMins >= start) return true;
+      if (row.day_of_week === prevDay && nowMins < end) return true;
+    }
+  }
+  return false;
+}
 
 function getDayOfWeekInTimezone(dateStr: string, timezone?: string | null): number {
   try {
@@ -879,8 +1000,11 @@ function StoreDetail() {
                   )}
                 />
                 {isBodyContactStore && (store.minimum_age ?? 0) >= 18 && (
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                    🔞 18+ policy
+                  <span
+                    title="18+ only"
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5" /> 18+
                   </span>
                 )}
                 {isBodyContactStore && store.tattoo_license_url && (
@@ -888,9 +1012,10 @@ function StoreDetail() {
                     href={store.tattoo_license_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-full bg-teal-100 px-3 py-1 text-sm font-medium text-teal-800 hover:opacity-90 dark:bg-teal-900/40 dark:text-teal-300"
+                    title="View artist licence / ID"
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-1 text-xs font-medium text-teal-800 hover:opacity-80 dark:bg-teal-900/40 dark:text-teal-300"
                   >
-                    📜 Artist licence / ID
+                    <FileCheck2 className="h-3.5 w-3.5" /> Licence
                   </a>
                 )}
                 {isBodyContactStore && store.tattoo_portfolio_url && (
@@ -898,9 +1023,10 @@ function StoreDetail() {
                     href={store.tattoo_portfolio_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 hover:opacity-90 dark:bg-indigo-900/40 dark:text-indigo-300"
+                    title="View portfolio"
+                    className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:opacity-80 dark:bg-indigo-900/40 dark:text-indigo-300"
                   >
-                    🖼️ Portfolio
+                    <Images className="h-3.5 w-3.5" /> Portfolio
                   </a>
                 )}
               </div>
@@ -1679,7 +1805,25 @@ function StoreDetail() {
                 <div className="flex gap-3">
                   <Clock className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Opening hours</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">Opening hours</p>
+                      {(() => {
+                        const open = isStoreOpenNow(store.store_availability, store.hours, store.timezone);
+                        if (open === true)
+                          return (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                              🟢 Open
+                            </span>
+                          );
+                        if (open === false)
+                          return (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              ⚫ Closed
+                            </span>
+                          );
+                        return null;
+                      })()}
+                    </div>
                     <p className="text-sm text-muted-foreground">{store.hours}</p>
                   </div>
                 </div>
