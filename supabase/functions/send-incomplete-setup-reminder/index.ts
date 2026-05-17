@@ -5,6 +5,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.1";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const brevoKey = Deno.env.get("BREVO_KEY");
+const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+const merchantDashboardUrl = `${appUrl}/merchant`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,7 +119,7 @@ Deno.serve(async (req) => {
                   ${missingItems.map((item) => `<li>${item}</li>`).join("")}
                 </ul>
                 <p style="margin-top: 20px;">
-                  <a href="https://lokalshops.co.uk/merchant" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  <a href="${merchantDashboardUrl}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">
                     Complete Setup
                   </a>
                 </p>

@@ -44,6 +44,8 @@ Deno.serve(async (req) => {
     const smsSender = Deno.env.get("BREVO_SMS_SENDER") ?? "Lokal";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+    const merchantDashboardUrl = `${appUrl}/merchant`;
 
     if (!brevoKey || !supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ skipped: true, reason: "env not configured" }), {
@@ -84,7 +86,7 @@ Deno.serve(async (req) => {
       `${storeName} • #${payload.reference}`,
       `${fulfillment} • GBP ${total}`,
       `Customer: ${payload.customer_name}${payload.customer_phone ? ` (${payload.customer_phone})` : ""}`,
-      "Open: https://lokalshops.co.uk/merchant",
+      `Open: ${merchantDashboardUrl}`,
     ].join("\n");
 
     const html = `
@@ -95,7 +97,7 @@ Deno.serve(async (req) => {
       ${payload.customer_phone ? `<p><strong>Phone:</strong> ${payload.customer_phone}</p>` : ""}
       <p><strong>Fulfilment:</strong> ${fulfillment}</p>
       <p><strong>Total:</strong> GBP ${total}</p>
-      <p><a href="https://lokalshops.co.uk/merchant">Open Merchant Dashboard →</a></p>
+      <p><a href="${merchantDashboardUrl}">Open Merchant Dashboard →</a></p>
     `;
 
     const [smsResult, emailResult] = await Promise.all([

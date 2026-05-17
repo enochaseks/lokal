@@ -57,6 +57,8 @@ Deno.serve(async (req) => {
 
     const brevoKey = Deno.env.get("BREVO_API_KEY");
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+    const merchantDashboardUrl = `${appUrl}/merchant`;
     if (!brevoKey) {
       return new Response(JSON.stringify({ skipped: true, reason: "brevo not configured" }), {
         status: 200,
@@ -213,7 +215,7 @@ Deno.serve(async (req) => {
             `${merchantStoreName} • ${slotStr}`,
             `${payload.customer_name}${payload.customer_phone ? ` • ${payload.customer_phone}` : ""}`,
             payload.service ? `Service: ${payload.service}` : null,
-            `Open: https://lokalshops.co.uk/merchant`,
+            `Open: ${merchantDashboardUrl}`,
           ]
             .filter(Boolean)
             .join("\n");
@@ -226,7 +228,7 @@ Deno.serve(async (req) => {
             <p><strong>Date and time:</strong> ${slotStr}</p>
             ${payload.service ? `<p><strong>Service:</strong> ${payload.service}</p>` : ""}
             ${payload.staff_name ? `<p><strong>Team member:</strong> ${payload.staff_name}</p>` : ""}
-            <p><a href="https://lokalshops.co.uk/merchant">Open Merchant Dashboard →</a></p>
+            <p><a href="${merchantDashboardUrl}">Open Merchant Dashboard →</a></p>
           `;
 
           if (merchantSmsAlerts && merchantPhone) {

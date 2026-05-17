@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const brevoKey = Deno.env.get("BREVO_API_KEY");
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+    const merchantDashboardUrl = `${appUrl}/merchant`;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ error: "Missing Supabase env" }), {
@@ -187,7 +189,7 @@ Deno.serve(async (req) => {
         <li><strong>${stats.highRatingCount}</strong> positive rating${stats.highRatingCount === 1 ? "" : "s"} (4-5 stars)</li>
         <li><strong>${stats.lowRatingCount}</strong> low rating${stats.lowRatingCount === 1 ? "" : "s"} (1-2 stars)</li>
       </ul>
-      <p><a href="https://lokalshops.co.uk/merchant">Open merchant dashboard</a></p>
+      <p><a href="${merchantDashboardUrl}">Open merchant dashboard</a></p>
     `;
 
     const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {

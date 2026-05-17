@@ -61,6 +61,8 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const brevoKey = Deno.env.get("BREVO_API_KEY");
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+    const merchantDashboardUrl = `${appUrl}/merchant`;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ error: "Missing Supabase env" }), {
@@ -220,7 +222,7 @@ Deno.serve(async (req) => {
           
           <p><strong>You can now publish your store:</strong></p>
           <ol>
-            <li>Go to your merchant dashboard at <a href="https://lokalshops.co.uk/">lokalshops.co.uk</a></li>
+            <li>Go to your merchant dashboard at <a href="${merchantDashboardUrl}">${merchantDashboardUrl}</a></li>
             <li>Click the <strong>Publish</strong> button on your store</li>
             <li>Your store will be live and visible to customers across the Lokal platform!</li>
           </ol>
@@ -235,7 +237,7 @@ Deno.serve(async (req) => {
           ${notes}
           
           <p>Questions? Reply to this email or contact us at helplokal@gmail.com</p>
-          <p><a href="https://lokalshops.co.uk/" style="background:#000;color:#fff;padding:10px 20px;text-decoration:none;border-radius:8px;display:inline-block">Go to Dashboard</a></p>
+          <p><a href="${merchantDashboardUrl}" style="background:#000;color:#fff;padding:10px 20px;text-decoration:none;border-radius:8px;display:inline-block">Go to Dashboard</a></p>
         `;
       } else {
         subject = `Store verification request - Not approved`;

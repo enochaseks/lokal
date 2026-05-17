@@ -47,6 +47,8 @@ Deno.serve(async (req) => {
     const emailFrom = Deno.env.get("BREVO_EMAIL_FROM") ?? "noreply@lokalshops.co.uk";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
+    const merchantDashboardUrl = `${appUrl}/merchant`;
 
     if (!brevoKey || !supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ sent: false, reason: "env not configured" }), {
@@ -107,7 +109,7 @@ Deno.serve(async (req) => {
       ${staffText}
       ${ageText}
       <p>Please confirm any required age/ID checks and mark the booking completed in your merchant dashboard when finished.</p>
-      <p><a href="https://lokalshops.co.uk/merchant">Open merchant dashboard</a></p>
+      <p><a href="${merchantDashboardUrl}">Open merchant dashboard</a></p>
     `;
 
     const recipients: Array<{ email: string; name?: string }> = [];
