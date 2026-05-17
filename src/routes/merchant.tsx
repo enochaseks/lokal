@@ -69,6 +69,13 @@ import {
   resolveStoreMode,
   getHairBeautyModeForSubcategory,
   getCategorySubcategories,
+  DEFAULT_STORE_SECTION_ORDER,
+  STORE_BUTTON_STYLES,
+  STORE_BACKGROUND_THEMES,
+  STORE_FONT_PRESETS,
+  type StoreButtonStyle,
+  type StoreFontPreset,
+  type StoreSectionKey,
 } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
@@ -216,6 +223,18 @@ type StoreRow = {
   tiktok_handle: string | null;
   website_url: string | null;
   image_url: string | null;
+  logo_url?: string | null;
+  banner_image_url?: string | null;
+  brand_primary_color?: string | null;
+  brand_accent_color?: string | null;
+  button_style?: StoreButtonStyle | null;
+  font_preset?: StoreFontPreset | null;
+  page_background_theme?: "cream" | "primary_tint" | "accent_tint" | "gradient" | null;
+  show_reviews?: boolean | null;
+  show_hours?: boolean | null;
+  show_socials?: boolean | null;
+  show_featured_products?: boolean | null;
+  section_order?: StoreSectionKey[] | null;
   published: boolean;
   fulfillment: string;
   delivery_fee_gbp?: number | null;
@@ -432,6 +451,18 @@ function EditStoreDialog({
     fulfillment: string;
     delivery_fee_gbp: string;
     image_url: string;
+    logo_url: string;
+    banner_image_url: string;
+    brand_primary_color: string;
+    brand_accent_color: string;
+    button_style: StoreButtonStyle;
+    font_preset: StoreFontPreset;
+    page_background_theme: "cream" | "primary_tint" | "accent_tint" | "gradient";
+    show_reviews: boolean;
+    show_hours: boolean;
+    show_socials: boolean;
+    show_featured_products: boolean;
+    section_order: StoreSectionKey[];
     bank_name: string;
     bank_account_name: string;
     bank_account_number: string;
@@ -487,6 +518,23 @@ function EditStoreDialog({
     region: store.region ?? "GB",
     currency: store.currency ?? "GBP",
     selling_mode: resolveStoreMode(store.category, store.selling_mode),
+    logo_url: store.logo_url ?? "",
+    banner_image_url: store.banner_image_url ?? "",
+    brand_primary_color: store.brand_primary_color ?? "#b42318",
+    brand_accent_color: store.brand_accent_color ?? "#f97316",
+    button_style: (store.button_style ?? "pill") as StoreButtonStyle,
+    font_preset: (store.font_preset ?? "display") as StoreFontPreset,
+    page_background_theme:
+      (store.page_background_theme ?? "cream") as
+        | "cream"
+        | "primary_tint"
+        | "accent_tint"
+        | "gradient",
+    show_reviews: store.show_reviews ?? true,
+    show_hours: store.show_hours ?? true,
+    show_socials: true,
+    show_featured_products: store.show_featured_products ?? true,
+    section_order: (store.section_order?.length ? store.section_order : DEFAULT_STORE_SECTION_ORDER) as StoreSectionKey[],
   });
   const [products, setProducts] = useState<
     Array<{
@@ -514,6 +562,7 @@ function EditStoreDialog({
   );
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const brandingUnlocked = Boolean(store.is_verified || store.verified_at);
   const [initialProducts, setInitialProducts] = useState<Array<{
     id?: string;
     name: string;
@@ -584,19 +633,22 @@ function EditStoreDialog({
       });
   }, [store.id]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "image_url" | "logo_url" = "image_url",
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
       const ext = file.name.split(".").pop();
-      const path = `${store.owner_id}/${store.id}/cover.${ext}`;
+      const path = `${store.owner_id}/${store.id}/${target === "logo_url" ? "logo" : "cover"}.${ext}`;
       const { error } = await supabase.storage
         .from("store-images")
         .upload(path, file, { upsert: true });
       if (error) throw error;
-      setForm((f) => ({ ...f, image_url: path }));
-      toast.success("Image uploaded");
+      setForm((f) => ({ ...f, [target]: path }));
+      toast.success(target === "logo_url" ? "Logo uploaded" : "Image uploaded");
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
     } finally {
@@ -605,6 +657,18 @@ function EditStoreDialog({
   };
 
   const n = (v: string) => v.trim() || null;
+  const sectionOrder =
+    form.section_order?.length ? form.section_order : DEFAULT_STORE_SECTION_ORDER;
+  const setSectionPosition = (section: StoreSectionKey, position: number) => {
+    setForm((f) => {
+      const next = (f.section_order?.length ? [...f.section_order] : [...DEFAULT_STORE_SECTION_ORDER]);
+      const existingIndex = next.indexOf(section);
+      if (existingIndex !== -1) next.splice(existingIndex, 1);
+      const boundedIndex = Math.max(0, Math.min(position - 1, next.length));
+      next.splice(boundedIndex, 0, section);
+      return { ...f, section_order: next.slice(0, 4) as StoreSectionKey[] };
+    });
+  };
 
   const hasProductChanges =
     initialProducts !== null &&
@@ -757,6 +821,18 @@ function EditStoreDialog({
           bank_sort_code: n(form.bank_sort_code),
           region: form.region,
           currency: form.currency,
+          logo_url: n(form.logo_url),
+          banner_image_url: n(form.banner_image_url),
+          brand_primary_color: n(form.brand_primary_color),
+          brand_accent_color: n(form.brand_accent_color),
+          button_style: form.button_style,
+          font_preset: form.font_preset,
+          page_background_theme: form.page_background_theme,
+          show_reviews: form.show_reviews,
+          show_hours: form.show_hours,
+          show_socials: true,
+          show_featured_products: form.show_featured_products,
+          section_order: form.section_order,
         })
         .eq("id", store.id);
       if (storeErr) throw storeErr;
@@ -855,6 +931,18 @@ function EditStoreDialog({
         region: form.region,
         currency: form.currency,
         selling_mode: isModeConfigurableCategory(form.category) ? form.selling_mode : null,
+        logo_url: n(form.logo_url),
+        banner_image_url: n(form.banner_image_url),
+        brand_primary_color: n(form.brand_primary_color),
+        brand_accent_color: n(form.brand_accent_color),
+        button_style: form.button_style,
+        font_preset: form.font_preset,
+        page_background_theme: form.page_background_theme,
+        show_reviews: form.show_reviews,
+        show_hours: form.show_hours,
+        show_socials: true,
+        show_featured_products: form.show_featured_products,
+        section_order: form.section_order,
       });
       toast.success("Store updated");
       onClose();
@@ -1217,7 +1305,7 @@ function EditStoreDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Cover photo</Label>
+            <Label>Banner image</Label>
             {form.image_url && (
               <div className="h-28 w-full overflow-hidden rounded-lg bg-secondary">
                 <img
@@ -1248,6 +1336,208 @@ function EditStoreDialog({
                 disabled={uploading}
               />
             </label>
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-start gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Branding
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {brandingUnlocked
+                    ? "Verified stores can edit branding now."
+                    : "Branding is locked until verification. You’ll be able to customise this section once your store is verified."}
+                </p>
+              </div>
+              <span
+                className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                  brandingUnlocked
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                }`}
+              >
+                {brandingUnlocked ? <BadgeCheck className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                {brandingUnlocked ? "Unlocked" : "Locked"}
+              </span>
+            </div>
+
+            {brandingUnlocked ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Label>Logo image</Label>
+                  {form.logo_url && (
+                    <div className="mt-1 flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                      <img
+                        src={getImageUrl(form.logo_url) || ""}
+                        alt="Logo preview"
+                        className="h-12 w-12 rounded-full object-cover"
+                      />
+                      <span className="text-xs text-muted-foreground">Logo preview</span>
+                    </div>
+                  )}
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      value={form.logo_url}
+                      onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
+                      placeholder="Paste logo image URL"
+                    />
+                    <label className="shrink-0 cursor-pointer rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-secondary">
+                      Upload
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(e, "logo_url")}
+                        disabled={uploading}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <Label>Primary colour</Label>
+                  <Input
+                    type="color"
+                    value={form.brand_primary_color || "#b42318"}
+                    onChange={(e) => setForm((f) => ({ ...f, brand_primary_color: e.target.value }))}
+                    className="mt-1 h-11 w-full p-1"
+                  />
+                </div>
+                <div>
+                  <Label>Accent colour</Label>
+                  <Input
+                    type="color"
+                    value={form.brand_accent_color || "#f97316"}
+                    onChange={(e) => setForm((f) => ({ ...f, brand_accent_color: e.target.value }))}
+                    className="mt-1 h-11 w-full p-1"
+                  />
+                </div>
+                <div>
+                  <Label>Button style</Label>
+                  <Select
+                    value={form.button_style}
+                    onValueChange={(v) => setForm((f) => ({ ...f, button_style: v as StoreButtonStyle }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_BUTTON_STYLES.map((style) => (
+                        <SelectItem key={style.value} value={style.value}>
+                          {style.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Font preset</Label>
+                  <Select
+                    value={form.font_preset}
+                    onValueChange={(v) => setForm((f) => ({ ...f, font_preset: v as StoreFontPreset }))}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_FONT_PRESETS.map((font) => (
+                        <SelectItem key={font.value} value={font.value}>
+                          {font.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Background colour</Label>
+                  <Select
+                    value={form.page_background_theme}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        page_background_theme: v as
+                          | "cream"
+                          | "primary_tint"
+                          | "accent_tint"
+                          | "gradient",
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_BACKGROUND_THEMES.map((theme) => (
+                        <SelectItem key={theme.value} value={theme.value}>
+                          {theme.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="sm:col-span-2 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.show_featured_products}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, show_featured_products: e.target.checked }))
+                      }
+                    />
+                    Featured products section
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.show_hours}
+                      onChange={(e) => setForm((f) => ({ ...f, show_hours: e.target.checked }))}
+                    />
+                    Hours section
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.show_reviews}
+                      onChange={(e) => setForm((f) => ({ ...f, show_reviews: e.target.checked }))}
+                    />
+                    Customer reviews section
+                  </label>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Safe block order</Label>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {([
+                      ["featured_products", "Featured products"],
+                      ["hours", "Hours"],
+                      ["socials", "Social links"],
+                      ["reviews", "Reviews"],
+                    ] as Array<[StoreSectionKey, string]>).map(([section, label]) => (
+                      <div key={section} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                        <span className="text-sm flex-1">{label}</span>
+                        <Select
+                          value={String(sectionOrder.indexOf(section) + 1)}
+                          onValueChange={(v) => setSectionPosition(section, Number(v))}
+                        >
+                          <SelectTrigger className="w-24">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4].map((pos) => (
+                              <SelectItem key={pos} value={String(pos)}>
+                                {pos}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Only these four blocks can be reordered. The main buy/book section stays fixed.
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-3">

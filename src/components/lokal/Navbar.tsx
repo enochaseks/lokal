@@ -114,20 +114,18 @@ export function Navbar() {
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
-          <Link
-            to="/"
-            hash="stores"
+          <a
+            href="/#stores"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Stores
-          </Link>
-          <Link
-            to="/"
-            hash="how"
+          </a>
+          <a
+            href="/#how"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             How it works
-          </Link>
+          </a>
           <Link
             to="/help"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

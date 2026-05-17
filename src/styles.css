@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@400;500;600;700&family=Dancing+Script:wght@400;500;700&family=Nunito:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -38,6 +38,8 @@
 
   --font-display: 'Playfair Display', Georgia, serif;
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-script: 'Dancing Script', cursive;
+  --font-rounded: 'Nunito', system-ui, sans-serif;
 }
 
 :root {
@@ -118,12 +120,12 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: var(--font-sans);
+    font-family: var(--store-body-font, var(--font-sans));
     -webkit-font-smoothing: antialiased;
   }
 
   h1, h2, h3, h4 {
-    font-family: var(--font-display);
+    font-family: var(--store-heading-font, var(--font-display));
     letter-spacing: -0.02em;
   }
 }
@@ -136,6 +138,7 @@
   .shadow-card { box-shadow: var(--shadow-card); }
   .shadow-glow { box-shadow: var(--shadow-glow); }
   .font-display { font-family: var(--font-display); }
+  .font-script { font-family: var(--font-script); }
   .text-balance { text-wrap: balance; }
 
   @keyframes fade-loop {

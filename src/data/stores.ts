@@ -376,6 +376,40 @@ export type Product = {
   image_url?: string | null;
 };
 
+export type StoreButtonStyle = "rounded" | "pill" | "square";
+export type StoreFontPreset = "display" | "sans" | "mono" | "script" | "rounded";
+export type StoreSectionKey = "featured_products" | "hours" | "socials" | "reviews";
+
+export const DEFAULT_STORE_SECTION_ORDER: StoreSectionKey[] = [
+  "featured_products",
+  "hours",
+  "socials",
+  "reviews",
+];
+
+export const STORE_FONT_PRESETS: Array<{ value: StoreFontPreset; label: string }> = [
+  { value: "display", label: "Elegant display" },
+  { value: "sans", label: "Clean sans" },
+  { value: "mono", label: "Modern mono" },
+  { value: "script", label: "Curly script" },
+  { value: "rounded", label: "Soft rounded" },
+];
+
+export const STORE_BUTTON_STYLES: Array<{ value: StoreButtonStyle; label: string }> = [
+  { value: "rounded", label: "Rounded" },
+  { value: "pill", label: "Pill" },
+  { value: "square", label: "Square" },
+];
+
+export const STORE_BACKGROUND_THEMES: Array<{
+  value: "cream" | "primary_tint" | "accent_tint" | "gradient";
+  label: string;
+}> = [
+  { value: "cream", label: "Cream" },
+  { value: "primary_tint", label: "Primary tint" },
+  { value: "accent_tint", label: "Accent tint" },
+  { value: "gradient", label: "Primary + accent" },
+];
 export type Store = {
   id: string;
   name: string;
@@ -415,6 +449,17 @@ export type Store = {
   tiktokHandle?: string;
   websiteUrl?: string;
   region?: Region;
+  logo_url?: string | null;
+  banner_image_url?: string | null;
+  brand_primary_color?: string | null;
+  brand_accent_color?: string | null;
+  button_style?: StoreButtonStyle | null;
+  font_preset?: StoreFontPreset | null;
+  show_reviews?: boolean | null;
+  show_hours?: boolean | null;
+  show_socials?: boolean | null;
+  show_featured_products?: boolean | null;
+  section_order?: StoreSectionKey[] | null;
   bank: { name: string; accountName: string; accountNumber: string; sortCode?: string };
   products: Product[];
   deposit_amount?: number | null;

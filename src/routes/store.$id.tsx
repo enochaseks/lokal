@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star, ShieldAlert, FileCheck2, Images } from "lucide-react";
 import whatsappLogo from "@/assets/WhatsApp_icon.png";
@@ -18,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
+import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable, DEFAULT_STORE_SECTION_ORDER } from "@/data/stores";
+import type { StoreButtonStyle, StoreFontPreset, StoreSectionKey } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -128,6 +130,18 @@ type StoreDetails = {
   tiktok_handle: string | null;
   website_url: string | null;
   image_url: string | null;
+  logo_url?: string | null;
+  banner_image_url?: string | null;
+  brand_primary_color?: string | null;
+  brand_accent_color?: string | null;
+  button_style?: StoreButtonStyle | null;
+  font_preset?: StoreFontPreset | null;
+  page_background_theme?: "cream" | "primary_tint" | "accent_tint" | "gradient" | null;
+  show_reviews?: boolean | null;
+  show_hours?: boolean | null;
+  show_socials?: boolean | null;
+  show_featured_products?: boolean | null;
+  section_order?: StoreSectionKey[] | null;
   fulfillment: string;
   delivery_fee_gbp?: number | null;
   location_type?: "salon" | "remote" | "travel" | "remote_and_travel" | null;
@@ -366,6 +380,58 @@ function generateTimeSlots(startTime: string, endTime: string, durationMins: num
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function getButtonRadius(buttonStyle?: StoreButtonStyle | null): string {
+  switch (buttonStyle) {
+    case "square":
+      return "rounded-md";
+    case "rounded":
+      return "rounded-xl";
+    default:
+      return "rounded-full";
+  }
+}
+
+function getStoreThemeStyle(store: StoreDetails): CSSProperties {
+  const fontPreset = store.font_preset ?? "display";
+  const pageBackgroundTheme = store.page_background_theme ?? "cream";
+  const primary = store.brand_primary_color || "#b42318";
+  const accent = store.brand_accent_color || "#f97316";
+  const headingFont =
+    fontPreset === "sans"
+      ? "var(--font-sans)"
+      : fontPreset === "mono"
+        ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace"
+        : fontPreset === "script"
+          ? "var(--font-script)"
+          : fontPreset === "rounded"
+            ? "var(--font-rounded)"
+            : "var(--font-display)";
+  const backgroundStyle =
+    pageBackgroundTheme === "primary_tint"
+      ? `color-mix(in oklch, ${primary} 7%, var(--background))`
+      : pageBackgroundTheme === "accent_tint"
+        ? `color-mix(in oklch, ${accent} 7%, var(--background))`
+        : pageBackgroundTheme === "gradient"
+          ? `linear-gradient(135deg, color-mix(in oklch, ${primary} 12%, var(--background)) 0%, color-mix(in oklch, ${accent} 12%, var(--background)) 100%)`
+          : undefined;
+  return {
+    ["--store-heading-font" as any]: headingFont,
+    ["--store-body-font" as any]: "var(--font-sans)",
+    background: backgroundStyle,
+  };
+}
+
+function getSectionOrder(store: StoreDetails): StoreSectionKey[] {
+  const allowed: StoreSectionKey[] = ["featured_products", "hours", "socials", "reviews"];
+  const current = store.section_order?.filter((section): section is StoreSectionKey =>
+    allowed.includes(section as StoreSectionKey),
+  );
+  const base = (current?.length ? current : DEFAULT_STORE_SECTION_ORDER).filter((section) =>
+    allowed.includes(section),
+  );
+  return [...base, ...allowed.filter((section) => !base.includes(section))];
+}
+
 export const Route = createFileRoute("/store/$id")({
   component: StoreDetail,
   head: (props) => {
@@ -565,6 +631,16 @@ function StoreDetail() {
     typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
   const shareUrl = `${domain}/store/${store.id}`;
   const shareText = `Check out ${store.name} on Lokal!`;
+  const storePrimaryColor = store.brand_primary_color || "#b42318";
+  const storeAccentColor = store.brand_accent_color || "#f97316";
+  const storeButtonRadius = getButtonRadius(store.button_style);
+  const visibleSectionOrder = getSectionOrder(store);
+  const bannerImageUrl = store.banner_image_url || store.image_url;
+  const showFeaturedProducts = store.show_featured_products !== false;
+  const showHours = store.show_hours !== false;
+  const showSocials = store.show_socials !== false;
+  const showReviews = store.show_reviews !== false;
+  const primaryButtonStyle = { background: storePrimaryColor, color: "#fff" };
   const websiteHref = normalizeWebsiteUrl(store.website_url);
   const instagramHref = buildInstagramUrl(store.instagram_handle);
   const tiktokHref = buildTikTokUrl(store.tiktok_handle);
@@ -606,6 +682,275 @@ function StoreDetail() {
 
   const proofReviewsWithImages = (store.proof_reviews ?? []).filter((r) => !!r.proof_image_url);
   const recentRatings = store.proof_reviews ?? [];
+
+  const sectionBlocks = {
+    featured_products:
+      showFeaturedProducts && products.length > 0 ? (
+        <section className="mb-8 rounded-2xl border border-border bg-card p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-bold">Featured products</h2>
+            <span className="text-xs text-muted-foreground">Picked by the merchant</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {products.slice(0, 3).map((p) => (
+              <div key={p.name} className="overflow-hidden rounded-xl border border-border bg-card">
+                {p.image_url && (
+                  <img
+                    src={getImageUrl(p.image_url) || undefined}
+                    alt={p.name}
+                    className="h-36 w-full object-cover"
+                  />
+                )}
+                <div className="p-4">
+                  <p className="text-sm font-semibold">{p.name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {currencySymbol}
+                    {p.price.toFixed(2)}{p.unit ? ` / ${p.unit}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null,
+    hours: (
+      <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-xl font-bold">
+          {isTravelServiceStore ? "Service details" : "Visit us"}
+        </h2>
+
+        {isTravelServiceStore ? (
+          <div className="flex gap-3">
+            <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">We travel to you</p>
+              <p className="text-sm text-muted-foreground">
+                No fixed customer-facing address is shown.
+              </p>
+            </div>
+          </div>
+        ) : (
+          store.address && (
+            <div className="flex gap-3">
+              <MapPin className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">{store.address}</p>
+                {store.city && (
+                  <p className="text-sm text-muted-foreground">
+                    {store.city}
+                    {store.postcode ? `, ${store.postcode}` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          )
+        )}
+
+        {showHours && store.hours && (
+          <div className="flex gap-3">
+            <Clock className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">Opening hours</p>
+                {(() => {
+                  const open = isStoreOpenNow(store.store_availability, store.hours, store.timezone);
+                  if (open === true)
+                    return (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        🟢 Open
+                      </span>
+                    );
+                  if (open === false)
+                    return (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        ⚫ Closed
+                      </span>
+                    );
+                  return null;
+                })()}
+              </div>
+              <p className="text-sm text-muted-foreground">{store.hours}</p>
+            </div>
+          </div>
+        )}
+
+        {store.phone && (
+          <div className="flex gap-3">
+            <Phone className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">Phone</p>
+              <a href={`tel:${store.phone}`} className="text-sm text-primary hover:underline">
+                {store.phone}
+              </a>
+            </div>
+          </div>
+        )}
+
+        {store.fulfillment && !isBookable(store.category, store.selling_mode) && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Fulfilment
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(store.fulfillment === "collection" || store.fulfillment === "both") && (
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                  🏪 Collection
+                </span>
+              )}
+              {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                  🚚 Delivery
+                </span>
+              )}
+              {store.fulfillment === "pay_at_store" && (
+                <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">
+                  💰 Pay at store
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {isBookable(store.category, store.selling_mode) && (store as any).location_type && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Service location
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {store.location_type === "salon" && (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  🏠 At store / premises
+                </span>
+              )}
+              {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
+                <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                  🚗 We travel to you
+                </span>
+              )}
+              {(store.location_type === "remote" || store.location_type === "remote_and_travel") && (
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                  💻 Remote / online
+                </span>
+              )}
+              {store.location_type === "salon" && store.fulfillment === "pay_at_store" && (
+                <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300">
+                  💰 Pay at store
+                </span>
+              )}
+              {(store.location_type === "travel" || store.location_type === "remote_and_travel") && (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                  🏦 Bank transfer only
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {(store.refund_policy ||
+          store.cancellation_policy ||
+          typeof store.accepts_refunds === "boolean") && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Refunds & cancellation
+            </p>
+            <p className="text-sm font-medium">
+              Refunds: {store.accepts_refunds ? "Accepted (subject to merchant policy)" : "Not accepted"}
+            </p>
+            {store.refund_policy && (
+              <p className="mt-1 text-sm text-muted-foreground">{store.refund_policy}</p>
+            )}
+            {store.cancellation_policy && (
+              <p className="mt-1 text-sm text-muted-foreground">{store.cancellation_policy}</p>
+            )}
+          </div>
+        )}
+      </div>
+    ),
+    socials: null,
+    reviews:
+      showReviews && (recentRatings.length > 0 || proofReviewsWithImages.length > 0) ? (
+        <div className="space-y-8">
+          {recentRatings.length > 0 && (
+            <section id="customer-ratings" className="rounded-2xl border border-border bg-card p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-2xl font-bold">Customer ratings</h2>
+                <span className="text-xs text-muted-foreground">Recent verified experiences</span>
+              </div>
+              <div className="space-y-4">
+                {recentRatings.map((review) => (
+                  <article key={`rating-${review.source}-${review.id}`} className="rounded-xl border border-border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{review.reviewer_name}</p>
+                        {review.staff_name && (
+                          <p className="text-xs text-muted-foreground">with {review.staff_name}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">★ {review.rating.toFixed(1)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(review.created_at).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    {review.body && (
+                      <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">{review.body}</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {proofReviewsWithImages.length > 0 && (
+            <section className="rounded-2xl border border-border bg-card p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-2xl font-bold">Recent customer proof photos</h2>
+                <span className="text-xs text-muted-foreground">Reported images are moderated</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {proofReviewsWithImages.map((review) => {
+                  const imageUrl = getImageUrl(review.proof_image_url) || "";
+                  const reportSubject = encodeURIComponent(`Report review proof image (${review.id})`);
+                  const reportBody = encodeURIComponent(
+                    `Store: ${store.name}\nStore ID: ${store.id}\nReview ID: ${review.id}\nSource: ${review.source}\nReason: `,
+                  );
+
+                  return (
+                    <article key={`${review.source}-${review.id}`} className="overflow-hidden rounded-xl border border-border">
+                      <img
+                        src={imageUrl}
+                        alt={`Proof shared by ${review.reviewer_name}`}
+                        className="h-44 w-full object-cover"
+                      />
+                      <div className="space-y-2 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">{review.reviewer_name}</p>
+                          <span className="text-xs text-muted-foreground">★ {review.rating.toFixed(1)}</span>
+                        </div>
+                        {review.staff_name && (
+                          <p className="text-xs text-muted-foreground">for {review.staff_name}</p>
+                        )}
+                        {review.body && <p className="line-clamp-3 text-xs text-muted-foreground">{review.body}</p>}
+                        <a
+                          href={`mailto:helplokal@gmail.com?subject=${reportSubject}&body=${reportBody}`}
+                          className="inline-flex text-xs font-medium text-primary hover:underline"
+                        >
+                          Report image
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      ) : null,
+  };
 
   const cartItems = products.map((p) => ({ ...p, qty: qty[p.name] ?? 0 })).filter((p) => p.qty > 0);
   const orderSubtotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -965,10 +1310,10 @@ function StoreDetail() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background" style={getStoreThemeStyle(store)}>
       <Navbar />
 
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8" data-section-order={visibleSectionOrder.join(",")}>
         <div className="container mx-auto max-w-3xl px-4">
           {/* Store closed banner */}
           {!storePublished && (
@@ -982,28 +1327,45 @@ function StoreDetail() {
               </div>
             </div>
           )}
-          {store.image_url && (
-            <div className="mb-8 overflow-hidden rounded-2xl">
-              <img
-                src={getImageUrl(store.image_url) || ""}
-                alt={store.name}
-                className="h-64 w-full object-cover sm:h-96"
-              />
+          {bannerImageUrl && (
+            <div className={`relative${store.logo_url ? " mb-14" : " mb-8"}`}>
+              <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+                <img
+                  src={getImageUrl(bannerImageUrl) || ""}
+                  alt={`${store.name} banner`}
+                  className="h-64 w-full object-cover sm:h-96"
+                />
+              </div>
+              {store.logo_url && (
+                <div className="absolute -bottom-8 left-1/2 z-10 h-16 w-16 -translate-x-1/2 overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm sm:h-20 sm:w-20">
+                  <img
+                    src={getImageUrl(store.logo_url) || ""}
+                    alt={`${store.name} logo`}
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </div>
+              )}
             </div>
           )}
           {/* Header with share buttons */}
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="font-display text-4xl font-bold">{store.name}</h1>
+              <h1 className="text-4xl font-bold">{store.name}</h1>
               {store.description && (
                 <p className="mt-2 text-lg text-muted-foreground">{store.description}</p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">
+                <span
+                  className="rounded-full px-3 py-1 text-sm font-medium"
+                  style={{ backgroundColor: `${storePrimaryColor}18`, color: storePrimaryColor }}
+                >
                   {store.category}
                 </span>
                 {store.origin && (
-                  <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium">
+                  <span
+                    className="rounded-full px-3 py-1 text-sm font-medium"
+                    style={{ backgroundColor: `${storeAccentColor}18`, color: storeAccentColor }}
+                  >
                     {store.origin}
                   </span>
                 )}
@@ -1109,7 +1471,8 @@ function StoreDetail() {
             <div className="flex flex-col gap-2 sm:min-w-48">
               <Button
                 onClick={handleCopyLink}
-                className="gap-2 bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                className={`gap-2 ${storeButtonRadius} shadow-warm hover:opacity-95`}
+                style={primaryButtonStyle}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied!" : "Copy link"}
@@ -1143,91 +1506,13 @@ function StoreDetail() {
             </div>
           </div>
 
-          {recentRatings.length > 0 && (
-            <section id="customer-ratings" className="mb-8 rounded-2xl border border-border bg-card p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-2xl font-bold">Customer ratings</h2>
-                <span className="text-xs text-muted-foreground">Recent verified experiences</span>
-              </div>
-              <div className="space-y-4">
-                {recentRatings.map((review) => (
-                  <article key={`rating-${review.source}-${review.id}`} className="rounded-xl border border-border p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{review.reviewer_name}</p>
-                        {review.staff_name && (
-                          <p className="text-xs text-muted-foreground">with {review.staff_name}</p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold">★ {review.rating.toFixed(1)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(review.created_at).toLocaleDateString("en-GB", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    {review.body && (
-                      <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">{review.body}</p>
-                    )}
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {proofReviewsWithImages.length > 0 && (
-            <section className="mb-8 rounded-2xl border border-border bg-card p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-2xl font-bold">Recent customer proof photos</h2>
-                <span className="text-xs text-muted-foreground">Reported images are moderated</span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {proofReviewsWithImages.map((review) => {
-                  const imageUrl = getImageUrl(review.proof_image_url) || "";
-                  const reportSubject = encodeURIComponent(`Report review proof image (${review.id})`);
-                  const reportBody = encodeURIComponent(
-                    `Store: ${store.name}\nStore ID: ${store.id}\nReview ID: ${review.id}\nSource: ${review.source}\nReason: `,
-                  );
-
-                  return (
-                    <article key={`${review.source}-${review.id}`} className="overflow-hidden rounded-xl border border-border">
-                      <img
-                        src={imageUrl}
-                        alt={`Proof shared by ${review.reviewer_name}`}
-                        className="h-44 w-full object-cover"
-                      />
-                      <div className="space-y-2 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold">{review.reviewer_name}</p>
-                          <span className="text-xs text-muted-foreground">★ {review.rating.toFixed(1)}</span>
-                        </div>
-                        {review.staff_name && (
-                          <p className="text-xs text-muted-foreground">for {review.staff_name}</p>
-                        )}
-                        {review.body && <p className="line-clamp-3 text-xs text-muted-foreground">{review.body}</p>}
-                        <a
-                          href={`mailto:helplokal@gmail.com?subject=${reportSubject}&body=${reportBody}`}
-                          className="inline-flex text-xs font-medium text-primary hover:underline"
-                        >
-                          Report image
-                        </a>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+          {visibleSectionOrder.map((sectionKey) => sectionBlocks[sectionKey]).filter(Boolean)}
 
           {/* Buy / book section */}
           <div className="mb-8 rounded-2xl border border-border bg-card p-6">
             {isBookable(store.category, store.selling_mode) ? (
               <div className="space-y-4">
-                <h2 className="font-display text-2xl font-bold">Book with this store</h2>
+                <h2 className="text-2xl font-bold">Book with this store</h2>
                 {bookingDepositDue && (
                   <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
                     <p className="font-semibold text-amber-900">✅ Booking request sent!</p>
@@ -1343,7 +1628,7 @@ function StoreDetail() {
                           <SelectContent>
                             {products.map((p) => (
                               <SelectItem key={p.name} value={p.name}>
-                                {p.name} — {currencySymbol}
+                                {p.name} - {currencySymbol}
                                 {p.price.toFixed(2)}
                               </SelectItem>
                             ))}
@@ -1379,11 +1664,9 @@ function StoreDetail() {
                             return (
                               <option key={m.id} value={m.id} disabled={atCapacity}>
                                 {m.name}
-                                {r
-                                  ? ` · ★ ${r.avg.toFixed(1)} (${r.count} review${r.count !== 1 ? "s" : ""})`
-                                  : ""}
-                                {` · ${dayLabel}`}
-                                {atCapacity ? " · Full on selected day" : ""}
+                                {r ? ` - ${r.avg.toFixed(1)} (${r.count} review${r.count !== 1 ? "s" : ""})` : ""}
+                                {` - ${dayLabel}`}
+                                {atCapacity ? " - Full on selected day" : ""}
                               </option>
                             );
                           })}
@@ -1427,13 +1710,7 @@ function StoreDetail() {
                         }}
                       />
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Booking days:{" "}
-                        {availableDays
-                          .map(
-                            (a) =>
-                              `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`,
-                          )
-                          .join(", ")}
+                        Booking days: {availableDays.map((a) => `${DAY_LABELS[a.day_of_week]} ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`).join(", ")}
                       </p>
                     </div>
                     {bookDate && (
@@ -1443,17 +1720,15 @@ function StoreDetail() {
                         </p>
                         {loadingSlots ? (
                           <div className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Loading slots…
+                            <Loader2 className="h-4 w-4 animate-spin" /> Loading slots...
                           </div>
                         ) : (
                           (() => {
-                            const availableSlots = freeSlots.filter(
-                              (s) => !slotStatus[s]?.disabled,
-                            );
+                            const availableSlots = freeSlots.filter((s) => !slotStatus[s]?.disabled);
                             if (availableSlots.length === 0)
                               return (
                                 <p className="mt-1 text-sm text-amber-600">
-                                  No available slots on this day — try another date.
+                                  No available slots on this day - try another date.
                                 </p>
                               );
                             return (
@@ -1465,18 +1740,10 @@ function StoreDetail() {
                                   {freeSlots.map((slot) => {
                                     const status = slotStatus[slot];
                                     return (
-                                      <SelectItem
-                                        key={slot}
-                                        value={slot}
-                                        disabled={status.disabled}
-                                      >
+                                      <SelectItem key={slot} value={slot} disabled={status.disabled}>
                                         {slot}
-                                        {status.disabled && status.reason === "full"
-                                          ? " (Full)"
-                                          : ""}
-                                        {status.disabled && status.reason === "past"
-                                          ? " (Passed)"
-                                          : ""}
+                                        {status.disabled && status.reason === "full" ? " (Full)" : ""}
+                                        {status.disabled && status.reason === "past" ? " (Passed)" : ""}
                                       </SelectItem>
                                     );
                                   })}
@@ -1526,7 +1793,7 @@ function StoreDetail() {
                     </div>
                     <div className="sm:col-span-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Email (optional — confirmations and fallback updates)
+                        Email (optional - confirmations and fallback updates)
                       </p>
                       <Input
                         value={bookEmail}
@@ -1644,7 +1911,8 @@ function StoreDetail() {
                           (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment)) ||
                           !storePublished
                         }
-                        className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                        className={`w-full ${storeButtonRadius} shadow-warm hover:opacity-95`}
+                        style={primaryButtonStyle}
                       >
                         {submittingBooking ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1663,7 +1931,7 @@ function StoreDetail() {
               </div>
             ) : (
               <div className="space-y-4">
-                <h2 className="font-display text-2xl font-bold">Buy from this store</h2>
+                <h2 className="text-2xl font-bold">Buy from this store</h2>
                 {products.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No products listed yet. Use phone or social links above to enquire.
@@ -1886,7 +2154,8 @@ function StoreDetail() {
                             !customerPhone.trim() ||
                             !storePublished
                           }
-                          className="w-full bg-gradient-primary text-primary-foreground shadow-warm hover:opacity-95"
+                          className={`w-full ${storeButtonRadius} shadow-warm hover:opacity-95`}
+                          style={primaryButtonStyle}
                         >
                           {placingOrder ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1911,7 +2180,7 @@ function StoreDetail() {
           <div className="grid gap-6 md:grid-cols-2">
             {/* Contact & Location */}
             <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
-              <h2 className="font-display text-xl font-bold">
+              <h2 className="text-xl font-bold">
                 {isTravelServiceStore ? "Service details" : "Visit us"}
               </h2>
 
@@ -1942,7 +2211,7 @@ function StoreDetail() {
                 )
               )}
 
-              {store.hours && (
+              {showHours && store.hours && (
                 <div className="flex gap-3">
                   <Clock className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                   <div>
@@ -2070,58 +2339,61 @@ function StoreDetail() {
             </div>
 
             {/* Social links */}
-            <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
-              <h2 className="font-display text-xl font-bold">Connect</h2>
+            {showSocials && (
+              <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
+                <h2 className="text-xl font-bold">Connect</h2>
 
-              {websiteHref && (
-                <a
-                  href={websiteHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
-                >
-                  <Globe className="h-5 w-5 shrink-0 text-primary mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Website</p>
-                    <p className="text-sm text-primary hover:underline truncate">{websiteHref}</p>
-                  </div>
-                </a>
-              )}
+                {websiteHref && (
+                  <a
+                    href={websiteHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex gap-3 rounded-lg p-3 transition-colors hover:bg-secondary"
+                  >
+                    <Globe className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Website</p>
+                      <p className="truncate text-sm text-primary hover:underline">{websiteHref}</p>
+                    </div>
+                  </a>
+                )}
 
-              {instagramHref && (
-                <a
-                  href={instagramHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
-                >
-                  <span className="text-xl mt-0.5">📷</span>
-                  <div>
-                    <p className="text-sm font-medium">Instagram</p>
-                    <p className="text-sm text-primary hover:underline truncate">Open profile</p>
-                  </div>
-                </a>
-              )}
+                {instagramHref && (
+                  <a
+                    href={instagramHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex gap-3 rounded-lg p-3 transition-colors hover:bg-secondary"
+                  >
+                    <span className="mt-0.5 text-xl">📷</span>
+                    <div>
+                      <p className="text-sm font-medium">Instagram</p>
+                      <p className="truncate text-sm text-primary hover:underline">Open profile</p>
+                    </div>
+                  </a>
+                )}
 
-              {tiktokHref && (
-                <a
-                  href={tiktokHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex gap-3 rounded-lg hover:bg-secondary p-3 transition-colors"
-                >
-                  <span className="text-xl mt-0.5">🎵</span>
-                  <div>
-                    <p className="text-sm font-medium">TikTok</p>
-                    <p className="text-sm text-primary hover:underline truncate">Open profile</p>
-                  </div>
-                </a>
-              )}
+                {tiktokHref && (
+                  <a
+                    href={tiktokHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex gap-3 rounded-lg p-3 transition-colors hover:bg-secondary"
+                  >
+                    <span className="mt-0.5 text-xl">🎵</span>
+                    <div>
+                      <p className="text-sm font-medium">TikTok</p>
+                      <p className="truncate text-sm text-primary hover:underline">Open profile</p>
+                    </div>
+                  </a>
+                )}
 
-              {!websiteHref && !instagramHref && !tiktokHref && (
-                <p className="text-sm text-muted-foreground">No social links available yet.</p>
-              )}
-            </div>
+                {!websiteHref && !instagramHref && !tiktokHref && (
+                  <p className="text-sm text-muted-foreground">No social links available yet.</p>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* CTA */}

@@ -450,6 +450,16 @@ export function StoreDialog({
 
   if (!store) return null;
 
+  const storePrimaryColor = store.brand_primary_color || "#b42318";
+  const storeAccentColor = store.brand_accent_color || "#f97316";
+  const storeFontClass =
+    store.font_preset === "sans"
+      ? "font-sans"
+      : store.font_preset === "mono"
+        ? "font-mono"
+        : "font-display";
+  const primaryButtonStyle = { background: storePrimaryColor, color: "#fff" };
+
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
   const isBodyContactStore = isBodyContactService(store.category, store.subcategory);
@@ -1026,25 +1036,42 @@ export function StoreDialog({
         if (!o) setTimeout(reset, 200);
       }}
     >
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0">
+      <DialogContent className={`max-h-[90vh] max-w-2xl overflow-y-auto p-0 ${storeFontClass}`}>
         <div className="relative h-56 overflow-hidden rounded-t-lg">
           <img src={store.image} alt={store.name} className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+          {store.logo_url && (
+            <div className="absolute bottom-4 left-4 z-10 h-12 w-12 overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm">
+              <img
+                src={getImageUrl(store.logo_url) || ""}
+                alt={`${store.name} logo`}
+                className="h-full w-full object-contain p-0.5"
+              />
+            </div>
+          )}
           <div className="absolute bottom-4 left-6 right-6">
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className="rounded-full bg-background/90 px-2.5 py-1 font-medium backdrop-blur">
-                {store.origin}
-              </span>
-              <span className="rounded-full bg-background/90 px-2.5 py-1 font-medium backdrop-blur">
+            <div className={`mb-2 flex items-center gap-2 text-xs${store.logo_url ? " pl-14" : ""}`}>
+              <span
+                className="rounded-full px-2.5 py-1 font-medium backdrop-blur"
+                style={{ backgroundColor: `${storePrimaryColor}22`, color: storePrimaryColor, border: `1px solid ${storePrimaryColor}44` }}
+              >
                 {store.category}
               </span>
+              {store.origin && (
+                <span
+                  className="rounded-full px-2.5 py-1 font-medium backdrop-blur"
+                  style={{ backgroundColor: `${storeAccentColor}22`, color: storeAccentColor, border: `1px solid ${storeAccentColor}44` }}
+                >
+                  {store.origin}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         <div className="px-6 pb-6">
           <DialogHeader className="text-left">
-            <DialogTitle className="font-display text-3xl">{store.name}</DialogTitle>
+            <DialogTitle className="text-3xl">{store.name}</DialogTitle>
             <DialogDescription className="text-base">{store.description}</DialogDescription>
             <div className="pt-2">
               <VerificationBadge
@@ -1097,10 +1124,11 @@ export function StoreDialog({
           <div className="mt-3 flex items-center gap-3">
             <Button
               size="sm"
-              variant={isFollowing ? "default" : "outline"}
-              className={isFollowing ? "bg-primary text-primary-foreground gap-1.5" : "gap-1.5"}
+              variant="outline"
+              className="gap-1.5"
               onClick={handleToggleFollow}
               disabled={followLoading}
+              style={isFollowing ? primaryButtonStyle : { borderColor: storePrimaryColor, color: storePrimaryColor }}
             >
               {followLoading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1339,7 +1367,7 @@ export function StoreDialog({
                       )}
                       {store.products.length > 0 && (
                         <>
-                          <h4 className="mt-6 font-display text-xl font-bold">Services</h4>
+                          <h4 className="mt-6 text-xl font-bold">Services</h4>
                           <div className="mt-3 divide-y divide-border rounded-xl border border-border">
                             {store.products.map((p) => (
                               <div
@@ -1703,7 +1731,7 @@ export function StoreDialog({
                     </>
                   ) : (
                     <>
-                      <h4 className="mt-6 font-display text-xl font-bold">Available products</h4>
+                      <h4 className="mt-6 text-xl font-bold">Available products</h4>
                       <div className="mt-3 divide-y divide-border rounded-xl border border-border">
                         {store.products.map((p) => {
                           const q = qty[p.name] ?? 0;
@@ -1854,7 +1882,7 @@ export function StoreDialog({
                   {/* Reviews section */}
                   <div className="mt-6">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-display text-lg font-bold">
+                      <h4 className="text-lg font-bold">
                         {storeReviews.length > 0
                           ? `Reviews (${storeReviews.length})`
                           : "No reviews yet"}
@@ -2004,7 +2032,7 @@ export function StoreDialog({
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">
                           Total
                         </div>
-                        <div className="font-display text-2xl font-bold">
+                        <div className="text-2xl font-bold">
                           {currencySymbol}
                           {total.toFixed(2)}
                         </div>
@@ -2032,7 +2060,7 @@ export function StoreDialog({
               >
                 <ArrowLeft className="h-3 w-3" /> Back to products
               </button>
-              <h4 className="mt-2 font-display text-xl font-bold">Your details</h4>
+              <h4 className="mt-2 text-xl font-bold">Your details</h4>
               <p className="text-sm text-muted-foreground">
                 The merchant will message you to confirm pickup or local delivery.
               </p>
@@ -2202,7 +2230,7 @@ export function StoreDialog({
                     Bank transfer only
                   </span>
                 </div>
-                <h4 className="font-display text-2xl font-bold">
+                <h4 className="text-2xl font-bold">
                   Send {currencySymbol}
                   {bookingDepositDue
                     ? bookingDepositDue.amount.toFixed(2)

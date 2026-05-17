@@ -2,7 +2,7 @@ import { useState } from "react";
 import { MapPin, Star } from "lucide-react";
 import type { Store } from "@/data/stores";
 import { VerificationBadge } from "./VerificationBadge";
-import { buildInstagramUrl, buildTikTokUrl, isBodyContactService } from "@/lib/utils";
+import { buildInstagramUrl, buildTikTokUrl, isBodyContactService, getImageUrl } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,11 @@ export function StoreCard({ store, onClick }: { store: Store; onClick: () => voi
             height={600}
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
           />
+          {store.logo_url && (
+            <div className="absolute bottom-3 left-3 z-10 h-10 w-10 overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm">
+              <img src={getImageUrl(store.logo_url) || ""} alt={`${store.name} logo`} className="h-full w-full object-contain p-0.5" />
+            </div>
+          )}
           <div className="absolute left-3 top-3 flex items-center gap-2">
             <div className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium backdrop-blur">
               {store.origin}
