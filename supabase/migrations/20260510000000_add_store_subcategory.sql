@@ -32,8 +32,7 @@ begin
             'Skincare Products',
             'Hair Products',
             'Cosmetics',
-            'Tools & Accessories',
-            'Fragrances',
+            'Lashes',
             'Body Care'
           ]::text[])
         )

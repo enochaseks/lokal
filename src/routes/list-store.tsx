@@ -46,6 +46,8 @@ import {
   REGION_BANK,
   DEFAULT_BANK,
   isStoreBookable,
+  isModeConfigurableCategory,
+  getHairBeautyModeForSubcategory,
   getCategorySubcategories,
   isValidStoreSubcategory,
 } from "@/data/stores";
@@ -162,7 +164,13 @@ export const Route = createFileRoute("/list-store")({
 
 const CATEGORIES = LIVE_CATEGORIES;
 const ORIGINS = LIVE_ORIGINS;
-const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
+const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Body Arts & Crafts"]);
+
+function requiresPayAtStoreFulfillment(category: string, sellingMode?: SellingMode | null): boolean {
+  if (PAY_AT_STORE_ONLY_CATEGORIES.has(category)) return true;
+  if (category === "Hair & Beauty") return isStoreBookable(category, sellingMode);
+  return false;
+}
 
 function isValidImageReference(value: string) {
   if (!value) return true;
@@ -467,7 +475,7 @@ function ListStorePage() {
   );
   const [staff, setStaff] = useState<StaffDraft[]>([]);
   const isServiceStore = isStoreBookable(store.category, store.selling_mode);
-  const forcePayAtStore = PAY_AT_STORE_ONLY_CATEGORIES.has(store.category);
+  const forcePayAtStore = requiresPayAtStoreFulfillment(store.category, store.selling_mode);
   const requiresFixedAddress = !isServiceStore || store.location_type === "salon";
 
   useEffect(() => {
@@ -737,7 +745,7 @@ function ListStorePage() {
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
         fulfillment:
-          PAY_AT_STORE_ONLY_CATEGORIES.has(parsedStore.category)
+          requiresPayAtStoreFulfillment(parsedStore.category, store.selling_mode)
             ? "pay_at_store"
             : parsedStore.fulfillment,
         delivery_fee_gbp:
@@ -749,7 +757,7 @@ function ListStorePage() {
         timezone: parsedStore.timezone,
         postcode: requiresFixedAddress ? toNullable(parsedStore.postcode) : null,
         location_type: isServiceStore ? store.location_type : null,
-        selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
+        selling_mode: isModeConfigurableCategory(store.category) ? store.selling_mode : null,
         subcategory: parsedStore.subcategory?.trim() ? parsedStore.subcategory.trim() : null,
         minimum_age: parsedStore.minimum_age ?? null,
         tattoo_portfolio_url: parsedStore.tattoo_portfolio_url?.trim()
@@ -1020,7 +1028,7 @@ function ListStorePage() {
                       setStore((prev) => {
                         const nextCategory = v as (typeof CATEGORIES)[number];
                         const nextMode: SellingMode =
-                          nextCategory === "Clothes & Fashion"
+                          isModeConfigurableCategory(nextCategory)
                             ? prev.selling_mode
                             : isStoreBookable(nextCategory)
                               ? "services"
@@ -1043,7 +1051,7 @@ function ListStorePage() {
                         return {
                           ...prev,
                           category: nextCategory,
-                          fulfillment: PAY_AT_STORE_ONLY_CATEGORIES.has(nextCategory)
+                          fulfillment: requiresPayAtStoreFulfillment(nextCategory, nextMode)
                             ? "pay_at_store"
                             : prev.fulfillment,
                           subcategory: nextSubcategory,
@@ -1100,12 +1108,20 @@ function ListStorePage() {
                     onValueChange={(v) =>
                       setStore((s) => {
                         const nextSubcategory = v === "none" ? "" : v;
+                        const nextMode =
+                          s.category === "Hair & Beauty"
+                            ? getHairBeautyModeForSubcategory(nextSubcategory)
+                            : s.selling_mode;
                         const keepCertificate =
                           s.category === "Groceries" && nextSubcategory === "Meat & Fish";
                         const keepTattooFields = isBodyArtsArtistStore(s.category, nextSubcategory);
                         return {
                           ...s,
                           subcategory: nextSubcategory,
+                          selling_mode: nextMode,
+                          fulfillment: requiresPayAtStoreFulfillment(s.category, nextMode)
+                            ? "pay_at_store"
+                            : s.fulfillment,
                           health_safety_certificate_url: keepCertificate
                             ? s.health_safety_certificate_url
                             : "",
@@ -1130,6 +1146,12 @@ function ListStorePage() {
                       )}
                     </SelectContent>
                   </Select>
+                  {store.category === "Hair & Beauty" && store.selling_mode === "products" && (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Selling wigs, bundles, extensions, or other hair products? Choose the best
+                      product subcategory here.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1297,7 +1319,7 @@ function ListStorePage() {
                 </div>
               )}
 
-              {store.category === "Clothes & Fashion" && (
+              {isModeConfigurableCategory(store.category) && (
                 <div>
                   <Label>How do you want to sell?</Label>
                   <Select
@@ -1306,7 +1328,7 @@ function ListStorePage() {
                       setStore((s) => {
                         const nextMode = v as SellingMode;
                         const nextSubcategory = getCategorySubcategories(
-                          "Clothes & Fashion",
+                          s.category,
                           nextMode,
                         ).includes(s.subcategory)
                           ? s.subcategory
@@ -1326,8 +1348,7 @@ function ListStorePage() {
                     </SelectContent>
                   </Select>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    Choose products for ready stock, or services for custom manufacturing and
-                    bookings.
+                    Choose products for ready stock, or services for appointment-based work.
                   </p>
                 </div>
               )}

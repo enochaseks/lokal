@@ -58,8 +58,7 @@ alter table public.stores
         'Skincare Products',
         'Hair Products',
         'Cosmetics',
-        'Tools & Accessories',
-        'Fragrances',
+        'Lashes',
         'Body Care'
       ]::text[])
     )

@@ -12,7 +12,20 @@ export const LIVE_CATEGORIES = [
 ] as const;
 
 /** Categories that are always service/booking based. */
-export const BOOKABLE_CATEGORIES = ["Barbers", "Hair & Beauty", "Body Arts & Crafts"] as const;
+export const BOOKABLE_CATEGORIES = ["Barbers", "Body Arts & Crafts"] as const;
+
+/** Categories where merchants can choose products vs services. */
+export const MODE_CONFIGURABLE_CATEGORIES = ["Clothes & Fashion", "Hair & Beauty"] as const;
+
+/** Hair & Beauty subcategories that are product-based (not service bookings). */
+export const HAIR_BEAUTY_PRODUCT_SUBCATEGORIES = ["Wigs, Bundles & Extensions"] as const;
+
+/** Returns the selling mode driven by the chosen Hair & Beauty subcategory. */
+export function getHairBeautyModeForSubcategory(subcategory?: string | null): SellingMode {
+  return (HAIR_BEAUTY_PRODUCT_SUBCATEGORIES as readonly string[]).includes(subcategory ?? "")
+    ? "products"
+    : "services";
+}
 
 export const CLOTHES_FASHION_PRODUCT_SUBCATEGORIES = [
   "Men's Wear",
@@ -68,13 +81,13 @@ export const CATEGORY_SUBCATEGORIES = {
     "Natural Hair Care",
     "Lashes & Brows",
     "Nails",
+    "Wigs, Bundles & Extensions",
   ],
   "Beauty Store": [
     "Skincare Products",
     "Hair Products",
     "Cosmetics",
-    "Tools & Accessories",
-    "Fragrances",
+    "Lashes",
     "Body Care",
   ],
   "Body Arts & Crafts": ["Tattooing", "Piercing", "Henna", "Body Painting", "Craft Workshops"],
@@ -90,6 +103,10 @@ export function getCategorySubcategories(
     return [...CLOTHES_FASHION_PRODUCT_SUBCATEGORIES, ...CLOTHES_FASHION_SERVICE_SUBCATEGORIES];
   }
   return CATEGORY_SUBCATEGORIES[category as keyof typeof CATEGORY_SUBCATEGORIES] ?? [];
+}
+
+export function isModeConfigurableCategory(category: string): boolean {
+  return (MODE_CONFIGURABLE_CATEGORIES as readonly string[]).includes(category);
 }
 
 export function isValidStoreSubcategory(
@@ -257,6 +274,9 @@ export function resolveStoreMode(category: string, sellingMode?: string | null):
   if (category === "Clothes & Fashion") {
     return sellingMode === "services" ? "services" : "products";
   }
+  if (category === "Hair & Beauty") {
+    return sellingMode === "products" ? "products" : "services";
+  }
   if ((BOOKABLE_CATEGORIES as readonly string[]).includes(category)) {
     return "services";
   }
@@ -269,7 +289,7 @@ export function isStoreBookable(category: string, sellingMode?: string | null): 
 
 export const LIVE_ORIGINS = [
   // Diaspora identities
-  "✊ African American / Black American",
+  "✊🏿✊🏾✊🏽 African American / Black American",
   "🇬🇧 Black British",
   "🇬🇧 Afro-Caribbean British",
   "🌍 African Diaspora",

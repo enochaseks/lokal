@@ -65,6 +65,9 @@ import {
   REGION_ADDRESS,
   DEFAULT_AREA,
   isStoreBookable,
+  isModeConfigurableCategory,
+  resolveStoreMode,
+  getHairBeautyModeForSubcategory,
   getCategorySubcategories,
 } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
@@ -320,14 +323,19 @@ type VerificationTier = "verified" | "online_verified";
 
 const STRICT_VERIFICATION_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
 const TRUSTED_VERIFICATION_TIERS = new Set<VerificationTier>(["verified", "online_verified"]);
-const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
+const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Body Arts & Crafts"]);
 
 function requiresTrustedVerificationTier(store: Pick<StoreRow, "category">): boolean {
   return STRICT_VERIFICATION_CATEGORIES.has(store.category);
 }
 
-function requiresPayAtStoreFulfillment(category: string): boolean {
-  return PAY_AT_STORE_ONLY_CATEGORIES.has(category);
+function requiresPayAtStoreFulfillment(
+  category: string,
+  sellingMode?: SellingMode | null,
+): boolean {
+  if (PAY_AT_STORE_ONLY_CATEGORIES.has(category)) return true;
+  if (category === "Hair & Beauty") return isStoreBookable(category, sellingMode);
+  return false;
 }
 
 type PostRow = {
@@ -465,7 +473,7 @@ function EditStoreDialog({
     instagram_handle: store.instagram_handle ?? "",
     tiktok_handle: store.tiktok_handle ?? "",
     website_url: store.website_url ?? "",
-    fulfillment: requiresPayAtStoreFulfillment(store.category)
+    fulfillment: requiresPayAtStoreFulfillment(store.category, store.selling_mode)
       ? "pay_at_store"
       : (store.fulfillment ?? "collection"),
     delivery_fee_gbp:
@@ -478,7 +486,7 @@ function EditStoreDialog({
     location_type: (store as any).location_type ?? "salon",
     region: store.region ?? "GB",
     currency: store.currency ?? "GBP",
-    selling_mode: store.selling_mode === "services" ? "services" : "products",
+    selling_mode: resolveStoreMode(store.category, store.selling_mode),
   });
   const [products, setProducts] = useState<
     Array<{
@@ -515,7 +523,7 @@ function EditStoreDialog({
     image_url: string;
   }> | null>(null);
   const isServiceStore = isStoreBookable(form.category, form.selling_mode);
-  const forcePayAtStore = requiresPayAtStoreFulfillment(form.category);
+  const forcePayAtStore = requiresPayAtStoreFulfillment(form.category, form.selling_mode);
   const isTattooStore = form.category === "Body Arts & Crafts" && form.subcategory === "Tattooing";
   const isAdminUser = roles.includes("admin") || isAdminEmail(user?.email);
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
@@ -727,7 +735,7 @@ function EditStoreDialog({
           phone: normalizePhoneForAlerts(form.phone, phoneCountry) ?? n(form.phone),
           merchant_sms_alerts: form.merchant_sms_alerts,
           merchant_email_alerts: form.merchant_email_alerts,
-          fulfillment: requiresPayAtStoreFulfillment(form.category)
+          fulfillment: requiresPayAtStoreFulfillment(form.category, form.selling_mode)
             ? "pay_at_store"
             : form.fulfillment,
           delivery_fee_gbp:
@@ -739,7 +747,7 @@ function EditStoreDialog({
           refund_policy: n(form.refund_policy),
           cancellation_policy: n(form.cancellation_policy),
           location_type: isServiceStore ? form.location_type || null : null,
-          selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
+          selling_mode: isModeConfigurableCategory(form.category) ? form.selling_mode : null,
           instagram_handle: instagramHandle,
           tiktok_handle: tiktokHandle,
           website_url: websiteUrl,
@@ -832,7 +840,7 @@ function EditStoreDialog({
         instagram_handle: instagramHandle,
         tiktok_handle: tiktokHandle,
         website_url: websiteUrl,
-        fulfillment: requiresPayAtStoreFulfillment(form.category)
+        fulfillment: requiresPayAtStoreFulfillment(form.category, form.selling_mode)
           ? "pay_at_store"
           : form.fulfillment,
         delivery_fee_gbp:
@@ -846,7 +854,7 @@ function EditStoreDialog({
         bank_sort_code: n(form.bank_sort_code),
         region: form.region,
         currency: form.currency,
-        selling_mode: form.category === "Clothes & Fashion" ? form.selling_mode : null,
+        selling_mode: isModeConfigurableCategory(form.category) ? form.selling_mode : null,
       });
       toast.success("Store updated");
       onClose();
@@ -887,7 +895,7 @@ function EditStoreDialog({
                     setForm((f) => {
                       const nextCategory = v as Category;
                       const nextMode: SellingMode =
-                        nextCategory === "Clothes & Fashion"
+                        isModeConfigurableCategory(nextCategory)
                           ? f.selling_mode
                           : isStoreBookable(nextCategory)
                             ? "services"
@@ -905,7 +913,7 @@ function EditStoreDialog({
                       return {
                         ...f,
                         category: nextCategory,
-                        fulfillment: requiresPayAtStoreFulfillment(nextCategory)
+                        fulfillment: requiresPayAtStoreFulfillment(nextCategory, nextMode)
                           ? "pay_at_store"
                           : f.fulfillment,
                         subcategory: nextSubcategory,
@@ -977,12 +985,20 @@ function EditStoreDialog({
                     onValueChange={(v) =>
                       setForm((f) => {
                         const nextSubcategory = v === "none" ? "" : v;
+                        const nextMode =
+                          f.category === "Hair & Beauty"
+                            ? getHairBeautyModeForSubcategory(nextSubcategory)
+                            : f.selling_mode;
                         const keepCertificate =
                           f.category === "Groceries" && nextSubcategory === "Meat & Fish";
                         const keepTattooFields = isBodyContactService(f.category, nextSubcategory);
                         return {
                           ...f,
                           subcategory: nextSubcategory,
+                          selling_mode: nextMode,
+                          fulfillment: requiresPayAtStoreFulfillment(f.category, nextMode)
+                            ? "pay_at_store"
+                            : f.fulfillment,
                           minimum_age: keepTattooFields ? f.minimum_age || "18" : "18",
                           tattoo_portfolio_url: keepTattooFields ? f.tattoo_portfolio_url : "",
                           tattoo_license_url: keepTattooFields ? f.tattoo_license_url : "",
@@ -1010,6 +1026,12 @@ function EditStoreDialog({
                       )}
                     </SelectContent>
                   </Select>
+                  {form.category === "Hair & Beauty" && form.selling_mode === "products" && (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Selling wigs, bundles, extensions, or other hair products? Choose the best
+                      product subcategory here.
+                    </p>
+                  )}
                   {subcategoryLocked && (
                     <p className="mt-1.5 text-xs text-muted-foreground">
                       Subcategory is locked after verification while your store is live.
@@ -1151,7 +1173,7 @@ function EditStoreDialog({
                   )}
                 </>
               )}
-              {form.category === "Clothes & Fashion" && (
+              {isModeConfigurableCategory(form.category) && (
                 <div className="sm:col-span-2">
                   <Label>How do you want to sell?</Label>
                   <Select
@@ -1160,7 +1182,7 @@ function EditStoreDialog({
                       setForm((f) => {
                         const nextMode = v as SellingMode;
                         const nextSubcategory = getCategorySubcategories(
-                          "Clothes & Fashion",
+                          f.category,
                           nextMode,
                         ).includes(f.subcategory)
                           ? f.subcategory

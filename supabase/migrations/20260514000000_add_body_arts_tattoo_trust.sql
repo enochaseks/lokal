@@ -46,7 +46,8 @@ ALTER TABLE public.stores
         'Locs',
         'Natural Hair Care',
         'Lashes & Brows',
-        'Nails'
+        'Nails',
+        'Wigs, Bundles & Extensions'
       ]::text[])
     )
     OR (
@@ -55,8 +56,7 @@ ALTER TABLE public.stores
         'Skincare Products',
         'Hair Products',
         'Cosmetics',
-        'Tools & Accessories',
-        'Fragrances',
+        'Lashes',
         'Body Care'
       ]::text[])
     )
