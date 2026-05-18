@@ -37,6 +37,7 @@
     "clsx": "^2.1.1",
     "libphonenumber-js": "^1.12.42",
     "lucide-react": "^0.575.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",

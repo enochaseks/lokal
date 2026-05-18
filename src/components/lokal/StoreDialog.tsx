@@ -948,6 +948,11 @@ export function StoreDialog({
 
     setDownloadingCard(true);
     try {
+      const highlightItems = (store.products ?? []).slice(0, 3).map((item) => ({
+        name: item.name,
+        price: item.price,
+        unit: item.unit,
+      }));
       const downloaded = await downloadStoreShareCard({
         storeName: store.name,
         description: store.description,
@@ -958,12 +963,25 @@ export function StoreDialog({
         primaryColor: storePrimaryColor,
         accentColor: storeAccentColor,
         shareUrl,
+        verificationTier: store.verification_tier,
+        sellingMode: store.selling_mode,
+        highlights: highlightItems,
+        city: store.city,
+        websiteUrl: store.websiteUrl,
+        instagramHandle: store.instagramHandle,
+        phone: store.phone,
+        campaignCode: store.id.slice(0, 8).toUpperCase(),
+        campaignSource: "store_card",
+        campaignMedium: "social_share",
+        campaignName: "merchant_store_card",
       });
       if (!downloaded) {
         toast.error("Could not create store card");
         return;
       }
-      toast.success("Store card downloaded");
+      toast.success("Store cards downloaded", {
+        description: "Story and square variants are ready.",
+      });
     } catch {
       toast.error("Could not create store card");
     } finally {
