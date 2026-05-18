@@ -17,6 +17,24 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@/assets/logo.png";
 
+const FOLLOWING_LAST_SEEN_PREFIX = "lokal:following:lastSeen:";
+const FOLLOWING_SEEN_EVENT = "lokal:following:seen";
+
+function getFollowingLastSeenKey(userId: string): string {
+  return `${FOLLOWING_LAST_SEEN_PREFIX}${userId}`;
+}
+
+function markFollowingSeenAt(userId: string, seenAt?: string): void {
+  if (typeof window === "undefined") return;
+  const timestamp = seenAt ?? new Date().toISOString();
+  window.localStorage.setItem(getFollowingLastSeenKey(userId), timestamp);
+  window.dispatchEvent(
+    new CustomEvent<{ userId: string; seenAt: string }>(FOLLOWING_SEEN_EVENT, {
+      detail: { userId, seenAt: timestamp },
+    }),
+  );
+}
+
 export function Navbar() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -55,8 +73,10 @@ export function Navbar() {
       return;
     }
 
+    const currentUserId = user.id;
+
     const readAndCheck = async () => {
-      const lastSeenRaw = window.localStorage.getItem(`lokal:following:lastSeen:${user.id}`);
+      const lastSeenRaw = window.localStorage.getItem(getFollowingLastSeenKey(currentUserId));
       const lastSeenIso =
         lastSeenRaw && !Number.isNaN(Date.parse(lastSeenRaw))
           ? new Date(lastSeenRaw).toISOString()
@@ -65,7 +85,7 @@ export function Navbar() {
       const { data: follows } = await (supabase as any)
         .from("store_follows")
         .select("store_id")
-        .eq("user_id", user.id);
+        .eq("user_id", currentUserId);
 
       const storeIds = (follows ?? []).map((f: any) => f.store_id) as string[];
       if (storeIds.length === 0) {
@@ -87,11 +107,24 @@ export function Navbar() {
     };
 
     void readAndCheck();
+
+    const onFollowingSeen = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string }>).detail;
+      if (detail?.userId === currentUserId) {
+        setHasNewFollowingPosts(false);
+      }
+    };
+
+    window.addEventListener(FOLLOWING_SEEN_EVENT, onFollowingSeen);
+
+    return () => {
+      window.removeEventListener(FOLLOWING_SEEN_EVENT, onFollowingSeen);
+    };
   }, [user?.id]);
 
   const markFollowingSeen = () => {
     if (!user?.id || typeof window === "undefined") return;
-    window.localStorage.setItem(`lokal:following:lastSeen:${user.id}`, new Date().toISOString());
+    markFollowingSeenAt(user.id);
     setHasNewFollowingPosts(false);
   };
 

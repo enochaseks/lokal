@@ -14,6 +14,20 @@ import { Toaster } from "@/components/ui/sonner";
 import { Heart } from "lucide-react";
 import storePlaceholder from "@/assets/store-grocery.jpg";
 
+const FOLLOWING_LAST_SEEN_PREFIX = "lokal:following:lastSeen:";
+const FOLLOWING_SEEN_EVENT = "lokal:following:seen";
+
+function markFollowingFeedSeen(userId: string, seenAt?: string): void {
+  if (typeof window === "undefined") return;
+  const timestamp = seenAt ?? new Date().toISOString();
+  window.localStorage.setItem(`${FOLLOWING_LAST_SEEN_PREFIX}${userId}`, timestamp);
+  window.dispatchEvent(
+    new CustomEvent<{ userId: string; seenAt: string }>(FOLLOWING_SEEN_EVENT, {
+      detail: { userId, seenAt: timestamp },
+    }),
+  );
+}
+
 type FollowRow = {
   store_id: string;
   created_at: string;
@@ -76,6 +90,7 @@ function FollowingPage() {
       if (ids.length === 0) {
         setStores([]);
         setPosts([]);
+        markFollowingFeedSeen(userId);
         setLoading(false);
         return;
       }
@@ -148,6 +163,14 @@ function FollowingPage() {
 
       setStores(orderedStores);
       setPosts((postRows ?? []) as PostRow[]);
+
+      const latestPostCreatedAt =
+        ((postRows ?? []) as PostRow[])
+          .map((post) => post.created_at)
+          .filter(Boolean)
+          .sort((a, b) => String(b).localeCompare(String(a)))[0] ?? null;
+      markFollowingFeedSeen(userId, latestPostCreatedAt ?? undefined);
+
       setLoading(false);
     })();
   }, []);
