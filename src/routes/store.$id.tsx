@@ -601,6 +601,7 @@ function StoreDetail() {
   const store = Route.useLoaderData() as StoreDetails;
   const [copied, setCopied] = useState(false);
   const [downloadingCard, setDownloadingCard] = useState(false);
+  const [showCardFormatPicker, setShowCardFormatPicker] = useState(false);
   const [reference, setReference] = useState(() => makeRef());
   const [storePublished, setStorePublished] = useState(store.published);
   const [revealBankDetails, setRevealBankDetails] = useState(false);
@@ -1236,7 +1237,7 @@ function StoreDetail() {
     );
   };
 
-  const handleDownloadStoreCard = async () => {
+  const handleDownloadStoreCard = async (format: "story" | "square" | "both") => {
     setDownloadingCard(true);
     try {
       const highlightItems = products.slice(0, 3).map((item) => ({
@@ -1265,6 +1266,7 @@ function StoreDetail() {
         campaignSource: "store_card",
         campaignMedium: "social_share",
         campaignName: "merchant_store_card",
+        formats: format === "both" ? ["story", "square"] : [format],
       });
       if (!downloaded) {
         toast.error("Could not create store card");
@@ -1277,6 +1279,7 @@ function StoreDetail() {
       toast.error("Could not create store card");
     } finally {
       setDownloadingCard(false);
+      setShowCardFormatPicker(false);
     }
   };
 
@@ -1688,7 +1691,7 @@ function StoreDetail() {
               </Button>
               <Button
                 variant="outline"
-                onClick={handleDownloadStoreCard}
+                onClick={() => setShowCardFormatPicker(true)}
                 disabled={downloadingCard}
                 className={`gap-2 ${storeButtonRadius}`}
               >
@@ -2656,6 +2659,31 @@ function StoreDetail() {
                 )}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCardFormatPicker} onOpenChange={setShowCardFormatPicker}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose a card to download</DialogTitle>
+            <DialogDescription>Pick the format you want.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button onClick={() => void handleDownloadStoreCard("story")} disabled={downloadingCard}>
+              Story
+            </Button>
+            <Button onClick={() => void handleDownloadStoreCard("square")} disabled={downloadingCard}>
+              Square
+            </Button>
+            <Button
+              className="sm:col-span-2"
+              variant="outline"
+              onClick={() => void handleDownloadStoreCard("both")}
+              disabled={downloadingCard}
+            >
+              Both
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

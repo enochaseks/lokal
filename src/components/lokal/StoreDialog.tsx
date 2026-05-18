@@ -278,6 +278,7 @@ export function StoreDialog({
   const [followCount, setFollowCount] = useState(0);
   const [copiedShare, setCopiedShare] = useState(false);
   const [downloadingCard, setDownloadingCard] = useState(false);
+  const [showCardFormatPicker, setShowCardFormatPicker] = useState(false);
 
   // Booking state (Barbers / Beauty)
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -940,7 +941,7 @@ export function StoreDialog({
     setTimeout(() => setCopiedShare(false), 2000);
   };
 
-  const handleDownloadStoreCard = async () => {
+  const handleDownloadStoreCard = async (format: "story" | "square" | "both") => {
     if (!store) return;
     const domain =
       typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
@@ -974,6 +975,7 @@ export function StoreDialog({
         campaignSource: "store_card",
         campaignMedium: "social_share",
         campaignName: "merchant_store_card",
+        formats: format === "both" ? ["story", "square"] : [format],
       });
       if (!downloaded) {
         toast.error("Could not create store card");
@@ -986,6 +988,7 @@ export function StoreDialog({
       toast.error("Could not create store card");
     } finally {
       setDownloadingCard(false);
+      setShowCardFormatPicker(false);
     }
   };
 
@@ -1318,7 +1321,7 @@ export function StoreDialog({
               size="sm"
               variant="outline"
               className="gap-1.5"
-              onClick={handleDownloadStoreCard}
+              onClick={() => setShowCardFormatPicker(true)}
               disabled={downloadingCard}
             >
               {downloadingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
@@ -2577,6 +2580,31 @@ export function StoreDialog({
                 )}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCardFormatPicker} onOpenChange={setShowCardFormatPicker}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Choose a card to download</DialogTitle>
+            <DialogDescription>Pick the format you want.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button onClick={() => void handleDownloadStoreCard("story")} disabled={downloadingCard}>
+              Story
+            </Button>
+            <Button onClick={() => void handleDownloadStoreCard("square")} disabled={downloadingCard}>
+              Square
+            </Button>
+            <Button
+              className="sm:col-span-2"
+              variant="outline"
+              onClick={() => void handleDownloadStoreCard("both")}
+              disabled={downloadingCard}
+            >
+              Both
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
