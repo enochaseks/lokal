@@ -48,7 +48,12 @@ function Index() {
   const [liveStores, setLiveStores] = useState<Store[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
   const [search, setSearch] = useState("");
-  const { city, loading: locationLoading } = useLocation();
+  const {
+    city,
+    loading: locationLoading,
+    error: locationError,
+    refreshLocation,
+  } = useLocation();
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [cityManuallySet, setCityManuallySet] = useState(false);
   const [showCityInput, setShowCityInput] = useState(false);
@@ -256,7 +261,7 @@ function Index() {
       const { data: rows } = await supabase
         .from("stores")
         .select(
-          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
+          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,logo_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
         )
         .eq("published", true)
         .order("created_at", { ascending: false });
@@ -317,6 +322,7 @@ function Index() {
             cancellation_policy: r.cancellation_policy || undefined,
             selling_mode: r.selling_mode ?? null,
             image: getImageUrl(r.image_url) || storePlaceholder,
+            logo_url: r.logo_url ?? null,
             description: r.description || "A new Lokal merchant.",
             instagramHandle: r.instagram_handle || undefined,
             tiktokHandle: r.tiktok_handle || undefined,
@@ -470,12 +476,32 @@ function Index() {
                       : "All locations"}
                 </span>
                 <button
+                  onClick={async () => {
+                    const result = await refreshLocation();
+                    setCityManuallySet(false);
+                    if (result.city) {
+                      setLocationFilter(result.city);
+                      setCityInputValue(result.city);
+                      setShowCityInput(false);
+                    }
+                  }}
+                  disabled={locationLoading}
+                  className="text-[10px] font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  {locationLoading ? "Detecting..." : "Use current location"}
+                </button>
+                <button
                   onClick={() => setShowCityInput((v) => !v)}
                   className="text-[10px] font-medium text-primary hover:underline"
                 >
                   {showCityInput ? "Cancel" : "Change city"}
                 </button>
               </div>
+              {locationError && !locationLoading && !locationFilter && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Could not auto-detect your location. Use current location to try again, or set a city manually.
+                </p>
+              )}
               {showCityInput && (
                 <form
                   className="mt-2 flex gap-2"

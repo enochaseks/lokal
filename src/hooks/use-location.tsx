@@ -4,6 +4,7 @@ type LocationState = {
   city: string | null;
   loading: boolean;
   error: string | null;
+  refreshLocation: () => Promise<GeoResult>;
 };
 
 type GeoResult = {
@@ -61,22 +62,31 @@ function getLocationErrorMessage(code?: number): string {
   return "Could not get location";
 }
 
-function resolveCityOnce(): Promise<GeoResult> {
-  if (cachedCity) {
-    return Promise.resolve({ city: cachedCity, error: null });
-  }
-
+function resolveCity(options?: { forceRefresh?: boolean }): Promise<GeoResult> {
+  const forceRefresh = options?.forceRefresh ?? false;
   const storedCity = readStoredCity();
-  if (storedCity) {
-    cachedCity = storedCity;
-    return Promise.resolve({ city: storedCity, error: null });
+  const fallbackCity = cachedCity ?? storedCity;
+
+  if (!forceRefresh) {
+    if (cachedCity) {
+      return Promise.resolve({ city: cachedCity, error: null });
+    }
+
+    if (storedCity) {
+      cachedCity = storedCity;
+      return Promise.resolve({ city: storedCity, error: null });
+    }
   }
 
   if (sharedLookupPromise) return sharedLookupPromise;
 
   sharedLookupPromise = new Promise<GeoResult>((resolve) => {
     if (!navigator.geolocation) {
-      resolve({ city: null, error: "Geolocation not supported" });
+      resolve(
+        fallbackCity
+          ? { city: fallbackCity, error: null }
+          : { city: null, error: "Geolocation not supported" },
+      );
       sharedLookupPromise = null;
       return;
     }
@@ -92,10 +102,14 @@ function resolveCityOnce(): Promise<GeoResult> {
         sharedLookupPromise = null;
       },
       (err) => {
-        resolve({ city: null, error: getLocationErrorMessage(err.code) });
+        resolve(
+          fallbackCity
+            ? { city: fallbackCity, error: null }
+            : { city: null, error: getLocationErrorMessage(err.code) },
+        );
         sharedLookupPromise = null;
       },
-      { timeout: 8000 },
+      { timeout: 8000, maximumAge: 0 },
     );
   });
 
@@ -103,24 +117,54 @@ function resolveCityOnce(): Promise<GeoResult> {
 }
 
 export function useLocation(): LocationState {
-  const [city, setCity] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [city, setCity] = useState<string | null>(cachedCity ?? readStoredCity());
+  const [loading, setLoading] = useState(city === null);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshLocation = async (): Promise<GeoResult> => {
+    setLoading(true);
+    const result = await resolveCity({ forceRefresh: true });
+    setCity(result.city);
+    setError(result.error);
+    setLoading(false);
+    return result;
+  };
 
   useEffect(() => {
     let cancelled = false;
 
-    void resolveCityOnce().then((result) => {
+    const applyResult = (result: GeoResult) => {
       if (cancelled) return;
       setCity(result.city);
       setError(result.error);
       setLoading(false);
-    });
+    };
+
+    const refreshLocation = () => {
+      void resolveCity({ forceRefresh: true }).then(applyResult);
+    };
+
+    refreshLocation();
+
+    const onFocus = () => {
+      refreshLocation();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshLocation();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
-  return { city, loading, error };
+  return { city, loading, error, refreshLocation };
 }

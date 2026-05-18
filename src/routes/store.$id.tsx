@@ -30,6 +30,7 @@ import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable, DEFAULT_STORE_SECT
 import type { StoreButtonStyle, StoreFontPreset, StoreSectionKey } from "@/data/stores";
 import type { Region, SellingMode } from "@/data/stores";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocation } from "@/hooks/use-location";
 import {
   buildInstagramUrl,
   buildTikTokUrl,
@@ -373,6 +374,28 @@ function makeRef() {
   );
 }
 
+function normalizeCityName(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isSameOrNearbyCity(userCity: string, storeCity: string): boolean {
+  const user = normalizeCityName(userCity);
+  const store = normalizeCityName(storeCity);
+  if (!user || !store) return false;
+  if (user === store) return true;
+  if (user.includes(store) || store.includes(user)) return true;
+
+  const userParts = user.split(" ");
+  const storeParts = store.split(" ");
+  const userCore = userParts[userParts.length - 1] ?? user;
+  const storeCore = storeParts[storeParts.length - 1] ?? store;
+  return userCore === storeCore;
+}
+
 function generateTimeSlots(startTime: string, endTime: string, durationMins: number): string[] {
   const slots: string[] = [];
   const [sh, sm] = startTime.split(":").map(Number);
@@ -599,6 +622,7 @@ function checkRateLimit(phone: string): { allowed: boolean; waitMins: number } {
 
 function StoreDetail() {
   const store = Route.useLoaderData() as StoreDetails;
+  const { city: userCity, loading: userCityLoading } = useLocation();
   const [copied, setCopied] = useState(false);
   const [downloadingCard, setDownloadingCard] = useState(false);
   const [showCardFormatPicker, setShowCardFormatPicker] = useState(false);
@@ -684,6 +708,28 @@ function StoreDetail() {
   const isTravelServiceStore =
     isBookable(store.category, store.selling_mode) &&
     (store.location_type === "travel" || store.location_type === "remote_and_travel");
+  const isRemoteServiceStore =
+    isBookable(store.category, store.selling_mode) &&
+    (store.location_type === "remote" || store.location_type === "remote_and_travel");
+
+  const hasCityMismatch =
+    !!userCity &&
+    !!store.city &&
+    !isSameOrNearbyCity(userCity, store.city);
+
+  const blocksBookingByLocation =
+    isBookable(store.category, store.selling_mode) &&
+    !isTravelServiceStore &&
+    !isRemoteServiceStore &&
+    hasCityMismatch;
+
+  const blocksOrderByLocation =
+    !isBookable(store.category, store.selling_mode) &&
+    orderFulfillment !== "delivery" &&
+    hasCityMismatch;
+
+  const showCrossCityBlock =
+    !userCityLoading && (blocksBookingByLocation || blocksOrderByLocation);
 
   const staffRatingMap = (() => {
     const sums: Record<string, { total: number; count: number }> = {};
@@ -1284,6 +1330,16 @@ function StoreDetail() {
   };
 
   const handlePlaceOrder = async () => {
+    if (blocksOrderByLocation) {
+      toast.error("This store does not currently serve your location", {
+        description:
+          userCity && store.city
+            ? `You're in ${userCity} and this store serves ${store.city}. You can't place an order here due to location.`
+            : "You can't place an order here due to location.",
+      });
+      return;
+    }
+
     if (cartItems.length === 0) {
       toast.error("Add at least one product");
       return;
@@ -1385,6 +1441,16 @@ function StoreDetail() {
   };
 
   const handleBook = async () => {
+    if (blocksBookingByLocation) {
+      toast.error("This store does not currently serve your location", {
+        description:
+          userCity && store.city
+            ? `You're in ${userCity} and this store serves ${store.city}. You can't book this store due to location.`
+            : "You can't book this store due to location.",
+      });
+      return;
+    }
+
     const normalizedBookPhone = normalizePhoneForAlerts(bookPhone, bookPhoneCountry);
     if (!normalizedBookPhone) {
       toast.error("Enter phone in international format", {
@@ -1535,6 +1601,21 @@ function StoreDetail() {
                 <p className="font-semibold text-destructive">This store is currently closed</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   The merchant has temporarily hidden this store. Ordering and booking are disabled.
+                </p>
+              </div>
+            </div>
+          )}
+          {showCrossCityBlock && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+              <span className="text-lg">📍</span>
+              <div>
+                <p className="font-semibold text-amber-900">
+                  This store is outside your current location
+                </p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  {userCity && store.city
+                    ? `You're browsing from ${userCity}, while this store is in ${store.city}. You can't ${isBookable(store.category, store.selling_mode) ? "book" : "shop"} with this store due to location.`
+                    : "You can't shop or book with this store due to location."}
                 </p>
               </div>
             </div>
@@ -2128,7 +2209,8 @@ function StoreDetail() {
                           (staffMembers.length > 0 &&
                             (!bookStaffId || (!!bookDate && availableStaffMembers.length === 0))) ||
                           (requiresAgeVerification && (!bookAgeConfirmed || !bookIdCommitment)) ||
-                          !storePublished
+                          !storePublished ||
+                          blocksBookingByLocation
                         }
                         className={`w-full ${storeButtonRadius} shadow-warm hover:opacity-95`}
                         style={primaryButtonStyle}
@@ -2142,6 +2224,11 @@ function StoreDetail() {
                       {!storePublished && (
                         <p className="mt-2 text-xs text-center text-destructive">
                           This store is currently closed.
+                        </p>
+                      )}
+                      {blocksBookingByLocation && (
+                        <p className="mt-2 text-xs text-center text-amber-700">
+                          Booking is unavailable because this store is outside your current city.
                         </p>
                       )}
                     </div>
@@ -2369,7 +2456,8 @@ function StoreDetail() {
                             cartItems.length === 0 ||
                             !customerName.trim() ||
                             !customerPhone.trim() ||
-                            !storePublished
+                            !storePublished ||
+                            blocksOrderByLocation
                           }
                           className={`w-full ${storeButtonRadius} shadow-warm hover:opacity-95`}
                           style={primaryButtonStyle}
@@ -2383,6 +2471,11 @@ function StoreDetail() {
                         {!storePublished && (
                           <p className="mt-2 text-xs text-center text-destructive">
                             This store is currently closed.
+                          </p>
+                        )}
+                        {blocksOrderByLocation && (
+                          <p className="mt-2 text-xs text-center text-amber-700">
+                            Ordering is unavailable because this store is outside your current city.
                           </p>
                         )}
                       </div>
