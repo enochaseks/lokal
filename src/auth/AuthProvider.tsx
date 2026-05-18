@@ -43,9 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
       setUser(sess?.user ?? null);
+      setLoading(false);
       // Defer DB calls to avoid deadlock
       setTimeout(() => {
-        loadRoles(sess?.user?.id);
+        void loadRoles(sess?.user?.id);
       }, 0);
     });
 
@@ -53,7 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
       setSession(sess);
       setUser(sess?.user ?? null);
-      loadRoles(sess?.user?.id).finally(() => setLoading(false));
+      setLoading(false);
+      void loadRoles(sess?.user?.id);
     });
 
     return () => sub.subscription.unsubscribe();

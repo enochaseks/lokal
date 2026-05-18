@@ -121,6 +121,36 @@ function getDetectedTimezone(): string {
   }
 }
 
+async function copyTextToClipboard(value: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  try {
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy copy path below.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 function isValidIanaTimezone(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
@@ -166,17 +196,6 @@ export const Route = createFileRoute("/merchant")({
         to: "/auth",
         search: () => ({ redirect: "/merchant", mode: "" }),
       });
-
-    // Check if user has created a store
-    const { data: stores } = await supabase
-      .from("stores")
-      .select("id")
-      .eq("owner_id", session.user.id)
-      .limit(1);
-
-    if (!stores || stores.length === 0) {
-      throw redirect({ to: "/list-store", search: { category: undefined } });
-    }
   },
   errorComponent: RouteError,
   component: MerchantPage,
@@ -2327,11 +2346,19 @@ function MerchantPage() {
 
   const filteredOrders = orders.filter((order) => orderMatchesFilter(order, orderFilter));
 
-  const handleShareStore = (storeId: string) => {
+  const handleShareStore = async (storeId: string) => {
     const domain =
       typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
     const shareUrl = `${domain}/store/${storeId}`;
-    navigator.clipboard.writeText(shareUrl);
+
+    const copied = await copyTextToClipboard(shareUrl);
+    if (!copied) {
+      toast.error("Could not copy share link", {
+        description: shareUrl,
+      });
+      return;
+    }
+
     trackEvent("merchant_store_share", { store_id: storeId, source: "merchant_dashboard" });
 
     setSharedStoreIds((prev) => {
@@ -2377,6 +2404,7 @@ function MerchantPage() {
     if (!user) return;
     let isActive = true;
     let realtimeChannel: any = null;
+    let deferredLoadId: number | null = null;
 
     (async () => {
       const { data: storesData, error } = await supabase
@@ -2399,129 +2427,136 @@ function MerchantPage() {
       if (rows.length === 0) return;
       const storeIds = rows.map((s) => s.id);
 
-      const { data: productsData } = await db
-        .from("store_products")
-        .select("store_id")
-        .in("store_id", storeIds);
-      const counts: Record<string, number> = {};
-      for (const row of (productsData ?? []) as Array<{ store_id: string }>) {
-        counts[row.store_id] = (counts[row.store_id] ?? 0) + 1;
-      }
-      setListingCountByStore(counts);
-
-      if (onboardingStoreId && !storeIds.includes(onboardingStoreId)) {
-        setOnboardingStoreId(null);
-      }
-
-      try {
-        const { data: reqData } = await (supabase as any)
-          .from("store_verification_requests")
-          .select("store_id,status,submitted_at,verification_method")
-          .eq("owner_id", user.id)
-          .in("store_id", storeIds)
-          .order("submitted_at", { ascending: false });
-
-        const latestByStore: Record<string, VerificationStatus> = {};
-        const tierByStore: Record<string, VerificationTier> = {};
-        for (const req of (reqData ?? []) as Array<{
-          store_id: string;
-          status: VerificationStatus;
-          verification_method?: string | null;
-        }>) {
-          if (!latestByStore[req.store_id]) latestByStore[req.store_id] = req.status;
-          if (!tierByStore[req.store_id] && req.status === "approved") {
-            if (req.verification_method === "registration_number") {
-              tierByStore[req.store_id] = "verified";
-            } else if (req.verification_method === "online_presence") {
-              tierByStore[req.store_id] = "online_verified";
-            }
+      deferredLoadId = window.setTimeout(() => {
+        void (async () => {
+          const { data: productsData } = await db
+            .from("store_products")
+            .select("store_id")
+            .in("store_id", storeIds);
+          if (!isActive) return;
+          const counts: Record<string, number> = {};
+          for (const row of (productsData ?? []) as Array<{ store_id: string }>) {
+            counts[row.store_id] = (counts[row.store_id] ?? 0) + 1;
           }
-        }
-        setVerificationStatusByStore(latestByStore);
-        setVerificationTierByStore(tierByStore);
-      } catch {
-        // Table may not be migrated yet.
-      }
+          setListingCountByStore(counts);
 
-      const { data: ordersData } = await db
-        .from("orders")
-        .select("*")
-        .in("store_id", storeIds)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      setOrders((ordersData ?? []) as unknown as OrderRow[]);
+          if (onboardingStoreId && !storeIds.includes(onboardingStoreId)) {
+            setOnboardingStoreId(null);
+          }
 
-      // Load messages (graceful if table not yet migrated)
-      try {
-        const { data: msgsData } = await db
-          .from("messages")
-          .select("*")
-          .in("store_id", storeIds)
-          .order("created_at", { ascending: false })
-          .limit(200);
-        setMessages((msgsData ?? []) as MessageRow[]);
-      } catch {
-        /* messages table not yet created */
-      }
+          try {
+            const { data: reqData } = await (supabase as any)
+              .from("store_verification_requests")
+              .select("store_id,status,submitted_at,verification_method")
+              .eq("owner_id", user.id)
+              .in("store_id", storeIds)
+              .order("submitted_at", { ascending: false });
+            if (!isActive) return;
 
-      // Load posts
-      try {
-        const { data: postsData } = await db
-          .from("store_posts")
-          .select("*")
-          .in("store_id", storeIds)
-          .order("created_at", { ascending: false })
-          .limit(200);
-        setPosts((postsData ?? []) as PostRow[]);
-      } catch {
-        /* posts table may not exist yet */
-      }
+            const latestByStore: Record<string, VerificationStatus> = {};
+            const tierByStore: Record<string, VerificationTier> = {};
+            for (const req of (reqData ?? []) as Array<{
+              store_id: string;
+              status: VerificationStatus;
+              verification_method?: string | null;
+            }>) {
+              if (!latestByStore[req.store_id]) latestByStore[req.store_id] = req.status;
+              if (!tierByStore[req.store_id] && req.status === "approved") {
+                if (req.verification_method === "registration_number") {
+                  tierByStore[req.store_id] = "verified";
+                } else if (req.verification_method === "online_presence") {
+                  tierByStore[req.store_id] = "online_verified";
+                }
+              }
+            }
+            setVerificationStatusByStore(latestByStore);
+            setVerificationTierByStore(tierByStore);
+          } catch {
+            // Table may not be migrated yet.
+          }
 
-      // Load bookings and availability for Barbers/Beauty stores
-      const bookableIds = rows
-        .filter((s) => isStoreBookable(s.category, s.selling_mode))
-        .map((s) => s.id);
-      if (bookableIds.length > 0) {
-        try {
-          const [
-            { data: availData },
-            { data: bookingsData },
-            { data: staffData },
-            { data: reviewsData },
-          ] = await Promise.all([
-            db.from("store_availability").select("*").in("store_id", bookableIds),
-            db
-              .from("store_bookings")
+          const { data: ordersData } = await db
+            .from("orders")
+            .select("*")
+            .in("store_id", storeIds)
+            .order("created_at", { ascending: false })
+            .limit(100);
+          if (!isActive) return;
+          setOrders((ordersData ?? []) as unknown as OrderRow[]);
+
+          try {
+            const { data: msgsData } = await db
+              .from("messages")
               .select("*")
-              .in("store_id", bookableIds)
-              .gte("slot_start", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 19))
-              .order("slot_start", { ascending: true })
-              .limit(200),
-            db
-              .from("store_staff")
+              .in("store_id", storeIds)
+              .order("created_at", { ascending: false })
+              .limit(200);
+            if (!isActive) return;
+            setMessages((msgsData ?? []) as MessageRow[]);
+          } catch {
+            /* messages table not yet created */
+          }
+
+          try {
+            const { data: postsData } = await db
+              .from("store_posts")
               .select("*")
-              .in("store_id", bookableIds)
-              .order("position", { ascending: true }),
-            db.from("staff_reviews").select("staff_id, rating").in("store_id", bookableIds),
-          ]);
-          setStoreAvailability((availData ?? []) as AvailabilityRow[]);
-          setBookings((bookingsData ?? []) as BookingRow[]);
-          setStoreStaff((staffData ?? []) as StaffRow[]);
-          const sums: Record<string, { total: number; count: number }> = {};
-          ((reviewsData ?? []) as Array<{ staff_id: string; rating: number }>).forEach((r) => {
-            if (!sums[r.staff_id]) sums[r.staff_id] = { total: 0, count: 0 };
-            sums[r.staff_id].total += r.rating;
-            sums[r.staff_id].count += 1;
-          });
-          const rmap: Record<string, { avg: number; count: number }> = {};
-          Object.keys(sums).forEach((k) => {
-            rmap[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count };
-          });
-          setStaffRatingSummary(rmap);
-        } catch {
-          /* bookings tables not yet created */
-        }
-      }
+              .in("store_id", storeIds)
+              .order("created_at", { ascending: false })
+              .limit(200);
+            if (!isActive) return;
+            setPosts((postsData ?? []) as PostRow[]);
+          } catch {
+            /* posts table may not exist yet */
+          }
+
+          const bookableIds = rows
+            .filter((s) => isStoreBookable(s.category, s.selling_mode))
+            .map((s) => s.id);
+          if (bookableIds.length === 0) return;
+
+          try {
+            const [
+              { data: availData },
+              { data: bookingsData },
+              { data: staffData },
+              { data: reviewsData },
+            ] = await Promise.all([
+              db.from("store_availability").select("*").in("store_id", bookableIds),
+              db
+                .from("store_bookings")
+                .select("*")
+                .in("store_id", bookableIds)
+                .gte("slot_start", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 19))
+                .order("slot_start", { ascending: true })
+                .limit(200),
+              db
+                .from("store_staff")
+                .select("*")
+                .in("store_id", bookableIds)
+                .order("position", { ascending: true }),
+              db.from("staff_reviews").select("staff_id, rating").in("store_id", bookableIds),
+            ]);
+            if (!isActive) return;
+            setStoreAvailability((availData ?? []) as AvailabilityRow[]);
+            setBookings((bookingsData ?? []) as BookingRow[]);
+            setStoreStaff((staffData ?? []) as StaffRow[]);
+            const sums: Record<string, { total: number; count: number }> = {};
+            ((reviewsData ?? []) as Array<{ staff_id: string; rating: number }>).forEach((r) => {
+              if (!sums[r.staff_id]) sums[r.staff_id] = { total: 0, count: 0 };
+              sums[r.staff_id].total += r.rating;
+              sums[r.staff_id].count += 1;
+            });
+            const rmap: Record<string, { avg: number; count: number }> = {};
+            Object.keys(sums).forEach((k) => {
+              rmap[k] = { avg: sums[k].total / sums[k].count, count: sums[k].count };
+            });
+            setStaffRatingSummary(rmap);
+          } catch {
+            /* bookings tables not yet created */
+          }
+        })();
+      }, 0);
 
       // Real-time subscriptions
       realtimeChannel = supabase
@@ -2630,6 +2665,9 @@ function MerchantPage() {
 
     return () => {
       isActive = false;
+      if (deferredLoadId != null) {
+        window.clearTimeout(deferredLoadId);
+      }
       if (realtimeChannel) {
         supabase.removeChannel(realtimeChannel);
       }
@@ -2896,7 +2934,8 @@ function MerchantPage() {
     }
   }, [tab, hasBookableStore]);
 
-  if (loading || !user) return <NavigationLoadingScreen />;
+  if (loading) return <NavigationLoadingScreen />;
+  if (!user) return null;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">

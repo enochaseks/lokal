@@ -29,6 +29,7 @@ import {
   Rss,
   Heart,
   Share2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +45,7 @@ import {
   isBodyContactService,
   resolveRenderableImageUrl,
 } from "@/lib/utils";
+import { downloadStoreShareCard } from "../../lib/store-share-card.ts";
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
@@ -275,6 +277,7 @@ export function StoreDialog({
   const [followLoading, setFollowLoading] = useState(false);
   const [followCount, setFollowCount] = useState(0);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [downloadingCard, setDownloadingCard] = useState(false);
 
   // Booking state (Barbers / Beauty)
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -937,6 +940,37 @@ export function StoreDialog({
     setTimeout(() => setCopiedShare(false), 2000);
   };
 
+  const handleDownloadStoreCard = async () => {
+    if (!store) return;
+    const domain =
+      typeof window !== "undefined" ? window.location.origin : "https://lokalshops.co.uk";
+    const shareUrl = `${domain}/store/${store.id}`;
+
+    setDownloadingCard(true);
+    try {
+      const downloaded = await downloadStoreShareCard({
+        storeName: store.name,
+        description: store.description,
+        category: store.category,
+        origin: store.origin,
+        imageUrl: getImageUrl(store.image),
+        logoUrl: getImageUrl(store.logo_url),
+        primaryColor: storePrimaryColor,
+        accentColor: storeAccentColor,
+        shareUrl,
+      });
+      if (!downloaded) {
+        toast.error("Could not create store card");
+        return;
+      }
+      toast.success("Store card downloaded");
+    } catch {
+      toast.error("Could not create store card");
+    } finally {
+      setDownloadingCard(false);
+    }
+  };
+
   const handleBook = async () => {
     if (!isStoreVerified) {
       toast.warning(unverifiedWarningText);
@@ -1261,6 +1295,16 @@ export function StoreDialog({
             <Button size="sm" variant="outline" className="gap-1.5" onClick={handleShareStore}>
               {copiedShare ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
               {copiedShare ? "Copied!" : "Share"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={handleDownloadStoreCard}
+              disabled={downloadingCard}
+            >
+              {downloadingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {downloadingCard ? "Preparing..." : "Store card"}
             </Button>
             {followCount > 0 && (
               <span className="text-xs text-muted-foreground">

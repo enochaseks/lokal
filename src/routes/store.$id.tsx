@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star, ShieldAlert, FileCheck2, Images } from "lucide-react";
+import { MapPin, Phone, Clock, Globe, Copy, Check, Loader2, Star, ShieldAlert, FileCheck2, Images, Download } from "lucide-react";
 import whatsappLogo from "@/assets/WhatsApp_icon.png";
 import facebookLogo from "@/assets/Facebook_Logo_2023.png";
 import xLogo from "@/assets/X_icon.svg.png";
@@ -39,6 +39,7 @@ import {
   normalizeWebsiteUrl,
   resolveRenderableImageUrl,
 } from "@/lib/utils";
+import { downloadStoreShareCard } from "../lib/store-share-card.ts";
 import { toast } from "sonner";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
 
@@ -599,6 +600,7 @@ function checkRateLimit(phone: string): { allowed: boolean; waitMins: number } {
 function StoreDetail() {
   const store = Route.useLoaderData() as StoreDetails;
   const [copied, setCopied] = useState(false);
+  const [downloadingCard, setDownloadingCard] = useState(false);
   const [reference, setReference] = useState(() => makeRef());
   const [storePublished, setStorePublished] = useState(store.published);
   const [revealBankDetails, setRevealBankDetails] = useState(false);
@@ -659,7 +661,10 @@ function StoreDetail() {
   const tiktokHref = buildTikTokUrl(store.tiktok_handle);
   const currencySymbol = REGIONS[store.region as Region]?.symbol ?? "£";
   const customerId = getStoredCustomerId();
-  const products = [...(store.store_products ?? [])].sort((a, b) => a.position - b.position);
+  const products = useMemo(
+    () => [...(store.store_products ?? [])].sort((a, b) => a.position - b.position),
+    [store.store_products],
+  );
   const availableDays = [...(store.store_availability ?? [])].sort(
     (a, b) => a.day_of_week - b.day_of_week,
   );
@@ -1159,8 +1164,41 @@ function StoreDetail() {
     setBookStaffId("");
   }, [bookStaffId, availableStaffMembers]);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareUrl);
+  const copyShareUrl = async () => {
+    try {
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        return true;
+      }
+    } catch {
+      // Fall through to the legacy copy path below.
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = shareUrl;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.style.pointerEvents = "none";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyLink = async () => {
+    const copiedOk = await copyShareUrl();
+    if (!copiedOk) {
+      toast.error("Could not copy link", { description: shareUrl });
+      return;
+    }
+
     setCopied(true);
     toast.success("Link copied!");
     setTimeout(() => setCopied(false), 2000);
@@ -1172,9 +1210,14 @@ function StoreDetail() {
     window.open(`https://wa.me/?text=${encoded}`, "_blank");
   };
 
-  const handleShareInstagram = () => {
+  const handleShareInstagram = async () => {
+    const copiedOk = await copyShareUrl();
+    if (!copiedOk) {
+      toast.error("Could not copy link", { description: shareUrl });
+      return;
+    }
+
     toast("Copy the link and share it in your Instagram Story or Direct Message", { icon: "ℹ️" });
-    navigator.clipboard.writeText(shareUrl);
   };
 
   const handleShareFacebook = () => {
@@ -1191,6 +1234,32 @@ function StoreDetail() {
       "_blank",
       "width=550,height=420",
     );
+  };
+
+  const handleDownloadStoreCard = async () => {
+    setDownloadingCard(true);
+    try {
+      const downloaded = await downloadStoreShareCard({
+        storeName: store.name,
+        description: store.description,
+        category: store.category,
+        origin: store.origin,
+        imageUrl: getImageUrl(bannerImageUrl),
+        logoUrl: getImageUrl(store.logo_url),
+        primaryColor: storePrimaryColor,
+        accentColor: storeAccentColor,
+        shareUrl,
+      });
+      if (!downloaded) {
+        toast.error("Could not create store card");
+        return;
+      }
+      toast.success("Store card downloaded");
+    } catch {
+      toast.error("Could not create store card");
+    } finally {
+      setDownloadingCard(false);
+    }
   };
 
   const handlePlaceOrder = async () => {
@@ -1598,6 +1667,15 @@ function StoreDetail() {
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied!" : "Copy link"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDownloadStoreCard}
+                disabled={downloadingCard}
+                className={`gap-2 ${storeButtonRadius}`}
+              >
+                {downloadingCard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {downloadingCard ? "Preparing card..." : "Download store card"}
               </Button>
               <div className="grid grid-cols-2 gap-2">
                 <button
