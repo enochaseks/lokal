@@ -256,6 +256,16 @@ function Index() {
     }
   }, [city, cityManuallySet]);
 
+  const handleUseCurrentLocation = async () => {
+    const result = await refreshLocation();
+    setCityManuallySet(false);
+    if (result.city) {
+      setLocationFilter(result.city);
+      setCityInputValue(result.city);
+      setShowCityInput(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       const { data: rows } = await supabase
@@ -462,7 +472,11 @@ function Index() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main>
-        <Hero onSearch={setSearch} />
+        <Hero
+          onSearch={setSearch}
+          city={city}
+          locationLoading={locationLoading}
+        />
 
         <section id="stores" className="container mx-auto px-4 py-20">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
@@ -476,14 +490,8 @@ function Index() {
                       : "All locations"}
                 </span>
                 <button
-                  onClick={async () => {
-                    const result = await refreshLocation();
-                    setCityManuallySet(false);
-                    if (result.city) {
-                      setLocationFilter(result.city);
-                      setCityInputValue(result.city);
-                      setShowCityInput(false);
-                    }
+                  onClick={() => {
+                    void handleUseCurrentLocation();
                   }}
                   disabled={locationLoading}
                   className="text-[10px] font-medium text-primary hover:underline disabled:opacity-50"

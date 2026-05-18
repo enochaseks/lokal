@@ -13,9 +13,15 @@ type GeoResult = {
 };
 
 const LOCATION_CITY_KEY = "lokal:geo:city";
+const LOCATION_UPDATED_EVENT = "lokal:location-updated";
 
 let cachedCity: string | null = null;
 let sharedLookupPromise: Promise<GeoResult> | null = null;
+
+function emitLocationUpdate(result: GeoResult): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<GeoResult>(LOCATION_UPDATED_EVENT, { detail: result }));
+}
 
 async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
   try {
@@ -127,6 +133,7 @@ export function useLocation(): LocationState {
     setCity(result.city);
     setError(result.error);
     setLoading(false);
+    emitLocationUpdate(result);
     return result;
   };
 
@@ -156,13 +163,21 @@ export function useLocation(): LocationState {
       }
     };
 
+    const onLocationUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<GeoResult>).detail;
+      if (!detail) return;
+      applyResult(detail);
+    };
+
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener(LOCATION_UPDATED_EVENT, onLocationUpdated);
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener(LOCATION_UPDATED_EVENT, onLocationUpdated);
     };
   }, []);
 

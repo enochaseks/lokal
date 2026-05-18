@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { MapPin, LogOut, Store, Heart, User, ShieldCheck, Sprout } from "lucide-react";
+import { Loader2, LogOut, Navigation, Store, Heart, User, ShieldCheck, Sprout } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useLocation } from "@/hooks/use-location";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +20,7 @@ import logoImage from "@/assets/logo.png";
 export function Navbar() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { city, loading } = useLocation();
+  const { city, loading, refreshLocation } = useLocation();
   const [storeName, setStoreName] = useState<string | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
   const [hasNewFollowingPosts, setHasNewFollowingPosts] = useState(false);
@@ -160,14 +160,20 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="sm"
-            className="hidden gap-1.5 md:inline-flex"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => {
+              void refreshLocation();
+            }}
             disabled={loading}
+            title={loading ? "Detecting location" : city ? `Location: ${city}` : "Use current location"}
+            aria-label={loading ? "Detecting location" : "Use current location"}
           >
-            <MapPin className="h-3.5 w-3.5 text-muted-foreground/70" />
-            <span className="text-[11px] text-muted-foreground/70">
-              {loading ? "Detecting..." : (city ?? "Location")}
-            </span>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/80" />
+            ) : (
+              <Navigation className="h-4 w-4 text-muted-foreground/80" />
+            )}
           </Button>
 
           {!user ? (

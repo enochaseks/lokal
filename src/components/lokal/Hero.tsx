@@ -3,11 +3,12 @@ import { Link } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, MapPin, Search } from "lucide-react";
-import { useLocation } from "@/hooks/use-location";
 import { trackEvent } from "@/lib/analytics";
 
 type HeroProps = {
   onSearch?: (query: string) => void;
+  city?: string | null;
+  locationLoading?: boolean;
 };
 
 const heroMessages = [
@@ -23,8 +24,7 @@ const heroMessages = [
   },
 ] as const;
 
-export function Hero({ onSearch }: HeroProps) {
-  const { city, loading } = useLocation();
+export function Hero({ onSearch, city = null, locationLoading = false }: HeroProps) {
   const [query, setQuery] = useState("");
   const [messageIndex, setMessageIndex] = useState(0);
   const [messageVisible, setMessageVisible] = useState(true);
@@ -91,7 +91,7 @@ export function Hero({ onSearch }: HeroProps) {
                 <MapPin className="h-5 w-5 shrink-0 text-primary" />
                 <Input
                   placeholder={
-                    loading
+                    locationLoading
                       ? "Detecting location…"
                       : city
                         ? `Stores near ${city}`
