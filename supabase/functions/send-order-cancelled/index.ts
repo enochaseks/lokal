@@ -7,6 +7,7 @@ const corsHeaders = {
 
 type OrderCancelledPayload = {
   order_id?: string;
+  cancelled_by?: "customer" | "merchant";
   reference: string;
   store_id: string;
   store_name?: string | null;
@@ -46,8 +47,79 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const appUrl = (Deno.env.get("APP_URL") ?? "https://lokalshops.co.uk").replace(/\/+$/, "");
     const merchantDashboardUrl = `${appUrl}/merchant`;
+    const cancelledBy = payload.cancelled_by ?? "customer";
+    const fulfillment = payload.fulfillment_method === "delivery" ? "Delivery" : "Collection";
+    const total = Number(payload.total_gbp ?? 0).toFixed(2);
 
-    if (!brevoKey || !supabaseUrl || !serviceRoleKey) {
+    if (!brevoKey) {
+      return new Response(JSON.stringify({ skipped: true, reason: "env not configured" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (cancelledBy === "merchant") {
+      const customerPhone = toE164(payload.customer_phone);
+      const customerSmsText = [
+        `Hi ${payload.customer_name}, your order ${payload.reference} has been cancelled by ${payload.store_name ?? "the merchant"}.`,
+        `${fulfillment} • GBP ${total}`,
+        `Track: ${appUrl}/order`,
+      ].join("\n");
+
+      const customerHtml = `
+        <h2>Your order was cancelled</h2>
+        <p>Hi ${payload.customer_name}, your order from <strong>${payload.store_name ?? "this store"}</strong> has been cancelled by the merchant.</p>
+        <p><strong>Reference:</strong> ${payload.reference}</p>
+        <p><strong>Fulfilment:</strong> ${fulfillment}</p>
+        <p><strong>Total:</strong> GBP ${total}</p>
+        <p><a href="${appUrl}/order">Track your order →</a></p>
+      `;
+
+      let smsResult: { ok: boolean; body: string } = { ok: false, body: "customer phone missing" };
+      if (customerPhone) {
+        const smsRes = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+          method: "POST",
+          headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: smsSender,
+            recipient: customerPhone,
+            content: customerSmsText,
+            type: "transactional",
+            tag: "customer-order-cancelled-by-merchant",
+          }),
+        });
+        smsResult = { ok: smsRes.ok, body: await smsRes.text() };
+      }
+
+      let emailResult: { ok: boolean; body: string } = { ok: false, body: "sms succeeded" };
+      if (!smsResult.ok) {
+        if (payload.customer_email) {
+          const emailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: { "api-key": brevoKey, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sender: { email: emailFrom, name: "Lokal" },
+              to: [{ email: payload.customer_email, name: payload.customer_name }],
+              subject: `Order ${payload.reference} was cancelled`,
+              htmlContent: customerHtml,
+            }),
+          });
+          emailResult = { ok: emailRes.ok, body: await emailRes.text() };
+        } else {
+          emailResult = { ok: false, body: "customer email missing" };
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ sent: emailResult.ok || smsResult.ok, sms: smsResult, email: emailResult }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ skipped: true, reason: "env not configured" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -77,9 +149,6 @@ Deno.serve(async (req) => {
     });
     const user = await userRes.json();
     const merchantEmail = user?.email ?? user?.user?.email ?? null;
-
-    const fulfillment = payload.fulfillment_method === "delivery" ? "Delivery" : "Collection";
-    const total = Number(payload.total_gbp ?? 0).toFixed(2);
 
     const smsText = [
       "Order cancelled by customer",

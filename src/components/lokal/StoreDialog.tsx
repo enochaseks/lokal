@@ -36,7 +36,14 @@ import { getCountries, getCountryCallingCode, type CountryCode } from "libphonen
 import type { Store } from "@/data/stores";
 import { REGION_BANK, DEFAULT_BANK, REGIONS, isStoreBookable } from "@/data/stores";
 import type { Region } from "@/data/stores";
-import { buildInstagramUrl, buildTikTokUrl, getImageUrl, isBodyContactService } from "@/lib/utils";
+import {
+  buildInstagramUrl,
+  buildTikTokUrl,
+  getImageUrl,
+  isDisplayableImagePath,
+  isBodyContactService,
+  resolveRenderableImageUrl,
+} from "@/lib/utils";
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
@@ -229,6 +236,7 @@ export function StoreDialog({
   const [showMsgForm, setShowMsgForm] = useState(false);
   const [msgName, setMsgName] = useState("");
   const [msgPhone, setMsgPhone] = useState("");
+  const [msgEmail, setMsgEmail] = useState("");
   const [msgCountryCode, setMsgCountryCode] = useState<CountryCode>("GB");
   const [msgBody, setMsgBody] = useState("");
   const [sendingMsg, setSendingMsg] = useState(false);
@@ -292,6 +300,99 @@ export function StoreDialog({
   );
   const [staffBookingCounts, setStaffBookingCounts] = useState<Record<string, number>>({});
   const [bookEmail, setBookEmail] = useState("");
+  const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+  const [previewUnsupported, setPreviewUnsupported] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    if (!open || !store) return;
+
+    const imagePaths = Array.from(
+      new Set((store.products ?? []).map((product) => product.image_url).filter(Boolean) as string[]),
+    );
+    if (imagePaths.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        imagePaths.map(async (imagePath) => [imagePath, await resolveRenderableImageUrl(imagePath)] as const),
+      );
+      if (!cancelled) {
+        setResolvedImageUrls((prev) => ({
+          ...prev,
+          ...Object.fromEntries(entries),
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, store]);
+
+  const openImagePreview = async (path: string | null | undefined, alt: string) => {
+    const directUrl = getImageUrl(path);
+    if (!directUrl) return;
+
+    setPreviewUnsupported(false);
+    setPreviewLoading(true);
+
+    if (path && resolvedImageUrls[path]) {
+      setPreviewImage({ src: resolvedImageUrls[path] as string, alt });
+      setPreviewLoading(false);
+      return;
+    }
+
+    if (isDisplayableImagePath(path)) {
+      setPreviewImage({ src: directUrl, alt });
+      setPreviewLoading(false);
+      return;
+    }
+
+    setPreviewImage(null);
+
+    try {
+      const resolvedUrl = await resolveRenderableImageUrl(path);
+      if (resolvedUrl) {
+        setPreviewImage({ src: resolvedUrl, alt });
+      } else {
+        setPreviewUnsupported(true);
+        setPreviewImage({ src: directUrl, alt });
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closeImagePreview = (open: boolean) => {
+    if (!open) {
+      setPreviewImage(null);
+      setPreviewUnsupported(false);
+    }
+  };
+
+  const renderPreviewableImage = (
+    imagePath: string | null | undefined,
+    alt: string,
+    imageClassName: string,
+    buttonClassName = "",
+  ) => {
+    const imageSrc =
+      (imagePath ? resolvedImageUrls[imagePath] : null) ?? getImageUrl(imagePath ?? "") ?? "";
+    if (!imageSrc) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => void openImagePreview(imagePath, alt)}
+        className={`shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-90 ${buttonClassName}`.trim()}
+        title="Tap to expand"
+      >
+        <img src={imageSrc} alt={alt} className={imageClassName} />
+      </button>
+    );
+  };
 
   useEffect(() => {
     if (!open || !store) return;
@@ -730,9 +831,10 @@ export function StoreDialog({
 
   const handleSendMsg = async () => {
     const normalizedMsgPhone = normalizePhoneForAlerts(msgPhone, msgCountryCode);
-    if (!normalizedMsgPhone) {
-      toast.error("Enter phone in international format", {
-        description: "Choose a country and enter your local mobile number.",
+    const normalizedMsgEmail = msgEmail.trim().toLowerCase();
+    if (!normalizedMsgPhone && !normalizedMsgEmail) {
+      toast.error("Add contact details", {
+        description: "Add a phone number or an email address so the store can reply.",
       });
       return;
     }
@@ -742,17 +844,35 @@ export function StoreDialog({
       const { error } = await (supabase as any).from("messages").insert({
         store_id: store.id,
         customer_name: msgName.trim(),
-        customer_phone: normalizedMsgPhone,
+        customer_phone: normalizedMsgPhone || null,
+        customer_email: normalizedMsgEmail || null,
         body: msgBody.trim(),
         direction: "inbound",
       });
       if (error) throw error;
+
+      void supabase.functions.invoke("send-message-alert", {
+        body: {
+          store_id: store.id,
+          store_name: store.name,
+          customer_name: msgName.trim(),
+          customer_phone: normalizedMsgPhone || normalizedMsgEmail || "",
+          customer_email: normalizedMsgEmail || null,
+          body: msgBody.trim(),
+        },
+      }).then(({ error: fnError }) => {
+        if (fnError) {
+          console.error("send-message-alert failed", fnError.message);
+        }
+      });
+
       toast.success("Enquiry sent!", {
-        description: `${store.name} will reply to you on WhatsApp or by phone.`,
+        description: `${store.name} will reply to you on WhatsApp, by phone, or by email.`,
       });
       setShowMsgForm(false);
       setMsgName("");
       setMsgPhone("");
+      setMsgEmail("");
       setMsgBody("");
     } catch (e: any) {
       toast.error(e.message ?? "Could not send message");
@@ -1029,14 +1149,15 @@ export function StoreDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (!o) setTimeout(reset, 200);
-      }}
-    >
-      <DialogContent className={`max-h-[90vh] max-w-2xl overflow-y-auto p-0 ${storeFontClass}`}>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          onOpenChange(o);
+          if (!o) setTimeout(reset, 200);
+        }}
+      >
+        <DialogContent className={`max-h-[90vh] max-w-2xl overflow-y-auto p-0 ${storeFontClass}`}>
         <div className="relative h-56 overflow-hidden rounded-t-lg">
           <img src={store.image} alt={store.name} className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
@@ -1375,12 +1496,10 @@ export function StoreDialog({
                                 className="flex items-center justify-between gap-4 p-4"
                               >
                                 <div className="flex items-center gap-3">
-                                  {p.image_url && (
-                                    <img
-                                      src={getImageUrl(p.image_url) || undefined}
-                                      alt={p.name}
-                                      className="h-12 w-12 rounded-md object-cover shrink-0"
-                                    />
+                                  {renderPreviewableImage(
+                                    p.image_url,
+                                    p.name,
+                                    "h-12 w-12 rounded-md object-cover",
                                   )}
                                   <div className="font-medium">{p.name}</div>
                                 </div>
@@ -1741,12 +1860,10 @@ export function StoreDialog({
                               className="flex items-center justify-between gap-4 p-4"
                             >
                               <div className="flex items-center gap-3">
-                                {p.image_url && (
-                                  <img
-                                    src={getImageUrl(p.image_url) || undefined}
-                                    alt={p.name}
-                                    className="h-12 w-12 rounded-md object-cover shrink-0"
-                                  />
+                                {renderPreviewableImage(
+                                  p.image_url,
+                                  p.name,
+                                  "h-12 w-12 rounded-md object-cover",
                                 )}
                                 <div>
                                   <div className="font-medium">{p.name}</div>
@@ -1796,7 +1913,7 @@ export function StoreDialog({
                       <div className="space-y-3 rounded-xl border border-border bg-secondary/40 p-4">
                         <p className="text-sm font-semibold">Send an enquiry to {store.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          They'll reply to you on WhatsApp or by phone.
+                          They'll reply to you on WhatsApp, by phone, or by email.
                         </p>
                         <div>
                           <label className="text-xs font-medium text-muted-foreground">
@@ -1840,8 +1957,22 @@ export function StoreDialog({
                             </div>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Pick your country, then enter your local number. You can also paste full
-                            international format (+...).
+                            Pick your country, then enter your local number.
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Email address <span className="font-normal">(optional)</span>
+                          </label>
+                          <Input
+                            type="email"
+                            value={msgEmail}
+                            onChange={(e) => setMsgEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            className="mt-1"
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Use this if you do not have WhatsApp.
                           </p>
                         </div>
                         <div>
@@ -1863,7 +1994,7 @@ export function StoreDialog({
                           <Button
                             size="sm"
                             disabled={
-                              !msgName.trim() || !msgPhone.trim() || !msgBody.trim() || sendingMsg
+                              !msgName.trim() || (!msgPhone.trim() && !msgEmail.trim()) || !msgBody.trim() || sendingMsg
                             }
                             onClick={handleSendMsg}
                             className="bg-green-600 text-white hover:bg-green-700"
@@ -2347,7 +2478,46 @@ export function StoreDialog({
             </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(previewImage)} onOpenChange={closeImagePreview}>
+        <DialogContent className="max-w-4xl overflow-hidden p-0 sm:max-h-[90vh]">
+          <DialogHeader className="border-b border-border px-6 py-4 text-left">
+            <DialogTitle>{previewImage?.alt ?? "Image preview"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-[75vh] items-center justify-center bg-black/95 p-4">
+            {previewLoading ? (
+              <div className="flex items-center gap-2 text-sm text-white/80">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading preview...
+              </div>
+            ) : previewImage && !previewUnsupported ? (
+              <img
+                src={previewImage.src}
+                alt={previewImage.alt}
+                className="max-h-[70vh] w-auto max-w-full object-contain"
+                onError={() => setPreviewUnsupported(true)}
+              />
+            ) : (
+              <div className="space-y-3 px-4 py-10 text-center text-white">
+                <p className="text-sm text-white/80">
+                  This browser cannot render that image format in-app.
+                </p>
+                {previewImage && (
+                  <a
+                    href={previewImage.src}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-black"
+                  >
+                    Open original file
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

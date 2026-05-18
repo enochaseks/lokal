@@ -46,8 +46,6 @@ import {
   REGION_BANK,
   DEFAULT_BANK,
   isStoreBookable,
-  isModeConfigurableCategory,
-  getHairBeautyModeForSubcategory,
   getCategorySubcategories,
   isValidStoreSubcategory,
 } from "@/data/stores";
@@ -164,13 +162,7 @@ export const Route = createFileRoute("/list-store")({
 
 const CATEGORIES = LIVE_CATEGORIES;
 const ORIGINS = LIVE_ORIGINS;
-const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Body Arts & Crafts"]);
-
-function requiresPayAtStoreFulfillment(category: string, sellingMode?: SellingMode | null): boolean {
-  if (PAY_AT_STORE_ONLY_CATEGORIES.has(category)) return true;
-  if (category === "Hair & Beauty") return isStoreBookable(category, sellingMode);
-  return false;
-}
+const PAY_AT_STORE_ONLY_CATEGORIES = new Set(["Barbers", "Hair & Beauty", "Body Arts & Crafts"]);
 
 function isValidImageReference(value: string) {
   if (!value) return true;
@@ -255,10 +247,7 @@ const storeSchema = z
     postcode: z.string().trim().max(20).optional(),
     hours: z.string().trim().max(80).optional(),
     phone: z.string().trim().max(40).optional(),
-    merchant_sms_alerts: z.boolean().default(true),
-    merchant_email_alerts: z.boolean().default(true),
     fulfillment: z.enum(["collection", "delivery", "both", "pay_at_store"]).default("collection"),
-    delivery_fee_gbp: z.number().min(0).max(9999).default(0),
     image_url: z
       .string()
       .trim()
@@ -440,10 +429,7 @@ function ListStorePage() {
     timezone: getDetectedTimezone(),
     hours: "",
     phone: "",
-    merchant_sms_alerts: true,
-    merchant_email_alerts: true,
     fulfillment: "collection" as "collection" | "delivery" | "both" | "pay_at_store",
-    delivery_fee_gbp: 0,
     image_url: "",
     instagram_handle: "",
     tiktok_handle: "",
@@ -475,7 +461,7 @@ function ListStorePage() {
   );
   const [staff, setStaff] = useState<StaffDraft[]>([]);
   const isServiceStore = isStoreBookable(store.category, store.selling_mode);
-  const forcePayAtStore = requiresPayAtStoreFulfillment(store.category, store.selling_mode);
+  const forcePayAtStore = PAY_AT_STORE_ONLY_CATEGORIES.has(store.category);
   const requiresFixedAddress = !isServiceStore || store.location_type === "salon";
 
   useEffect(() => {
@@ -495,12 +481,7 @@ function ListStorePage() {
     try {
       const draft = JSON.parse(raw);
       localStorage.removeItem(DRAFT_KEY);
-      setStore((prev) => ({
-        ...prev,
-        ...draft.store,
-        merchant_sms_alerts: draft.store?.merchant_sms_alerts ?? true,
-        merchant_email_alerts: draft.store?.merchant_email_alerts ?? true,
-      }));
+      setStore(draft.store);
       setBank(draft.bank);
       setProducts(draft.products);
       setSchedule(draft.schedule);
@@ -745,19 +726,15 @@ function ListStorePage() {
         tiktok_handle: normalizeTikTokHandle(store.tiktok_handle),
         website_url: normalizeWebsiteUrl(store.website_url),
         fulfillment:
-          requiresPayAtStoreFulfillment(parsedStore.category, store.selling_mode)
+          PAY_AT_STORE_ONLY_CATEGORIES.has(parsedStore.category)
             ? "pay_at_store"
             : parsedStore.fulfillment,
-        delivery_fee_gbp:
-          parsedStore.fulfillment === "delivery" || parsedStore.fulfillment === "both"
-            ? Number(parsedStore.delivery_fee_gbp ?? 0)
-            : 0,
         address: requiresFixedAddress ? toNullable(parsedStore.address) : null,
         city: requiresFixedAddress ? toNullable(parsedStore.city) : null,
         timezone: parsedStore.timezone,
         postcode: requiresFixedAddress ? toNullable(parsedStore.postcode) : null,
         location_type: isServiceStore ? store.location_type : null,
-        selling_mode: isModeConfigurableCategory(store.category) ? store.selling_mode : null,
+        selling_mode: store.category === "Clothes & Fashion" ? store.selling_mode : null,
         subcategory: parsedStore.subcategory?.trim() ? parsedStore.subcategory.trim() : null,
         minimum_age: parsedStore.minimum_age ?? null,
         tattoo_portfolio_url: parsedStore.tattoo_portfolio_url?.trim()
@@ -1028,7 +1005,7 @@ function ListStorePage() {
                       setStore((prev) => {
                         const nextCategory = v as (typeof CATEGORIES)[number];
                         const nextMode: SellingMode =
-                          isModeConfigurableCategory(nextCategory)
+                          nextCategory === "Clothes & Fashion"
                             ? prev.selling_mode
                             : isStoreBookable(nextCategory)
                               ? "services"
@@ -1051,7 +1028,7 @@ function ListStorePage() {
                         return {
                           ...prev,
                           category: nextCategory,
-                          fulfillment: requiresPayAtStoreFulfillment(nextCategory, nextMode)
+                          fulfillment: PAY_AT_STORE_ONLY_CATEGORIES.has(nextCategory)
                             ? "pay_at_store"
                             : prev.fulfillment,
                           subcategory: nextSubcategory,
@@ -1108,20 +1085,12 @@ function ListStorePage() {
                     onValueChange={(v) =>
                       setStore((s) => {
                         const nextSubcategory = v === "none" ? "" : v;
-                        const nextMode =
-                          s.category === "Hair & Beauty"
-                            ? getHairBeautyModeForSubcategory(nextSubcategory)
-                            : s.selling_mode;
                         const keepCertificate =
                           s.category === "Groceries" && nextSubcategory === "Meat & Fish";
                         const keepTattooFields = isBodyArtsArtistStore(s.category, nextSubcategory);
                         return {
                           ...s,
                           subcategory: nextSubcategory,
-                          selling_mode: nextMode,
-                          fulfillment: requiresPayAtStoreFulfillment(s.category, nextMode)
-                            ? "pay_at_store"
-                            : s.fulfillment,
                           health_safety_certificate_url: keepCertificate
                             ? s.health_safety_certificate_url
                             : "",
@@ -1146,12 +1115,6 @@ function ListStorePage() {
                       )}
                     </SelectContent>
                   </Select>
-                  {store.category === "Hair & Beauty" && store.selling_mode === "products" && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      Selling wigs, bundles, extensions, or other hair products? Choose the best
-                      product subcategory here.
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -1319,7 +1282,7 @@ function ListStorePage() {
                 </div>
               )}
 
-              {isModeConfigurableCategory(store.category) && (
+              {store.category === "Clothes & Fashion" && (
                 <div>
                   <Label>How do you want to sell?</Label>
                   <Select
@@ -1328,7 +1291,7 @@ function ListStorePage() {
                       setStore((s) => {
                         const nextMode = v as SellingMode;
                         const nextSubcategory = getCategorySubcategories(
-                          s.category,
+                          "Clothes & Fashion",
                           nextMode,
                         ).includes(s.subcategory)
                           ? s.subcategory
@@ -1348,7 +1311,8 @@ function ListStorePage() {
                     </SelectContent>
                   </Select>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    Choose products for ready stock, or services for appointment-based work.
+                    Choose products for ready stock, or services for custom manufacturing and
+                    bookings.
                   </p>
                 </div>
               )}
@@ -1381,28 +1345,6 @@ function ListStorePage() {
                   </>
                 )}
               </div>
-
-              {(store.fulfillment === "delivery" || store.fulfillment === "both") && (
-                <div>
-                  <Label>Local delivery fee ({REGIONS[region].currency})</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={store.delivery_fee_gbp}
-                    onChange={(e) =>
-                      setStore((prev) => ({
-                        ...prev,
-                        delivery_fee_gbp: Math.max(0, Number(e.target.value) || 0),
-                      }))
-                    }
-                    className="mt-1"
-                  />
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    This fee is added only when the customer chooses delivery.
-                  </p>
-                </div>
-              )}
 
               {isServiceStore && (
                 <div>
@@ -1661,33 +1603,8 @@ function ListStorePage() {
                     </div>
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    Use a WhatsApp-enabled mobile number for faster alerts. If WhatsApp/SMS is
-                    unavailable, we'll fall back to email when enabled.
+                    You'll receive order alerts by email and SMS to this number.
                   </p>
-                  <div className="mt-3 space-y-2">
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={store.merchant_sms_alerts}
-                        onChange={(e) =>
-                          setStore({ ...store, merchant_sms_alerts: e.target.checked })
-                        }
-                        className="rounded border-gray-300"
-                      />
-                      Enable SMS order/booking alerts
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={store.merchant_email_alerts}
-                        onChange={(e) =>
-                          setStore({ ...store, merchant_email_alerts: e.target.checked })
-                        }
-                        className="rounded border-gray-300"
-                      />
-                      Enable email order/booking alerts
-                    </label>
-                  </div>
                 </div>
               </div>
 

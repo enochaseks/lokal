@@ -275,7 +275,8 @@ type MessageRow = {
   id: string;
   store_id: string;
   customer_name: string;
-  customer_phone: string;
+  customer_phone: string | null;
+  customer_email?: string | null;
   body: string;
   direction: "inbound" | "outbound";
   created_at: string;
@@ -336,6 +337,14 @@ type StaffDraft = {
   daily_capacity: string;
   available_days: number[];
 };
+
+type OrderFilter =
+  | "all"
+  | "pending_transfer"
+  | "transfer_received"
+  | "ready"
+  | "completed"
+  | "cancelled";
 
 type VerificationStatus = "pending" | "approved" | "rejected";
 type VerificationTier = "verified" | "online_verified";
@@ -578,6 +587,7 @@ function EditStoreDialog({
   const requiresFixedAddress = !isServiceStore || form.location_type === "salon";
   const isBodyContact = isBodyContactService(form.category, form.subcategory);
   const isGrocery = form.category === "Groceries";
+  const nameLocked = Boolean(store.published && store.is_verified) && !isAdminUser;
   const categoryLocked = Boolean(store.category_locked ?? store.published) && !isAdminUser;
   const subcategoryLocked = Boolean(store.published && store.is_verified) && !isAdminUser;
 
@@ -591,7 +601,7 @@ function EditStoreDialog({
         const loadedProducts = (data ?? []).map((p: any) => ({
           id: p.id,
           name: p.name,
-          price: String(p.price),
+          price: p.price != null && Number.isFinite(Number(p.price)) ? String(p.price) : "",
           unit: p.unit ?? "",
           deposit: p.deposit != null ? String(p.deposit) : "",
           image_url: p.image_url ?? "",
@@ -641,8 +651,9 @@ function EditStoreDialog({
     if (!file) return;
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop();
-      const path = `${store.owner_id}/${store.id}/${target === "logo_url" ? "logo" : "cover"}.${ext}`;
+      const ext = file.name.split(".").pop() || "jpg";
+      const suffix = Date.now();
+      const path = `${store.owner_id}/${store.id}/${target === "logo_url" ? "logo" : "cover"}-${suffix}.${ext}`;
       const { error } = await supabase.storage
         .from("store-images")
         .upload(path, file, { upsert: true });
@@ -652,6 +663,7 @@ function EditStoreDialog({
     } catch (e: any) {
       toast.error(e.message ?? "Upload failed");
     } finally {
+      e.target.value = "";
       setUploading(false);
     }
   };
@@ -692,6 +704,12 @@ function EditStoreDialog({
     }
     if (!isValidIanaTimezone(form.timezone)) {
       toast.error("Enter a valid IANA timezone (e.g. Africa/Lagos)");
+      return;
+    }
+    if (nameLocked && form.name.trim() !== store.name) {
+      toast.error("Store name cannot be changed for verified live stores", {
+        description: "Unpublish and contact support if you need a store name change.",
+      });
       return;
     }
     if (categoryLocked && form.category !== store.category) {
@@ -837,6 +855,21 @@ function EditStoreDialog({
         .eq("id", store.id);
       if (storeErr) throw storeErr;
 
+      const invalidProductIndex = products.findIndex((p) => {
+        const hasAnyValue =
+          p.name.trim() || p.price.trim() || p.unit.trim() || p.deposit.trim() || p.image_url.trim();
+        if (!hasAnyValue) return false;
+        if (!p.name.trim()) return true;
+        if (!p.price.trim()) return true;
+        return !Number.isFinite(Number(p.price));
+      });
+      if (invalidProductIndex !== -1) {
+        toast.error(
+          `Product ${invalidProductIndex + 1} needs both a name and a valid price before you can save.`,
+        );
+        return;
+      }
+
       const validProducts = products.filter((p) => p.name.trim() && p.price.trim());
       if (hasProductChanges) {
         console.log("Product changes detected:", {
@@ -970,9 +1003,15 @@ function EditStoreDialog({
                 <Input
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  disabled={nameLocked}
                   maxLength={80}
                   className="mt-1"
                 />
+                {nameLocked && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Store name is locked after verification while your store is live.
+                  </p>
+                )}
               </div>
               <div>
                 <Label>Category</Label>
@@ -2221,10 +2260,15 @@ function MerchantPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const db = supabase as unknown as { from: (table: string) => any };
-  const [tab, setTab] = useState<"stores" | "orders" | "messages" | "bookings" | "posts">("stores");
+  const [tab, setTab] = useState<"stores" | "orders" | "messages" | "bookings" | "posts">(() => {
+    if (typeof window === "undefined") return "stores";
+    const search = new URLSearchParams(window.location.search);
+    return search.get("tab") === "messages" ? "messages" : "stores";
+  });
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [seenInboundMessageIds, setSeenInboundMessageIds] = useState<Set<string>>(new Set());
   const [expandedConv, setExpandedConv] = useState<string | null>(null);
@@ -2263,6 +2307,25 @@ function MerchantPage() {
   const [verificationTierByStore, setVerificationTierByStore] = useState<
     Record<string, VerificationTier>
   >({});
+
+  const orderFilterLabels: Record<OrderFilter, string> = {
+    all: "All",
+    pending_transfer: "Awaiting transfer",
+    transfer_received: "Transfer received",
+    ready: "Ready",
+    completed: "Done",
+    cancelled: "Cancelled",
+  };
+
+  const orderMatchesFilter = (order: OrderRow, filter: OrderFilter) => {
+    if (filter === "all") return true;
+    if (filter === "transfer_received") {
+      return ["transfer_received", "payment_received"].includes(order.status);
+    }
+    return order.status === filter;
+  };
+
+  const filteredOrders = orders.filter((order) => orderMatchesFilter(order, orderFilter));
 
   const handleShareStore = (storeId: string) => {
     const domain =
@@ -2751,6 +2814,28 @@ function MerchantPage() {
         });
       }
     }
+
+    if (status === "cancelled") {
+      const order = orders.find((o) => o.id === orderId);
+      const store = stores.find((s) => s.id === order?.store_id);
+      if ((order?.customer_email || order?.customer_phone) && store) {
+        void supabase.functions.invoke("send-order-cancelled", {
+          body: {
+            order_id: order.id,
+            cancelled_by: "merchant",
+            reference: order.reference,
+            store_id: store.id,
+            store_name: store.name,
+            customer_name: order.customer_name,
+            customer_phone: order.customer_phone,
+            customer_email: order.customer_email,
+            total_gbp: Number(order.total_gbp),
+            fulfillment_method: order.fulfillment_method ?? "collection",
+            delivery_fee_gbp: Number(order.delivery_fee_gbp ?? 0),
+          },
+        });
+      }
+    }
   };
 
   const markOrderPaid = (id: string) => updateOrderStatus(id, "transfer_received");
@@ -2781,6 +2866,17 @@ function MerchantPage() {
         hasSharedLink: sharedStoreIds.has(onboardingStore.id),
       }
     : null;
+
+  const openMessagesTab = () => {
+    setTab("messages");
+    setSeenInboundMessageIds((prev) => {
+      const next = new Set(prev);
+      for (const m of messages) {
+        if (m.direction === "inbound") next.add(m.id);
+      }
+      return next;
+    });
+  };
   const checklistDone = onboardingChecklist
     ? onboardingChecklist.hasListing &&
       onboardingChecklist.hasVerificationStep &&
@@ -2935,7 +3031,7 @@ function MerchantPage() {
               </button>
             )}
             <button
-              onClick={() => setTab("messages")}
+              onClick={openMessagesTab}
               className={`relative whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors ${tab === "messages" ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               Messages
@@ -3222,31 +3318,36 @@ function MerchantPage() {
                     "completed",
                     "cancelled",
                   ].map((f) => {
-                    const labels: Record<string, string> = {
-                      all: "All",
-                      pending_transfer: "Awaiting transfer",
-                      transfer_received: "Transfer received",
-                      ready: "Ready",
-                      completed: "Done",
-                      cancelled: "Cancelled",
-                    };
                     const count =
-                      f === "all" ? orders.length : orders.filter((o) => o.status === f).length;
+                      f === "all"
+                        ? orders.length
+                        : orders.filter((o) => orderMatchesFilter(o, f as OrderFilter)).length;
+                    const isActive = orderFilter === f;
                     return (
-                      <span
+                      <button
                         key={f}
-                        className="rounded-full bg-secondary px-3 py-1 text-muted-foreground"
+                        type="button"
+                        onClick={() => setOrderFilter(f as OrderFilter)}
+                        className={`rounded-full px-3 py-1 transition-colors ${
+                          isActive
+                            ? "bg-foreground text-background"
+                            : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                        }`}
                       >
-                        {labels[f]}{" "}
+                        {orderFilterLabels[f as OrderFilter]}{" "}
                         {count > 0 && (
-                          <span className="ml-1 font-bold text-foreground">{count}</span>
+                          <span
+                            className={`ml-1 font-bold ${isActive ? "text-background" : "text-foreground"}`}
+                          >
+                            {count}
+                          </span>
                         )}
-                      </span>
+                      </button>
                     );
                   })}
                 </div>
 
-                {orders.map((o) => {
+                {filteredOrders.map((o) => {
                   const storeName = stores.find((s) => s.id === o.store_id)?.name ?? "—";
                   const statusMeta: Record<string, { label: string; color: string }> = {
                     pending_transfer: {
@@ -3474,18 +3575,21 @@ function MerchantPage() {
                   {
                     storeId: string;
                     customerName: string;
-                    customerPhone: string;
+                    customerPhone: string | null;
+                    customerEmail: string | null;
                     msgs: MessageRow[];
                     lastAt: string;
                   }
                 > = {};
                 messages.forEach((m) => {
-                  const k = `${m.store_id}::${m.customer_phone}`;
+                  const contactKey = m.customer_phone || m.customer_email || m.id;
+                  const k = `${m.store_id}::${contactKey}`;
                   if (!convMap[k])
                     convMap[k] = {
                       storeId: m.store_id,
                       customerName: m.customer_name,
                       customerPhone: m.customer_phone,
+                      customerEmail: m.customer_email ?? null,
                       msgs: [],
                       lastAt: m.created_at,
                     };
@@ -3499,9 +3603,12 @@ function MerchantPage() {
                   <div className="space-y-2">
                     {convs.map(([key, conv]) => {
                       const storeName = stores.find((s) => s.id === conv.storeId)?.name ?? "—";
-                      const waDigits = toWhatsAppNumber(conv.customerPhone);
+                      const waDigits = conv.customerPhone ? toWhatsAppNumber(conv.customerPhone) : null;
                       const waLink = waDigits
                         ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi ${conv.customerName}, thanks for messaging ${storeName} on Lokal! 👋`)}`
+                        : null;
+                      const emailLink = conv.customerEmail
+                        ? `mailto:${conv.customerEmail}?subject=${encodeURIComponent(`Re: your enquiry to ${storeName}`)}`
                         : null;
                       const isExpanded = expandedConv === key;
                       const thread = [...conv.msgs].sort((a, b) =>
@@ -3522,6 +3629,9 @@ function MerchantPage() {
                               </div>
                               <div className="min-w-0">
                                 <div className="font-semibold text-sm">{conv.customerName}</div>
+                                <div className="truncate text-[11px] text-muted-foreground">
+                                  {conv.customerPhone ?? conv.customerEmail ?? "No contact provided"}
+                                </div>
                                 <div className="truncate text-xs text-muted-foreground">
                                   {thread[thread.length - 1]?.body}
                                 </div>
@@ -3560,10 +3670,10 @@ function MerchantPage() {
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <a
-                                  href={`tel:${conv.customerPhone}`}
-                                  className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary"
+                                    href={conv.customerPhone ? `tel:${conv.customerPhone}` : emailLink ?? "#"}
+                                    className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary"
                                 >
-                                  📞 Call
+                                    {conv.customerPhone ? "📞 Call" : "✉ Email"}
                                 </a>
                                 <a
                                   href={waLink ?? "#"}
@@ -3579,11 +3689,11 @@ function MerchantPage() {
                                 </a>
                                 {!waLink && (
                                   <span className="text-[10px] text-amber-600">
-                                    Customer phone missing country code
+                                    {conv.customerPhone ? "Customer phone missing country code" : "No WhatsApp number provided"}
                                   </span>
                                 )}
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  {conv.customerPhone}
+                                  {conv.customerPhone ?? conv.customerEmail ?? "No contact provided"}
                                 </span>
                               </div>
                             </div>

@@ -306,6 +306,7 @@ function CustomerDashboardPage() {
         void supabase.functions.invoke("send-order-cancelled", {
           body: {
             order_id: order.id,
+            cancelled_by: "customer",
             reference: order.reference,
             store_id: order.store_id,
             store_name: order.store_name,

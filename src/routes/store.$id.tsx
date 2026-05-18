@@ -10,6 +10,13 @@ import { Navbar } from "@/components/lokal/Navbar";
 
 import { VerificationBadge } from "@/components/lokal/VerificationBadge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,8 +34,10 @@ import {
   buildInstagramUrl,
   buildTikTokUrl,
   getImageUrl,
+  isDisplayableImagePath,
   isBodyContactService,
   normalizeWebsiteUrl,
+  resolveRenderableImageUrl,
 } from "@/lib/utils";
 import { toast } from "sonner";
 import { getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
@@ -604,6 +613,10 @@ function StoreDetail() {
     store.fulfillment === "delivery" ? "delivery" : "collection",
   );
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+  const [previewUnsupported, setPreviewUnsupported] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string | null>>({});
 
   const [bookService, setBookService] = useState("");
   const [bookStaffId, setBookStaffId] = useState("");
@@ -683,6 +696,93 @@ function StoreDetail() {
   const proofReviewsWithImages = (store.proof_reviews ?? []).filter((r) => !!r.proof_image_url);
   const recentRatings = store.proof_reviews ?? [];
 
+  useEffect(() => {
+    const imagePaths = Array.from(
+      new Set(products.map((product) => product.image_url).filter(Boolean) as string[]),
+    );
+    if (imagePaths.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        imagePaths.map(async (imagePath) => [imagePath, await resolveRenderableImageUrl(imagePath)] as const),
+      );
+      if (!cancelled) {
+        setResolvedImageUrls((prev) => ({
+          ...prev,
+          ...Object.fromEntries(entries),
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [products]);
+
+  const openImagePreview = async (path: string | null | undefined, alt: string) => {
+    const directUrl = getImageUrl(path);
+    if (!directUrl) return;
+
+    setPreviewUnsupported(false);
+    setPreviewLoading(true);
+
+    if (path && resolvedImageUrls[path]) {
+      setPreviewImage({ src: resolvedImageUrls[path] as string, alt });
+      setPreviewLoading(false);
+      return;
+    }
+
+    if (isDisplayableImagePath(path)) {
+      setPreviewImage({ src: directUrl, alt });
+      setPreviewLoading(false);
+      return;
+    }
+
+    setPreviewImage(null);
+
+    try {
+      const resolvedUrl = await resolveRenderableImageUrl(path);
+      if (resolvedUrl) {
+        setPreviewImage({ src: resolvedUrl, alt });
+      } else {
+        setPreviewUnsupported(true);
+        setPreviewImage({ src: directUrl, alt });
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closeImagePreview = (open: boolean) => {
+    if (!open) {
+      setPreviewImage(null);
+      setPreviewUnsupported(false);
+    }
+  };
+
+  const renderPreviewableImage = (
+    imagePath: string | null | undefined,
+    alt: string,
+    imageClassName: string,
+    buttonClassName = "",
+  ) => {
+    const imageSrc =
+      (imagePath ? resolvedImageUrls[imagePath] : null) ?? getImageUrl(imagePath ?? "") ?? "";
+    if (!imageSrc) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => void openImagePreview(imagePath, alt)}
+        className={`shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-90 ${buttonClassName}`.trim()}
+        title="Tap to expand"
+      >
+        <img src={imageSrc} alt={alt} className={imageClassName} />
+      </button>
+    );
+  };
+
   const sectionBlocks = {
     featured_products:
       showFeaturedProducts && products.length > 0 ? (
@@ -694,12 +794,11 @@ function StoreDetail() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {products.slice(0, 3).map((p) => (
               <div key={p.name} className="overflow-hidden rounded-xl border border-border bg-card">
-                {p.image_url && (
-                  <img
-                    src={getImageUrl(p.image_url) || undefined}
-                    alt={p.name}
-                    className="h-36 w-full object-cover"
-                  />
+                {renderPreviewableImage(
+                  p.image_url,
+                  p.name,
+                  "h-36 w-full object-cover",
+                  "w-full rounded-none",
                 )}
                 <div className="p-4">
                   <p className="text-sm font-semibold">{p.name}</p>
@@ -1152,6 +1251,29 @@ function StoreDetail() {
       });
       if (error) throw error;
 
+      // Keep shared-link orders on the same merchant notification path as the landing flow.
+      void supabase.functions
+        .invoke("send-whatsapp-alert", {
+          body: {
+            reference,
+            total_gbp: orderTotal,
+            currency_symbol: currencySymbol,
+            customer_name: customerName.trim(),
+            store_name: store.name,
+            store_id: store.id,
+            items: cartItems.map((item) => ({
+              name: item.name,
+              qty: item.qty,
+              unit: item.unit,
+            })),
+          },
+        })
+        .then(({ error: fnError }) => {
+          if (fnError) {
+            console.error("send-order-alert failed", fnError.message);
+          }
+        });
+
       toast.success("Order placed", {
         description: `Reference ${reference}. The merchant will confirm next steps.`,
         duration: 8000,
@@ -1592,12 +1714,10 @@ function StoreDetail() {
                       {products.map((p) => (
                         <div key={p.name} className="flex items-center justify-between text-sm">
                           <span className="flex items-center gap-2">
-                            {p.image_url && (
-                              <img
-                                src={getImageUrl(p.image_url) || undefined}
-                                alt={p.name}
-                                className="h-9 w-9 rounded-md object-cover shrink-0"
-                              />
+                            {renderPreviewableImage(
+                              p.image_url,
+                              p.name,
+                              "h-9 w-9 rounded-md object-cover",
                             )}
                             {p.name}
                           </span>
@@ -1944,12 +2064,10 @@ function StoreDetail() {
                         return (
                           <div key={p.name} className="flex items-center justify-between gap-4 p-3">
                             <div className="flex items-center gap-3">
-                              {p.image_url && (
-                                <img
-                                  src={getImageUrl(p.image_url) || undefined}
-                                  alt={p.name}
-                                  className="h-12 w-12 rounded-md object-cover shrink-0"
-                                />
+                              {renderPreviewableImage(
+                                p.image_url,
+                                p.name,
+                                "h-12 w-12 rounded-md object-cover",
                               )}
                               <div>
                                 <p className="text-sm font-medium">{p.name}</p>
@@ -2407,6 +2525,44 @@ function StoreDetail() {
           </div>
         </div>
       </main>
+
+      <Dialog open={Boolean(previewImage)} onOpenChange={closeImagePreview}>
+        <DialogContent className="max-w-4xl overflow-hidden p-0 sm:max-h-[90vh]">
+          <DialogHeader className="border-b border-border px-6 py-4 text-left">
+            <DialogTitle>{previewImage?.alt ?? "Image preview"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-[75vh] items-center justify-center bg-black/95 p-4">
+            {previewLoading ? (
+              <div className="flex items-center gap-2 text-sm text-white/80">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading preview...
+              </div>
+            ) : previewImage && !previewUnsupported ? (
+              <img
+                src={previewImage.src}
+                alt={previewImage.alt}
+                className="max-h-[70vh] w-auto max-w-full object-contain"
+                onError={() => setPreviewUnsupported(true)}
+              />
+            ) : (
+              <div className="space-y-3 px-4 py-10 text-center text-white">
+                <p className="text-sm text-white/80">
+                  This browser cannot render that image format in-app.
+                </p>
+                {previewImage && (
+                  <a
+                    href={previewImage.src}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-black"
+                  >
+                    Open original file
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

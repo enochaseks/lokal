@@ -59,41 +59,6 @@ function Index() {
   const [fulfillmentFilter, setFulfillmentFilter] = useState<"all" | "collection" | "delivery" | "both" | "pay_at_store">("all");
   const [originFilter, setOriginFilter] = useState<string>("all");
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const scrollToHashTarget = () => {
-      const hash = window.location.hash.replace(/^#/, "");
-      if (!hash) return;
-
-      if (hash === "how") {
-        setShowMoreSections(true);
-      }
-
-      window.requestAnimationFrame(() => {
-        const scroll = () => {
-          const target = document.getElementById(decodeURIComponent(hash));
-          if (!target) return;
-
-          // Offset for sticky navbar so section headings are not hidden.
-          const headerOffset = 80;
-          const top = target.getBoundingClientRect().top + window.scrollY - headerOffset;
-          window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-        };
-
-        // If a section is conditionally rendered (e.g., #how), give React one tick to mount it.
-        window.setTimeout(scroll, hash === "how" ? 120 : 0);
-      });
-    };
-
-    scrollToHashTarget();
-    window.addEventListener("hashchange", scrollToHashTarget);
-
-    return () => {
-      window.removeEventListener("hashchange", scrollToHashTarget);
-    };
-  }, []);
-
   const timeToMinutes = (time: string) => {
     const [h, m] = time.slice(0, 5).split(":").map(Number);
     return h * 60 + m;
@@ -291,7 +256,7 @@ function Index() {
       const { data: rows } = await supabase
         .from("stores")
         .select(
-          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,logo_url,banner_image_url,brand_primary_color,brand_accent_color,instagram_handle,tiktok_handle,website_url,fulfillment,delivery_fee_gbp,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
+          "id,name,category,subcategory,minimum_age,tattoo_portfolio_url,tattoo_license_url,is_verified_tattoo_artist,health_safety_certificate_status,origin,description,address,city,postcode,timezone,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,location_type,selling_mode,region,bank_name,bank_account_name,bank_account_number,bank_sort_code,deposit_amount,accepts_refunds,refund_policy,cancellation_policy,is_verified,verified_at,verification_reason,store_products(name,price,unit,position,image_url,deposit),store_availability(day_of_week,start_time,end_time)",
         )
         .eq("published", true)
         .order("created_at", { ascending: false });
@@ -346,17 +311,12 @@ function Index() {
             fulfillment:
               (r.fulfillment as "collection" | "delivery" | "both" | "pay_at_store") ||
               "collection",
-            delivery_fee_gbp: r.delivery_fee_gbp != null ? Number(r.delivery_fee_gbp) : 0,
             location_type: (r.location_type as Store["location_type"]) ?? null,
             accepts_refunds: !!r.accepts_refunds,
             refund_policy: r.refund_policy || undefined,
             cancellation_policy: r.cancellation_policy || undefined,
             selling_mode: r.selling_mode ?? null,
             image: getImageUrl(r.image_url) || storePlaceholder,
-            logo_url: r.logo_url ?? null,
-            banner_image_url: r.banner_image_url ?? null,
-            brand_primary_color: r.brand_primary_color ?? null,
-            brand_accent_color: r.brand_accent_color ?? null,
             description: r.description || "A new Lokal merchant.",
             instagramHandle: r.instagram_handle || undefined,
             tiktokHandle: r.tiktok_handle || undefined,

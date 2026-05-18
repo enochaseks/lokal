@@ -6,7 +6,7 @@ import { StoreDialog } from "@/components/lokal/StoreDialog";
 import { PostMedia } from "@/components/lokal/PostMedia";
 import { PostReactions } from "@/components/lokal/PostReactions";
 import { supabase } from "@/integrations/supabase/client";
-import { getImageUrl } from "@/lib/utils";
+import { getImageUrl, normalizeImagePath } from "@/lib/utils";
 import { type Store, LIVE_CATEGORIES } from "@/data/stores";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,7 +84,7 @@ function FollowingPage() {
         supabase
           .from("stores")
           .select(
-            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,delivery_fee_gbp,location_type,accepts_refunds,refund_policy,cancellation_policy,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position)",
+            "id,name,category,origin,description,address,city,postcode,hours,phone,image_url,instagram_handle,tiktok_handle,website_url,fulfillment,delivery_fee_gbp,location_type,accepts_refunds,refund_policy,cancellation_policy,bank_name,bank_account_name,bank_account_number,bank_sort_code,store_products(name,price,unit,position,image_url)",
           )
           .in("id", ids)
           .eq("published", true),
@@ -137,6 +137,7 @@ function FollowingPage() {
                 name: p.name,
                 price: Number(p.price),
                 unit: p.unit ?? undefined,
+                image_url: normalizeImagePath(p.image_url) ?? p.image_url ?? null,
               })),
           },
         ];
