@@ -20,6 +20,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { WelcomeModal } from "@/components/lokal/WelcomeModal";
 import storePlaceholder from "@/assets/store-grocery.jpg";
 
+const LOCATION_UPDATED_EVENT = "lokal:location-updated";
+
 export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
@@ -255,6 +257,22 @@ function Index() {
       setCityInputValue(city);
     }
   }, [city, cityManuallySet]);
+
+  useEffect(() => {
+    const onLocationUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ city: string | null }>).detail;
+      if (!detail?.city) return;
+      setCityManuallySet(false);
+      setLocationFilter(detail.city);
+      setCityInputValue(detail.city);
+      setShowCityInput(false);
+    };
+
+    window.addEventListener(LOCATION_UPDATED_EVENT, onLocationUpdated);
+    return () => {
+      window.removeEventListener(LOCATION_UPDATED_EVENT, onLocationUpdated);
+    };
+  }, []);
 
   const handleUseCurrentLocation = async () => {
     const result = await refreshLocation();
